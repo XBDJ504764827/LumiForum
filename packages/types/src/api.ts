@@ -73,3 +73,87 @@ export interface ProfileUpdateRequest {
   avatar?: string | null;
   nickname?: string | null;
 }
+
+export interface CategorySummary {
+  id: string;
+  slug: string;
+  name: string;
+  icon: string | null;
+}
+
+export interface Category extends CategorySummary {
+  description: string | null;
+  sort_order: number;
+  is_visible: boolean;
+  topic_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TopicAuthor {
+  id: string;
+  username: string;
+  nickname: string | null;
+  avatar: string | null;
+  role: RoleSummary;
+}
+
+export interface TopicStats {
+  views: number;
+  replies: number;
+  likes: number;
+}
+
+export interface TopicSummary {
+  id: string;
+  title: string;
+  slug: string;
+  summary: string | null;
+  category: CategorySummary;
+  author: TopicAuthor;
+  stats: TopicStats;
+  is_pinned: boolean;
+  is_featured: boolean;
+  last_reply_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TopicDetail extends TopicSummary {
+  content: string;
+}
+
+export interface PaginationMeta {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface Paginated<T> {
+  items: T[];
+  pagination: PaginationMeta;
+}
+
+export type TopicSort = "latest" | "hot" | "featured" | "pinned";
+
+export interface TopicListParams {
+  category?: string;
+  sort?: TopicSort;
+  page?: number;
+  page_size?: number;
+}
+
+export interface CreateTopicRequest {
+  category_id: string;
+  title: string;
+  content: string;
+  summary?: string;
+}
+
+export interface UpdateTopicRequest {
+  category_id?: string;
+  title?: string;
+  content?: string;
+  summary?: string | null;
+}

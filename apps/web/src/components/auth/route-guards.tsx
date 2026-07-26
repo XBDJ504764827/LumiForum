@@ -29,7 +29,7 @@ export function GuestOnly({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/profile");
+      router.replace("/");
     }
   }, [router, status]);
 

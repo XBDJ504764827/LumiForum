@@ -1,0 +1,19 @@
+import type { Metadata } from "next";
+
+import { RequireAuth } from "@/components/auth/route-guards";
+import { TopicEditView } from "@/components/forum/topic-edit-view";
+
+type Props = { params: Promise<{ slug: string }> };
+
+export const metadata: Metadata = {
+  title: "编辑帖子 | LumiForum",
+};
+
+export default async function EditTopicPage({ params }: Props) {
+  const { slug } = await params;
+  return (
+    <RequireAuth>
+      <TopicEditView slug={decodeURIComponent(slug)} />
+    </RequireAuth>
+  );
+}

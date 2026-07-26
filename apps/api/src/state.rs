@@ -5,8 +5,13 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
 use crate::config::Config;
-use crate::repositories::{AuthRepository, AuthorizationRepository, UserRepository};
-use crate::services::{AuthService, AuthServiceConfig, AuthorizationService, UserService};
+use crate::repositories::{
+    AuthRepository, AuthorizationRepository, CategoryRepository, TopicRepository, UserRepository,
+};
+use crate::services::{
+    AuthService, AuthServiceConfig, AuthorizationService, CategoryService, TopicService,
+    UserService,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -20,6 +25,8 @@ struct AppStateInner {
     pub auth: AuthService,
     pub users: UserService,
     pub authorization: AuthorizationService,
+    pub categories: CategoryService,
+    pub topics: TopicService,
 }
 
 impl AppState {
@@ -49,6 +56,9 @@ impl AppState {
             redis.clone(),
             config.authorization_cache_ttl_seconds,
         )?;
+        let category_repository = CategoryRepository::new(db.clone());
+        let categories = CategoryService::new(category_repository.clone());
+        let topics = TopicService::new(TopicRepository::new(db.clone()), category_repository);
 
         Ok(Self {
             inner: Arc::new(AppStateInner {
@@ -58,6 +68,8 @@ impl AppState {
                 auth,
                 users,
                 authorization,
+                categories,
+                topics,
             }),
         })
     }
@@ -84,5 +96,13 @@ impl AppState {
 
     pub fn authorization(&self) -> &AuthorizationService {
         &self.inner.authorization
+    }
+
+    pub fn categories(&self) -> &CategoryService {
+        &self.inner.categories
+    }
+
+    pub fn topics(&self) -> &TopicService {
+        &self.inner.topics
     }
 }

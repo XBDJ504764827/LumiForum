@@ -47,6 +47,14 @@ pub const ROLE_SUPER_ADMINISTRATOR: &str = "super_administrator";
 
 pub const PERMISSION_PROFILE_READ_SELF: &str = "user.profile.read:self";
 pub const PERMISSION_PROFILE_UPDATE_SELF: &str = "user.profile.update:self";
+pub const PERMISSION_CATEGORY_MANAGE: &str = "category.manage";
+pub const PERMISSION_TOPIC_CREATE: &str = "topic.create";
+pub const PERMISSION_TOPIC_UPDATE_SELF: &str = "topic.update:self";
+pub const PERMISSION_TOPIC_UPDATE_ANY: &str = "topic.update:any";
+pub const PERMISSION_TOPIC_DELETE_SELF: &str = "topic.delete:self";
+pub const PERMISSION_TOPIC_DELETE_ANY: &str = "topic.delete:any";
+pub const PERMISSION_TOPIC_PIN: &str = "topic.pin";
+pub const PERMISSION_TOPIC_FEATURE: &str = "topic.feature";
 
 #[derive(Clone)]
 pub struct AuthenticatedPrincipal {
