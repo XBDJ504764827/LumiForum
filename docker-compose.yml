@@ -1,0 +1,141 @@
+# LumiForum local development stack
+# Usage: docker compose up --build
+#
+# Services: postgres, redis, api (Rust/Axum), web (Next.js)
+# Hot reload: source bind-mounts + dev Dockerfiles
+
+name: lumiforum
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lumiforum-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lumiforum}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lumiforum}
+      POSTGRES_DB: ${POSTGRES_DB:-lumiforum}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lumiforum} -d ${POSTGRES_DB:-lumiforum}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - lumiforum
+
+  redis:
+    image: redis:7-alpine
+    container_name: lumiforum-redis
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - lumiforum
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile.dev
+    container_name: lumiforum-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: development
+      RUST_LOG: ${RUST_LOG:-info,tower_http=debug,sqlx=warn}
+      HOST: 0.0.0.0
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-lumiforum}:${POSTGRES_PASSWORD:-lumiforum}@postgres:5432/${POSTGRES_DB:-lumiforum}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-in-production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      # Workspace + crate sources for hot reload
+      - ./Cargo.toml:/workspace/Cargo.toml:ro
+      - ./Cargo.lock:/workspace/Cargo.lock
+      - ./rustfmt.toml:/workspace/rustfmt.toml:ro
+      - ./clippy.toml:/workspace/clippy.toml:ro
+      - ./apps/api:/workspace/apps/api
+      # Persist cargo registry & build cache across restarts
+      - cargo_registry:/usr/local/cargo/registry
+      - cargo_git:/usr/local/cargo/git
+      - api_target:/workspace/target
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - lumiforum
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile.dev
+    container_name: lumiforum-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
+      CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      # Server-side fetch to API inside docker network
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:8080}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - .:/workspace
+      # Isolate host/container dependency trees
+      - web_node_modules:/workspace/node_modules
+      - web_app_node_modules:/workspace/apps/web/node_modules
+      - web_next_cache:/workspace/apps/web/.next
+      - pnpm_store:/pnpm/store
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000 >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - lumiforum
+
+networks:
+  lumiforum:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  cargo_registry:
+  cargo_git:
+  api_target:
+  web_node_modules:
+  web_app_node_modules:
+  web_next_cache:
+  pnpm_store:

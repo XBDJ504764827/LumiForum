@@ -1,0 +1,14 @@
+node_modules
+pnpm-lock.yaml
+dist
+build
+out
+.next
+.turbo
+target
+coverage
+docker/data
+docker/volumes
+*.min.js
+*.min.css
+CHANGELOG.md

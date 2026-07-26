@@ -1,0 +1,9 @@
+/* Shared design tokens — consumed by apps/web */
+:root {
+  --lf-background: 0 0% 100%;
+  --lf-foreground: 240 10% 3.9%;
+  --lf-muted: 240 4.8% 95.9%;
+  --lf-muted-foreground: 240 3.8% 46.1%;
+  --lf-border: 240 5.9% 90%;
+  --lf-ring: 240 5% 64.9%;
+}
