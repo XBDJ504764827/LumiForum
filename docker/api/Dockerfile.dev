@@ -1,0 +1,24 @@
+# Development image for apps/api — cargo-watch hot reload
+FROM rust:1.88-bookworm
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    curl \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+  && rm -rf /var/lib/apt/lists/* \
+  && cargo install cargo-watch --locked
+
+WORKDIR /workspace
+
+# Pre-create crate path so first mount is smooth
+RUN mkdir -p apps/api/src
+
+ENV CARGO_TERM_COLOR=always \
+    RUST_BACKTRACE=1
+
+EXPOSE 8080
+
+# cargo-watch rebuilds on source change; -w limits watch scope
+CMD ["cargo", "watch", "-q", "-c", "-w", "apps/api", "-x", "run -p lumiforum-api"]
