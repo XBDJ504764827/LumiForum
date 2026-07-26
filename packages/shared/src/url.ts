@@ -8,16 +8,23 @@ export function getApiBaseUrl(options?: {
   internalUrl?: string;
   isServer?: boolean;
 }): string {
-  const publicUrl =
-    options?.publicUrl ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-  const internalUrl = options?.internalUrl ?? process.env.API_INTERNAL_URL;
   const isServer = options?.isServer ?? typeof window === "undefined";
+  const publicUrl =
+    options?.publicUrl ?? process.env.NEXT_PUBLIC_API_URL ?? defaultPublicApiUrl(isServer);
+  const internalUrl = options?.internalUrl ?? process.env.API_INTERNAL_URL;
 
   if (isServer && internalUrl) {
     return stripTrailingSlash(internalUrl);
   }
 
   return stripTrailingSlash(publicUrl);
+}
+
+function defaultPublicApiUrl(isServer: boolean): string {
+  if (!isServer && typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:8080`;
+  }
+  return "http://localhost:8080";
 }
 
 export function joinUrl(base: string, path: string): string {

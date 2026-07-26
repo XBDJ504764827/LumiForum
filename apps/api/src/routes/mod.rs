@@ -1,14 +1,13 @@
+pub mod auth;
 mod health;
+mod response;
+pub mod users;
 
 use axum::{
-    http::{HeaderValue, Method},
+    http::{header, HeaderValue, Method},
     Router,
 };
-use tower_http::{
-    cors::{Any, CorsLayer},
-    limit::RequestBodyLimitLayer,
-    trace::TraceLayer,
-};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 
 use crate::state::AppState;
 
@@ -17,6 +16,9 @@ pub fn create_router(state: AppState) -> Router {
 
     Router::new()
         .merge(health::router())
+        .merge(auth::public_router(state.clone()))
+        .merge(auth::protected_router(state.clone()))
+        .merge(users::protected_router(state.clone()))
         .layer(TraceLayer::new_for_http())
         .layer(RequestBodyLimitLayer::new(1024 * 1024))
         .layer(cors)
@@ -24,26 +26,13 @@ pub fn create_router(state: AppState) -> Router {
 }
 
 fn build_cors(origin: &str) -> CorsLayer {
-    if origin == "*" {
-        return CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods([
-                Method::GET,
-                Method::POST,
-                Method::PUT,
-                Method::PATCH,
-                Method::DELETE,
-                Method::OPTIONS,
-            ])
-            .allow_headers(Any);
-    }
-
     let origin = origin
         .parse::<HeaderValue>()
         .unwrap_or_else(|_| HeaderValue::from_static("http://localhost:3000"));
 
     CorsLayer::new()
         .allow_origin(origin)
+        .allow_credentials(true)
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -52,5 +41,5 @@ fn build_cors(origin: &str) -> CorsLayer {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers(Any)
+        .allow_headers([header::ACCEPT, header::AUTHORIZATION, header::CONTENT_TYPE])
 }
