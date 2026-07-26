@@ -41,9 +41,9 @@ docker compose up --build
 
 Services become available at:
 
-- Web: <http://localhost:3000>
-- API health: <http://localhost:8080/health>
-- API readiness: <http://localhost:8080/ready>
+- Web: <http://192.168.0.138:3000>
+- API health: <http://192.168.0.138:8080/health>
+- API readiness: <http://192.168.0.138:8080/ready>
 
 For host-side development, start PostgreSQL and Redis first, then run:
 

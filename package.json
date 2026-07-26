@@ -10,8 +10,9 @@
     "pnpm": ">=9.0.0"
   },
   "scripts": {
-    "dev": "turbo run dev --filter=@lumiforum/web",
-    "dev:web": "pnpm --filter @lumiforum/web dev",
+    "dev": "dotenv -e .env -- turbo run dev --filter=@lumiforum/web",
+    "dev:web": "dotenv -e .env -- pnpm --filter @lumiforum/web dev",
+    "dev:api": "dotenv -e .env -- cargo run -p lumiforum-api",
     "build": "turbo run build",
     "build:web": "turbo run build --filter=@lumiforum/web",
     "lint": "turbo run lint",
@@ -29,6 +30,7 @@
     "eslint": "^9.17.0",
     "eslint-config-next": "^16.2.12",
     "eslint-config-prettier": "^10.0.1",
+    "dotenv-cli": "^11.0.0",
     "prettier": "^3.4.2",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2",

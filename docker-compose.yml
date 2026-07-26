@@ -55,14 +55,14 @@ services:
     container_name: lumiforum-api
     restart: unless-stopped
     environment:
-      APP_ENV: development
+      APP_ENV: ${APP_ENV:-development}
       RUST_LOG: ${RUST_LOG:-info,tower_http=debug,sqlx=warn}
       HOST: 0.0.0.0
       PORT: 8080
       DATABASE_URL: postgres://${POSTGRES_USER:-lumiforum}:${POSTGRES_PASSWORD:-lumiforum}@postgres:5432/${POSTGRES_DB:-lumiforum}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-in-production}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://192.168.0.138:3000}
     ports:
       - "${API_PORT:-8080}:8080"
     volumes:
@@ -101,7 +101,7 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
       CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://192.168.0.138:8080}
       # Server-side fetch to API inside docker network
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:8080}
     ports:
