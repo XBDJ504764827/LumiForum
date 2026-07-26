@@ -9,6 +9,10 @@ Architecture and operations documentation. Product feature docs land in later ph
 | `architecture/` | System design, boundaries, ADRs |
 | `ops/`          | Deploy, runbooks, environments  |
 
+## Feature architecture
+
+- [Authentication database design](architecture/authentication-database.md)
+
 ## Conventions
 
 - Prefer short, dated ADRs for non-obvious decisions.

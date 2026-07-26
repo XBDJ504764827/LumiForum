@@ -6,8 +6,30 @@ use axum::{
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::services::{AuthError, AuthorizationError, UserError};
+
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("validation failed: {0}")]
+    Validation(&'static str),
+    #[error("identity conflict")]
+    IdentityConflict,
+    #[error("invalid credentials")]
+    InvalidCredentials,
+    #[error("authentication required")]
+    Unauthorized,
+    #[error("refresh token is invalid or expired")]
+    InvalidRefreshToken,
+    #[error("account unavailable")]
+    AccountUnavailable,
+    #[error("permission denied")]
+    Forbidden,
+    #[error("origin validation failed")]
+    CsrfValidationFailed,
+    #[error("resource not found")]
+    NotFound,
+    #[error("refresh token reuse detected")]
+    RefreshTokenReused,
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -20,23 +42,112 @@ struct ErrorBody {
 #[derive(Serialize)]
 struct ErrorDetail {
     code: &'static str,
-    message: String,
+    message: &'static str,
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let AppError::Internal(err) = &self;
-        tracing::error!(error = %err, "internal error");
+        let (status, code, message) = match &self {
+            Self::Validation(message) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "validation_error",
+                *message,
+            ),
+            Self::IdentityConflict => (
+                StatusCode::CONFLICT,
+                "identity_conflict",
+                "username or email is already in use",
+            ),
+            Self::InvalidCredentials => (
+                StatusCode::UNAUTHORIZED,
+                "invalid_credentials",
+                "invalid credentials",
+            ),
+            Self::Unauthorized => (
+                StatusCode::UNAUTHORIZED,
+                "authentication_required",
+                "authentication required",
+            ),
+            Self::InvalidRefreshToken => (
+                StatusCode::UNAUTHORIZED,
+                "invalid_refresh_token",
+                "refresh token is invalid or expired",
+            ),
+            Self::AccountUnavailable => (
+                StatusCode::FORBIDDEN,
+                "account_unavailable",
+                "account is unavailable",
+            ),
+            Self::Forbidden => (
+                StatusCode::FORBIDDEN,
+                "permission_denied",
+                "permission denied",
+            ),
+            Self::CsrfValidationFailed => (
+                StatusCode::FORBIDDEN,
+                "csrf_validation_failed",
+                "request origin is not allowed",
+            ),
+            Self::NotFound => (StatusCode::NOT_FOUND, "not_found", "resource not found"),
+            Self::RefreshTokenReused => {
+                tracing::warn!("refresh token reuse detected; token family revoked");
+                (
+                    StatusCode::UNAUTHORIZED,
+                    "invalid_refresh_token",
+                    "refresh token is invalid or expired",
+                )
+            }
+            Self::Internal(error) => {
+                tracing::error!(error = %error, "internal error");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal_error",
+                    "internal server error",
+                )
+            }
+        };
 
-        let status = StatusCode::INTERNAL_SERVER_ERROR;
-        let code = "internal_error";
-        let message = "internal server error".into();
+        (
+            status,
+            Json(ErrorBody {
+                error: ErrorDetail { code, message },
+            }),
+        )
+            .into_response()
+    }
+}
 
-        let body = Json(ErrorBody {
-            error: ErrorDetail { code, message },
-        });
+impl From<AuthError> for AppError {
+    fn from(error: AuthError) -> Self {
+        match error {
+            AuthError::Validation(message) => Self::Validation(message),
+            AuthError::IdentityConflict => Self::IdentityConflict,
+            AuthError::InvalidCredentials => Self::InvalidCredentials,
+            AuthError::AccountUnavailable => Self::AccountUnavailable,
+            AuthError::InvalidRefreshToken => Self::InvalidRefreshToken,
+            AuthError::RefreshTokenReused => Self::RefreshTokenReused,
+            AuthError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
 
-        (status, body).into_response()
+impl From<UserError> for AppError {
+    fn from(error: UserError) -> Self {
+        match error {
+            UserError::EmptyUpdate => Self::Validation("profile update contains no fields"),
+            UserError::Validation(message) => Self::Validation(message),
+            UserError::NotFound => Self::NotFound,
+            UserError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<AuthorizationError> for AppError {
+    fn from(error: AuthorizationError) -> Self {
+        match error {
+            AuthorizationError::Unauthorized => Self::Unauthorized,
+            AuthorizationError::Internal(error) => Self::Internal(error),
+        }
     }
 }
 
