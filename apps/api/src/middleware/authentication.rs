@@ -11,19 +11,46 @@ use crate::state::AppState;
 #[derive(Clone)]
 pub struct AuthorizationLayer {
     state: AppState,
-    permission: &'static str,
+    permission: Option<&'static str>,
 }
 
 impl AuthorizationLayer {
     pub fn new(state: AppState, permission: &'static str) -> Self {
-        Self { state, permission }
+        Self {
+            state,
+            permission: Some(permission),
+        }
+    }
+
+    pub fn authenticated(state: AppState) -> Self {
+        Self {
+            state,
+            permission: None,
+        }
     }
 }
 
 pub async fn require_permission(
     State(layer): State<AuthorizationLayer>,
+    request: Request,
+    next: Next,
+) -> AppResult<Response> {
+    authenticate(layer, request, next, true).await
+}
+
+pub async fn require_authenticated(
+    State(layer): State<AuthorizationLayer>,
+    request: Request,
+    next: Next,
+) -> AppResult<Response> {
+    authenticate(layer, request, next, false).await
+}
+
+async fn authenticate(
+    layer: AuthorizationLayer,
     mut request: Request,
     next: Next,
+    check_permission: bool,
 ) -> AppResult<Response> {
     let token = bearer_token(&request).ok_or(AppError::Unauthorized)?;
     let claims = layer
@@ -33,8 +60,13 @@ pub async fn require_permission(
         .decode_access_token(token)
         .map_err(|_| AppError::Unauthorized)?;
     let principal = layer.state.authorization().authenticate(claims).await?;
-    if !principal.has_permission(layer.permission) {
-        return Err(AppError::Forbidden);
+    if check_permission {
+        let permission = layer.permission.ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!("permission middleware has no permission"))
+        })?;
+        if !principal.has_permission(permission) {
+            return Err(AppError::Forbidden);
+        }
     }
 
     request.extensions_mut().insert(principal);

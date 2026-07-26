@@ -6,7 +6,7 @@ use axum::{
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::services::{AuthError, AuthorizationError, UserError};
+use crate::services::{AuthError, AuthorizationError, CategoryError, TopicError, UserError};
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -14,6 +14,10 @@ pub enum AppError {
     Validation(&'static str),
     #[error("identity conflict")]
     IdentityConflict,
+    #[error("slug conflict")]
+    SlugConflict,
+    #[error("category contains topics")]
+    CategoryNotEmpty,
     #[error("invalid credentials")]
     InvalidCredentials,
     #[error("authentication required")]
@@ -57,6 +61,16 @@ impl IntoResponse for AppError {
                 StatusCode::CONFLICT,
                 "identity_conflict",
                 "username or email is already in use",
+            ),
+            Self::SlugConflict => (
+                StatusCode::CONFLICT,
+                "slug_conflict",
+                "slug is already in use",
+            ),
+            Self::CategoryNotEmpty => (
+                StatusCode::CONFLICT,
+                "category_not_empty",
+                "category contains topics",
             ),
             Self::InvalidCredentials => (
                 StatusCode::UNAUTHORIZED,
@@ -147,6 +161,31 @@ impl From<AuthorizationError> for AppError {
         match error {
             AuthorizationError::Unauthorized => Self::Unauthorized,
             AuthorizationError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<CategoryError> for AppError {
+    fn from(error: CategoryError) -> Self {
+        match error {
+            CategoryError::Validation(message) => Self::Validation(message),
+            CategoryError::SlugConflict => Self::SlugConflict,
+            CategoryError::NotFound => Self::NotFound,
+            CategoryError::NotEmpty => Self::CategoryNotEmpty,
+            CategoryError::Forbidden => Self::Forbidden,
+            CategoryError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<TopicError> for AppError {
+    fn from(error: TopicError) -> Self {
+        match error {
+            TopicError::Validation(message) => Self::Validation(message),
+            TopicError::NotFound | TopicError::CategoryUnavailable => Self::NotFound,
+            TopicError::SlugConflict => Self::SlugConflict,
+            TopicError::Forbidden => Self::Forbidden,
+            TopicError::Internal(error) => Self::Internal(error),
         }
     }
 }

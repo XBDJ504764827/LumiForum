@@ -1,6 +1,8 @@
 pub mod auth;
+mod categories;
 mod health;
 mod response;
+mod topics;
 pub mod users;
 
 use axum::{
@@ -19,6 +21,8 @@ pub fn create_router(state: AppState) -> Router {
         .merge(auth::public_router(state.clone()))
         .merge(auth::protected_router(state.clone()))
         .merge(users::protected_router(state.clone()))
+        .merge(categories::router(state.clone()))
+        .merge(topics::router(state.clone()))
         .layer(TraceLayer::new_for_http())
         .layer(RequestBodyLimitLayer::new(1024 * 1024))
         .layer(cors)
