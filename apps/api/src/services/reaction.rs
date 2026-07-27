@@ -2,12 +2,16 @@ use redis::{aio::ConnectionManager, AsyncCommands};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::events::{
+    CommentLikedEvent, NotificationEvent, TopicFavoritedEvent, TopicLikedEvent, UserFollowedEvent,
+};
 use crate::models::{
     AuthenticatedPrincipal, CommentLikeState, FavoriteItem, FavoriteState, FollowState, Paginated,
     PaginationMeta, ReactionListQuery, TopicLikeState, UserPublicSummary, PERMISSION_COMMENT_LIKE,
     PERMISSION_TOPIC_FAVORITE, PERMISSION_TOPIC_LIKE, PERMISSION_USER_FOLLOW,
 };
-use crate::repositories::ReactionRepository;
+use crate::repositories::{NotificationRepository, ReactionRepository};
+use crate::services::NotificationService;
 
 const DEFAULT_PAGE_SIZE: u32 = 20;
 const MAX_PAGE_SIZE: u32 = 50;
@@ -19,6 +23,8 @@ const STATS_CACHE_TTL_SECS: u64 = 30;
 #[derive(Clone)]
 pub struct ReactionService {
     reactions: ReactionRepository,
+    notifications: NotificationService,
+    notify_lookup: NotificationRepository,
     redis: ConnectionManager,
 }
 
@@ -37,8 +43,18 @@ pub enum ReactionError {
 }
 
 impl ReactionService {
-    pub fn new(reactions: ReactionRepository, redis: ConnectionManager) -> Self {
-        Self { reactions, redis }
+    pub fn new(
+        reactions: ReactionRepository,
+        notifications: NotificationService,
+        notify_lookup: NotificationRepository,
+        redis: ConnectionManager,
+    ) -> Self {
+        Self {
+            reactions,
+            notifications,
+            notify_lookup,
+            redis,
+        }
     }
 
     pub async fn like_topic(
@@ -49,12 +65,15 @@ impl ReactionService {
         require(principal, PERMISSION_TOPIC_LIKE)?;
         self.enforce_rate_limit(principal.user_id).await?;
         self.ensure_topic(topic_id).await?;
-        let like_count = self
+        let (like_count, created) = self
             .reactions
             .like_topic(principal.user_id, topic_id)
             .await
             .map_err(internal)?;
         self.cache_topic_likes(topic_id, like_count).await;
+        if created {
+            self.emit_topic_liked(principal.user_id, topic_id).await;
+        }
         Ok(TopicLikeState {
             liked: true,
             like_count,
@@ -89,12 +108,15 @@ impl ReactionService {
         require(principal, PERMISSION_COMMENT_LIKE)?;
         self.enforce_rate_limit(principal.user_id).await?;
         self.ensure_comment(comment_id).await?;
-        let like_count = self
+        let (like_count, created) = self
             .reactions
             .like_comment(principal.user_id, comment_id)
             .await
             .map_err(internal)?;
         self.cache_comment_likes(comment_id, like_count).await;
+        if created {
+            self.emit_comment_liked(principal.user_id, comment_id).await;
+        }
         Ok(CommentLikeState {
             liked: true,
             like_count,
@@ -129,10 +151,14 @@ impl ReactionService {
         require(principal, PERMISSION_TOPIC_FAVORITE)?;
         self.enforce_rate_limit(principal.user_id).await?;
         self.ensure_topic(topic_id).await?;
-        self.reactions
+        let created = self
+            .reactions
             .favorite_topic(principal.user_id, topic_id)
             .await
             .map_err(internal)?;
+        if created {
+            self.emit_topic_favorited(principal.user_id, topic_id).await;
+        }
         Ok(FavoriteState { favorited: true })
     }
 
@@ -183,13 +209,20 @@ impl ReactionService {
             return Err(ReactionError::Validation("cannot follow yourself"));
         }
         self.ensure_user(user_id).await?;
-        let counters = self
+        let (counters, created) = self
             .reactions
             .follow_user(principal.user_id, user_id)
             .await
             .map_err(internal)?;
         self.cache_follow_stats(user_id, counters.followers_count, counters.following_count)
             .await;
+        if created {
+            self.emit_event(NotificationEvent::UserFollowed(UserFollowedEvent {
+                actor_id: principal.user_id,
+                recipient_id: user_id,
+            }))
+            .await;
+        }
         Ok(FollowState {
             following: true,
             followers_count: counters.followers_count,
@@ -317,6 +350,60 @@ impl ReactionService {
         let liked_set: std::collections::HashSet<Uuid> = liked.into_iter().collect();
         apply_comment_likes(nodes, &liked_set);
         Ok(())
+    }
+
+    async fn emit_topic_liked(&self, actor_id: Uuid, topic_id: Uuid) {
+        let Ok(Some((author_id, slug, title))) =
+            self.notify_lookup.topic_notify_context(topic_id).await
+        else {
+            return;
+        };
+        self.emit_event(NotificationEvent::TopicLiked(TopicLikedEvent {
+            actor_id,
+            recipient_id: author_id,
+            topic_id,
+            topic_slug: slug,
+            topic_title: title,
+        }))
+        .await;
+    }
+
+    async fn emit_comment_liked(&self, actor_id: Uuid, comment_id: Uuid) {
+        let Ok(Some((author_id, topic_id, slug))) =
+            self.notify_lookup.comment_notify_context(comment_id).await
+        else {
+            return;
+        };
+        self.emit_event(NotificationEvent::CommentLiked(CommentLikedEvent {
+            actor_id,
+            recipient_id: author_id,
+            comment_id,
+            topic_id,
+            topic_slug: slug,
+        }))
+        .await;
+    }
+
+    async fn emit_topic_favorited(&self, actor_id: Uuid, topic_id: Uuid) {
+        let Ok(Some((author_id, slug, title))) =
+            self.notify_lookup.topic_notify_context(topic_id).await
+        else {
+            return;
+        };
+        self.emit_event(NotificationEvent::TopicFavorited(TopicFavoritedEvent {
+            actor_id,
+            recipient_id: author_id,
+            topic_id,
+            topic_slug: slug,
+            topic_title: title,
+        }))
+        .await;
+    }
+
+    async fn emit_event(&self, event: NotificationEvent) {
+        if let Err(error) = self.notifications.handle_event(event).await {
+            tracing::warn!(%error, "failed to persist notification event");
+        }
     }
 
     async fn ensure_topic(&self, topic_id: Uuid) -> Result<(), ReactionError> {

@@ -200,7 +200,11 @@ impl ReactionRepository {
             .await
     }
 
-    pub async fn like_topic(&self, user_id: Uuid, topic_id: Uuid) -> Result<i64, sqlx::Error> {
+    pub async fn like_topic(
+        &self,
+        user_id: Uuid,
+        topic_id: Uuid,
+    ) -> Result<(i64, bool), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         let inserted = sqlx::query(
             r#"
@@ -234,7 +238,7 @@ impl ReactionRepository {
                 .fetch_one(&mut *tx)
                 .await?;
         tx.commit().await?;
-        Ok(like_count)
+        Ok((like_count, inserted == 1))
     }
 
     pub async fn unlike_topic(&self, user_id: Uuid, topic_id: Uuid) -> Result<i64, sqlx::Error> {
@@ -273,7 +277,11 @@ impl ReactionRepository {
         Ok(like_count)
     }
 
-    pub async fn like_comment(&self, user_id: Uuid, comment_id: Uuid) -> Result<i64, sqlx::Error> {
+    pub async fn like_comment(
+        &self,
+        user_id: Uuid,
+        comment_id: Uuid,
+    ) -> Result<(i64, bool), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         let inserted = sqlx::query(
             r#"
@@ -307,7 +315,7 @@ impl ReactionRepository {
                 .fetch_one(&mut *tx)
                 .await?;
         tx.commit().await?;
-        Ok(like_count)
+        Ok((like_count, inserted == 1))
     }
 
     pub async fn unlike_comment(
@@ -350,8 +358,8 @@ impl ReactionRepository {
         Ok(like_count)
     }
 
-    pub async fn favorite_topic(&self, user_id: Uuid, topic_id: Uuid) -> Result<(), sqlx::Error> {
-        sqlx::query(
+    pub async fn favorite_topic(&self, user_id: Uuid, topic_id: Uuid) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
             r#"
             INSERT INTO favorites (topic_id, user_id)
             VALUES ($1, $2)
@@ -362,7 +370,7 @@ impl ReactionRepository {
         .bind(user_id)
         .execute(&self.pool)
         .await?;
-        Ok(())
+        Ok(result.rows_affected() == 1)
     }
 
     pub async fn unfavorite_topic(&self, user_id: Uuid, topic_id: Uuid) -> Result<(), sqlx::Error> {
@@ -490,7 +498,7 @@ impl ReactionRepository {
         &self,
         follower_id: Uuid,
         following_id: Uuid,
-    ) -> Result<FollowCounters, sqlx::Error> {
+    ) -> Result<(FollowCounters, bool), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         let inserted = sqlx::query(
             r#"
@@ -530,7 +538,7 @@ impl ReactionRepository {
 
         let counters = load_follow_counters(&mut tx, following_id).await?;
         tx.commit().await?;
-        Ok(counters)
+        Ok((counters, inserted == 1))
     }
 
     pub async fn unfollow_user(

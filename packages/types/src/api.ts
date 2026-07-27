@@ -236,3 +236,48 @@ export interface CreateCommentRequest {
 export interface UpdateCommentRequest {
   content: string;
 }
+
+export type NotificationType =
+  | "post_liked"
+  | "comment_liked"
+  | "comment_created"
+  | "comment_replied"
+  | "topic_favorited"
+  | "user_followed"
+  | "mentioned"
+  | "system_message";
+
+export type NotificationTargetType = "topic" | "comment" | "user" | "system";
+
+export interface NotificationActor {
+  id: string;
+  username: string;
+  nickname: string | null;
+  avatar: string | null;
+  role: RoleSummary;
+}
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  content: string;
+  target_type: NotificationTargetType | null;
+  target_id: string | null;
+  metadata: Record<string, unknown>;
+  is_read: boolean;
+  actor: NotificationActor | null;
+  created_at: string;
+  stream_hint: string;
+}
+
+export interface UnreadCount {
+  count: number;
+}
+
+export interface NotificationListParams {
+  page?: number;
+  page_size?: number;
+  is_read?: boolean;
+  type?: NotificationType;
+}

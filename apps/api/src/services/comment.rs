@@ -2,6 +2,7 @@ use redis::{aio::ConnectionManager, AsyncCommands};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::events::{CommentCreatedEvent, CommentRepliedEvent, NotificationEvent};
 use crate::models::{
     AuthenticatedPrincipal, CommentListQuery, CommentNode, CreateCommentRequest, Paginated,
     PaginationMeta, UpdateCommentRequest, PERMISSION_COMMENT_CREATE, PERMISSION_COMMENT_DELETE_ANY,
@@ -9,8 +10,10 @@ use crate::models::{
     PERMISSION_COMMENT_UPDATE_ANY, PERMISSION_COMMENT_UPDATE_SELF,
 };
 use crate::repositories::{
-    repository_comment_to_node, CommentRepository, NewComment, TopicRepository,
+    repository_comment_to_node, CommentRepository, NewComment, NotificationRepository,
+    TopicRepository,
 };
+use crate::services::NotificationService;
 
 const DEFAULT_PAGE_SIZE: u32 = 20;
 const MAX_PAGE_SIZE: u32 = 50;
@@ -22,6 +25,8 @@ const RATE_LIMIT_MAX: u64 = 10;
 pub struct CommentService {
     comments: CommentRepository,
     topics: TopicRepository,
+    notifications: NotificationService,
+    notify_lookup: NotificationRepository,
     redis: ConnectionManager,
 }
 
@@ -45,11 +50,15 @@ impl CommentService {
     pub fn new(
         comments: CommentRepository,
         topics: TopicRepository,
+        notifications: NotificationService,
+        notify_lookup: NotificationRepository,
         redis: ConnectionManager,
     ) -> Self {
         Self {
             comments,
             topics,
+            notifications,
+            notify_lookup,
             redis,
         }
     }
@@ -104,6 +113,8 @@ impl CommentService {
             })
             .await
             .map_err(map_write_error)?;
+        self.emit_comment_created(principal.user_id, topic_id, comment.id)
+            .await;
         Ok(repository_comment_to_node(comment, Vec::new()))
     }
 
@@ -128,6 +139,9 @@ impl CommentService {
         }
         self.ensure_topic_published(parent.topic_id).await?;
         let content = normalize_content(request.content)?;
+        let parent_author_id = parent.author_id;
+        let parent_topic_id = parent.topic_id;
+        let parent_comment_id = parent.id;
         let comment = self
             .comments
             .create(NewComment {
@@ -138,6 +152,14 @@ impl CommentService {
             })
             .await
             .map_err(map_write_error)?;
+        self.emit_comment_replied(
+            principal.user_id,
+            parent_author_id,
+            parent_topic_id,
+            parent_comment_id,
+            comment.id,
+        )
+        .await;
         Ok(repository_comment_to_node(comment, Vec::new()))
     }
 
@@ -222,6 +244,56 @@ impl CommentService {
             })?
             .ok_or(CommentError::NotFound)?;
         Ok(repository_comment_to_node(comment, Vec::new()))
+    }
+
+    async fn emit_comment_created(&self, actor_id: Uuid, topic_id: Uuid, comment_id: Uuid) {
+        let Ok(Some((author_id, slug, title))) =
+            self.notify_lookup.topic_notify_context(topic_id).await
+        else {
+            return;
+        };
+        if let Err(error) = self
+            .notifications
+            .handle_event(NotificationEvent::CommentCreated(CommentCreatedEvent {
+                actor_id,
+                recipient_id: author_id,
+                comment_id,
+                topic_id,
+                topic_slug: slug,
+                topic_title: title,
+            }))
+            .await
+        {
+            tracing::warn!(%error, "failed to persist comment created notification");
+        }
+    }
+
+    async fn emit_comment_replied(
+        &self,
+        actor_id: Uuid,
+        recipient_id: Uuid,
+        topic_id: Uuid,
+        parent_comment_id: Uuid,
+        comment_id: Uuid,
+    ) {
+        let slug = match self.notify_lookup.topic_notify_context(topic_id).await {
+            Ok(Some((_, slug, _))) => slug,
+            _ => return,
+        };
+        if let Err(error) = self
+            .notifications
+            .handle_event(NotificationEvent::CommentReplied(CommentRepliedEvent {
+                actor_id,
+                recipient_id,
+                comment_id,
+                parent_comment_id,
+                topic_id,
+                topic_slug: slug,
+            }))
+            .await
+        {
+            tracing::warn!(%error, "failed to persist comment replied notification");
+        }
     }
 
     async fn ensure_topic_published(&self, topic_id: Uuid) -> Result<(), CommentError> {
