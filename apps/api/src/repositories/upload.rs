@@ -169,6 +169,24 @@ impl UploadRepository {
         .await
     }
 
+    pub async fn begin_delete_any(
+        &self,
+        upload_id: Uuid,
+    ) -> Result<Option<RepositoryUpload>, sqlx::Error> {
+        sqlx::query_as::<_, RepositoryUpload>(
+            r#"
+            UPDATE uploads SET status = 'deleting'
+            WHERE id = $1 AND status IN ('ready', 'pending', 'failed')
+            RETURNING id, user_id, filename, original_filename, storage_provider, storage_key,
+                      mime_type, file_size, category, url, thumbnail_storage_key, thumbnail_url,
+                      width, height, status, created_at, updated_at
+            "#,
+        )
+        .bind(upload_id)
+        .fetch_optional(&self.pool)
+        .await
+    }
+
     pub async fn restore_ready(&self, upload_id: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE uploads SET status = 'ready' WHERE id = $1 AND status = 'deleting'")
             .bind(upload_id)

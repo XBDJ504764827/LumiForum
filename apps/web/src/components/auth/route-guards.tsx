@@ -39,6 +39,27 @@ export function GuestOnly({ children }: { children: ReactNode }) {
   return children;
 }
 
+export function RequireAdmin({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const { status, user } = useAuth();
+  const allowed = user?.role.code === "administrator" || user?.role.code === "super_administrator";
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login");
+      return;
+    }
+    if (status === "authenticated" && !allowed) {
+      router.replace("/");
+    }
+  }, [allowed, router, status]);
+
+  if (status !== "authenticated" || !allowed) {
+    return <GuardLoading />;
+  }
+  return children;
+}
+
 function GuardLoading() {
   return (
     <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">

@@ -1,3 +1,4 @@
+mod admin;
 mod auth;
 mod authorization;
 mod category;
@@ -12,6 +13,7 @@ mod upload;
 mod upload_image;
 mod user;
 
+pub use admin::{AdminAuditContext, AdminError, AdminService};
 pub use auth::{AuthError, AuthService, AuthServiceConfig, IssuedSession, RefreshedSession};
 pub use authorization::{AuthorizationError, AuthorizationService};
 pub use category::{CategoryError, CategoryService};

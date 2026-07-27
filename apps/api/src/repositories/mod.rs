@@ -1,3 +1,4 @@
+mod admin;
 mod auth;
 mod authorization;
 mod category;
@@ -9,6 +10,7 @@ mod topic;
 mod upload;
 mod user;
 
+pub use admin::AdminRepository;
 pub use auth::{AuthRepository, RefreshRotation};
 pub use authorization::{AuthorizationRepository, AuthorizationSnapshot};
 pub use category::{

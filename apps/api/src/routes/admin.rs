@@ -1,0 +1,437 @@
+use std::net::SocketAddr;
+
+use axum::{
+    extract::{
+        rejection::{JsonRejection, PathRejection, QueryRejection},
+        ConnectInfo, State,
+    },
+    http::{HeaderMap, StatusCode},
+    middleware,
+    routing::{get, patch, post},
+    Extension, Json, Router,
+};
+use ipnetwork::IpNetwork;
+use uuid::Uuid;
+
+use crate::error::AppResult;
+use crate::middleware::{require_permission, AuthorizationLayer};
+use crate::models::{
+    AdminCommentListQuery, AdminDashboard, AdminFileListQuery, AdminLogListQuery,
+    AdminTopicListQuery, AdminTopicUpdateRequest, AdminUserListQuery, AdminUserUpdateRequest,
+    AuthenticatedPrincipal, CategoryResponse, CreateCategoryRequest, CreateReportRequest,
+    Paginated, ReportListQuery, ResolveReportRequest, UpdateCategoryRequest,
+    PERMISSION_ADMIN_ACCESS,
+};
+use crate::services::AdminAuditContext;
+use crate::state::AppState;
+
+use super::response::{parse_json, parse_path, parse_query, ApiResponse, MessageResponse};
+
+pub fn router(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/admin/dashboard", get(dashboard))
+        .route("/admin/roles", get(list_roles))
+        .route("/admin/users", get(list_users))
+        .route(
+            "/admin/users/{id}",
+            get(get_user).patch(update_user).delete(delete_user),
+        )
+        .route("/admin/topics", get(list_topics))
+        .route(
+            "/admin/topics/{id}",
+            patch(update_topic).delete(delete_topic),
+        )
+        .route("/admin/comments", get(list_comments))
+        .route(
+            "/admin/comments/{id}",
+            axum::routing::delete(delete_comment),
+        )
+        .route("/admin/comments/{id}/restore", post(restore_comment))
+        .route(
+            "/admin/categories",
+            get(list_categories).post(create_category),
+        )
+        .route(
+            "/admin/categories/{id}",
+            patch(update_category).delete(delete_category),
+        )
+        .route("/admin/files", get(list_files))
+        .route("/admin/files/cleanup", post(cleanup_files))
+        .route("/admin/files/{id}", axum::routing::delete(delete_file))
+        .route("/admin/reports", get(list_reports))
+        .route("/admin/reports/{id}", patch(resolve_report))
+        .route("/admin/logs", get(list_logs))
+        .route_layer(middleware::from_fn_with_state(
+            AuthorizationLayer::new(state.clone(), PERMISSION_ADMIN_ACCESS),
+            require_permission,
+        ))
+}
+
+pub fn public_report_router(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/reports", post(create_report))
+        .route_layer(middleware::from_fn_with_state(
+            AuthorizationLayer::authenticated(state),
+            crate::middleware::require_authenticated,
+        ))
+}
+
+async fn dashboard(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+) -> AppResult<Json<ApiResponse<AdminDashboard>>> {
+    let data = state.admin().dashboard(&principal).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn list_roles(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+) -> AppResult<Json<ApiResponse<Vec<crate::models::RoleOption>>>> {
+    let data = state.admin().list_roles(&principal).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn list_users(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<AdminUserListQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<Paginated<crate::models::AdminUserItem>>>> {
+    let data = state
+        .admin()
+        .list_users(&principal, parse_query(query)?)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn get_user(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::AdminUserItem>>> {
+    let data = state
+        .admin()
+        .get_user(&principal, parse_path(path)?)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn update_user(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+    payload: Result<Json<AdminUserUpdateRequest>, JsonRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::AdminUserItem>>> {
+    let data = state
+        .admin()
+        .update_user(
+            &principal,
+            parse_path(path)?,
+            parse_json(payload)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn delete_user(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::AdminUserItem>>> {
+    let data = state
+        .admin()
+        .delete_user(
+            &principal,
+            parse_path(path)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn list_topics(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<AdminTopicListQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<Paginated<crate::models::AdminTopicItem>>>> {
+    let data = state
+        .admin()
+        .list_topics(&principal, parse_query(query)?)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn update_topic(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+    payload: Result<Json<AdminTopicUpdateRequest>, JsonRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::AdminTopicItem>>> {
+    let data = state
+        .admin()
+        .update_topic(
+            &principal,
+            parse_path(path)?,
+            parse_json(payload)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn delete_topic(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<MessageResponse>>> {
+    state
+        .admin()
+        .delete_topic(
+            &principal,
+            parse_path(path)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(MessageResponse {
+        message: "topic deleted",
+    })))
+}
+
+async fn list_comments(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<AdminCommentListQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<Paginated<crate::models::AdminCommentItem>>>> {
+    let data = state
+        .admin()
+        .list_comments(&principal, parse_query(query)?)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn delete_comment(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<MessageResponse>>> {
+    state
+        .admin()
+        .delete_comment(
+            &principal,
+            parse_path(path)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(MessageResponse {
+        message: "comment deleted",
+    })))
+}
+
+async fn restore_comment(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::AdminCommentItem>>> {
+    let data = state
+        .admin()
+        .restore_comment(
+            &principal,
+            parse_path(path)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn list_categories(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+) -> AppResult<Json<ApiResponse<Vec<CategoryResponse>>>> {
+    let data = state.admin().list_categories(&principal).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn create_category(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    payload: Result<Json<CreateCategoryRequest>, JsonRejection>,
+) -> AppResult<(StatusCode, Json<ApiResponse<CategoryResponse>>)> {
+    let data = state
+        .admin()
+        .create_category(
+            &principal,
+            parse_json(payload)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok((StatusCode::CREATED, Json(ApiResponse::new(data))))
+}
+
+async fn update_category(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+    payload: Result<Json<UpdateCategoryRequest>, JsonRejection>,
+) -> AppResult<Json<ApiResponse<CategoryResponse>>> {
+    let data = state
+        .admin()
+        .update_category(
+            &principal,
+            parse_path(path)?,
+            parse_json(payload)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn delete_category(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<MessageResponse>>> {
+    state
+        .admin()
+        .delete_category(
+            &principal,
+            parse_path(path)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(MessageResponse {
+        message: "category deleted",
+    })))
+}
+
+async fn list_files(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<AdminFileListQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<Paginated<crate::models::AdminFileItem>>>> {
+    let data = state
+        .admin()
+        .list_files(&principal, parse_query(query)?)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn delete_file(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<MessageResponse>>> {
+    state
+        .admin()
+        .delete_file(
+            &principal,
+            parse_path(path)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(MessageResponse {
+        message: "file deleted",
+    })))
+}
+
+async fn cleanup_files(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> AppResult<Json<ApiResponse<serde_json::Value>>> {
+    let cleaned = state
+        .admin()
+        .cleanup_orphan_files(&principal, &audit_context(addr, &headers))
+        .await?;
+    Ok(Json(ApiResponse::new(
+        serde_json::json!({ "cleaned": cleaned }),
+    )))
+}
+
+async fn create_report(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    payload: Result<Json<CreateReportRequest>, JsonRejection>,
+) -> AppResult<(StatusCode, Json<ApiResponse<crate::models::ReportItem>>)> {
+    let data = state
+        .admin()
+        .create_report(&principal, parse_json(payload)?)
+        .await?;
+    Ok((StatusCode::CREATED, Json(ApiResponse::new(data))))
+}
+
+async fn list_reports(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<ReportListQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<Paginated<crate::models::ReportItem>>>> {
+    let data = state
+        .admin()
+        .list_reports(&principal, parse_query(query)?)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn resolve_report(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+    payload: Result<Json<ResolveReportRequest>, JsonRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::ReportItem>>> {
+    let data = state
+        .admin()
+        .resolve_report(
+            &principal,
+            parse_path(path)?,
+            parse_json(payload)?,
+            &audit_context(addr, &headers),
+        )
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn list_logs(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<AdminLogListQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<Paginated<crate::models::AdminLogItem>>>> {
+    let data = state
+        .admin()
+        .list_logs(&principal, parse_query(query)?)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+fn audit_context(addr: SocketAddr, headers: &HeaderMap) -> AdminAuditContext {
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.chars().take(512).collect::<String>());
+    AdminAuditContext {
+        ip: Some(IpNetwork::from(addr.ip())),
+        user_agent,
+    }
+}

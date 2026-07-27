@@ -130,8 +130,12 @@ impl AuthService {
             return Err(AuthError::InvalidCredentials);
         }
         ensure_active(&user)?;
-
-        self.issue_session(user, client_ip, user_agent).await
+        let user_id = user.id;
+        let session = self.issue_session(user, client_ip, user_agent).await?;
+        if let Err(error) = self.repository.touch_last_login(user_id).await {
+            tracing::warn!(%error, %user_id, "failed to update last_login_at");
+        }
+        Ok(session)
     }
 
     pub async fn refresh(
