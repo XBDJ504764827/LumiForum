@@ -281,3 +281,95 @@ export interface NotificationListParams {
   is_read?: boolean;
   type?: NotificationType;
 }
+
+export type SearchType = "topic" | "comment" | "user";
+export type SearchSort = "relevance" | "latest" | "hot";
+
+export interface SearchParams {
+  q?: string;
+  keyword?: string;
+  type?: SearchType;
+  category_id?: string;
+  author_id?: string;
+  sort?: SearchSort;
+  page?: number;
+  page_size?: number;
+  limit?: number;
+  from?: string;
+  to?: string;
+}
+
+export interface SearchAuthor {
+  id: string;
+  username: string;
+  nickname: string | null;
+  avatar: string | null;
+  role: RoleSummary;
+}
+
+export interface TopicSearchHit {
+  id: string;
+  title: string;
+  slug: string;
+  summary: string | null;
+  highlight: string;
+  category: CategorySummary;
+  author: SearchAuthor;
+  stats: TopicStats;
+  created_at: string;
+  rank: number;
+}
+
+export interface CommentSearchHit {
+  id: string;
+  topic_id: string;
+  topic_slug: string;
+  topic_title: string;
+  content_preview: string;
+  highlight: string;
+  author: SearchAuthor;
+  like_count: number;
+  created_at: string;
+  rank: number;
+}
+
+export interface UserSearchHit {
+  id: string;
+  username: string;
+  nickname: string | null;
+  avatar: string | null;
+  role: RoleSummary;
+  followers_count: number;
+  following_count: number;
+  highlight: string;
+  created_at: string;
+  rank: number;
+}
+
+export type SearchHit =
+  | ({ kind: "topic" } & TopicSearchHit)
+  | ({ kind: "comment" } & CommentSearchHit)
+  | ({ kind: "user" } & UserSearchHit);
+
+export interface SearchResponse {
+  query: string;
+  type: SearchType;
+  sort: SearchSort;
+  items: SearchHit[];
+  pagination: PaginationMeta;
+  engine: string;
+}
+
+export interface SearchSuggestionsResponse {
+  query: string;
+  suggestions: string[];
+}
+
+export interface HotKeyword {
+  keyword: string;
+  score: number;
+}
+
+export interface HotKeywordsResponse {
+  keywords: HotKeyword[];
+}

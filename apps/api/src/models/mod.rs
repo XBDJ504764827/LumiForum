@@ -6,6 +6,7 @@ mod pagination;
 mod rbac;
 mod reaction;
 mod refresh_token;
+mod search;
 mod topic;
 mod user;
 
@@ -42,6 +43,11 @@ pub use reaction::{
     UserPublicSummary,
 };
 pub use refresh_token::RefreshTokenRecord;
+pub use search::{
+    CommentSearchHit, HotKeyword, HotKeywordsResponse, SearchAuthor, SearchHit, SearchQuery,
+    SearchResponse, SearchSort, SearchSuggestionsResponse, SearchTopicStats, SearchType,
+    TopicSearchHit, UserSearchHit,
+};
 pub use topic::{
     CreateTopicRequest, ModerateTopicRequest, TopicAuthorSummary, TopicDetail, TopicListQuery,
     TopicListSort, TopicRecord, TopicStats, TopicStatus, TopicSummary, UpdateTopicRequest,

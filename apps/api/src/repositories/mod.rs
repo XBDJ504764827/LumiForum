@@ -4,6 +4,7 @@ mod category;
 mod comment;
 mod notification;
 mod reaction;
+mod search;
 mod topic;
 mod user;
 
@@ -16,6 +17,7 @@ pub use category::{
 pub use comment::{repository_comment_to_node, CommentRepository, NewComment, RepositoryComment};
 pub use notification::{NewNotification, NotificationListFilter, NotificationRepository};
 pub use reaction::{FollowCounters, ReactionRepository};
+pub use search::{CommentSearchFilter, SearchRepository, TopicSearchFilter, UserSearchFilter};
 pub use topic::{
     repository_topic_to_detail, repository_topic_to_summary, NewTopic, RepositoryTopic,
     TopicListOptions, TopicModeration, TopicRepository, TopicUpdate,

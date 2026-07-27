@@ -7,11 +7,11 @@ use sqlx::PgPool;
 use crate::config::Config;
 use crate::repositories::{
     AuthRepository, AuthorizationRepository, CategoryRepository, CommentRepository,
-    NotificationRepository, ReactionRepository, TopicRepository, UserRepository,
+    NotificationRepository, ReactionRepository, SearchRepository, TopicRepository, UserRepository,
 };
 use crate::services::{
     AuthService, AuthServiceConfig, AuthorizationService, CategoryService, CommentService,
-    NotificationService, ReactionService, TopicService, UserService,
+    NotificationService, ReactionService, SearchService, TopicService, UserService,
 };
 
 #[derive(Clone)]
@@ -31,6 +31,7 @@ struct AppStateInner {
     pub comments: CommentService,
     pub reactions: ReactionService,
     pub notifications: NotificationService,
+    pub search: SearchService,
 }
 
 impl AppState {
@@ -80,6 +81,7 @@ impl AppState {
             notification_repository,
             redis.clone(),
         );
+        let search = SearchService::new(SearchRepository::new(db.clone()), redis.clone());
 
         Ok(Self {
             inner: Arc::new(AppStateInner {
@@ -94,6 +96,7 @@ impl AppState {
                 comments,
                 reactions,
                 notifications,
+                search,
             }),
         })
     }
@@ -140,5 +143,9 @@ impl AppState {
 
     pub fn notifications(&self) -> &NotificationService {
         &self.inner.notifications
+    }
+
+    pub fn search(&self) -> &SearchService {
+        &self.inner.search
     }
 }
