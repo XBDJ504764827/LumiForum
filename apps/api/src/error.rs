@@ -6,7 +6,9 @@ use axum::{
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::services::{AuthError, AuthorizationError, CategoryError, TopicError, UserError};
+use crate::services::{
+    AuthError, AuthorizationError, CategoryError, CommentError, TopicError, UserError,
+};
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -32,6 +34,8 @@ pub enum AppError {
     CsrfValidationFailed,
     #[error("resource not found")]
     NotFound,
+    #[error("rate limit exceeded")]
+    RateLimited,
     #[error("refresh token reuse detected")]
     RefreshTokenReused,
     #[error(transparent)]
@@ -103,6 +107,11 @@ impl IntoResponse for AppError {
                 "request origin is not allowed",
             ),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found", "resource not found"),
+            Self::RateLimited => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "rate_limited",
+                "too many requests",
+            ),
             Self::RefreshTokenReused => {
                 tracing::warn!("refresh token reuse detected; token family revoked");
                 (
@@ -186,6 +195,18 @@ impl From<TopicError> for AppError {
             TopicError::SlugConflict => Self::SlugConflict,
             TopicError::Forbidden => Self::Forbidden,
             TopicError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<CommentError> for AppError {
+    fn from(error: CommentError) -> Self {
+        match error {
+            CommentError::Validation(message) => Self::Validation(message),
+            CommentError::NotFound | CommentError::TopicNotFound => Self::NotFound,
+            CommentError::Forbidden => Self::Forbidden,
+            CommentError::RateLimited => Self::RateLimited,
+            CommentError::Internal(error) => Self::Internal(error),
         }
     }
 }

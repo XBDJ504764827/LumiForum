@@ -1,6 +1,7 @@
 mod auth;
 mod authorization;
 mod category;
+mod comment;
 mod topic;
 mod user;
 
@@ -10,6 +11,7 @@ pub use category::{
     repository_category_to_response, CategoryRepository, CategoryUpdate, NewCategory,
     RepositoryCategory,
 };
+pub use comment::{repository_comment_to_node, CommentRepository, NewComment, RepositoryComment};
 pub use topic::{
     repository_topic_to_detail, repository_topic_to_summary, NewTopic, RepositoryTopic,
     TopicListOptions, TopicModeration, TopicRepository, TopicUpdate,

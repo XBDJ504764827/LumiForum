@@ -157,3 +157,34 @@ export interface UpdateTopicRequest {
   content?: string;
   summary?: string | null;
 }
+
+export interface CommentStats {
+  likes: number;
+  replies: number;
+}
+
+export interface CommentNode {
+  id: string;
+  topic_id: string;
+  parent_id: string | null;
+  content: string;
+  author: TopicAuthor;
+  stats: CommentStats;
+  edited_at: string | null;
+  created_at: string;
+  updated_at: string;
+  replies: CommentNode[];
+}
+
+export interface CommentListParams {
+  page?: number;
+  page_size?: number;
+}
+
+export interface CreateCommentRequest {
+  content: string;
+}
+
+export interface UpdateCommentRequest {
+  content: string;
+}

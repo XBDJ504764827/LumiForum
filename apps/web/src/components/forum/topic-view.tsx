@@ -21,6 +21,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { MarkdownContent } from "@/components/forum/markdown-content";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
+import { CommentSection } from "@/components/forum/comment-section";
 import { deleteTopic, forumKeys, getTopic } from "@/lib/api/forum";
 
 const elevatedRoles = new Set(["moderator", "administrator", "super_administrator"]);
@@ -112,7 +113,7 @@ export function TopicView({ slug }: { slug: string }) {
         <MarkdownContent content={data.content} className="py-4" />
 
         {canEdit ? (
-          <footer className="mt-10 border-t border-border pt-6">
+          <footer className="mt-8 border-t border-border pt-6">
             <div className="flex flex-wrap items-center gap-2">
               <Link
                 href={`/topics/${data.slug}/edit`}
@@ -156,6 +157,8 @@ export function TopicView({ slug }: { slug: string }) {
           </footer>
         ) : null}
       </article>
+
+      <CommentSection topicId={data.id} />
     </main>
   );
 }
