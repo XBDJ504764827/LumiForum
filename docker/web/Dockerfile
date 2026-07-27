@@ -1,5 +1,5 @@
 # Production multi-stage build for apps/web
-FROM node:20-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS deps
 
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
@@ -11,9 +11,9 @@ COPY packages/ui/package.json packages/ui/package.json
 COPY packages/types/package.json packages/types/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --frozen-lockfile
 
-FROM node:20-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
@@ -32,7 +32,7 @@ ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 RUN pnpm --filter @lumiforum/web build
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate \
   && apt-get update \

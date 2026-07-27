@@ -8,7 +8,7 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const variantClass: Record<NonNullable<ButtonProps["variant"]>, string> = {
-  default: "bg-zinc-900 text-zinc-50 hover:bg-zinc-800",
+  default: "bg-primary text-primary-foreground hover:bg-primary/90",
   outline: "border border-zinc-300 bg-transparent hover:bg-zinc-100",
   ghost: "bg-transparent hover:bg-zinc-100",
 };

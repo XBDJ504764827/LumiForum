@@ -1,0 +1,44 @@
+-- Bootstrap default forum sections so posting works on a fresh database.
+INSERT INTO categories (slug, name, description, icon, sort_order, is_visible)
+VALUES
+    (
+        'announcements',
+        '公告',
+        '官方公告与重要通知',
+        'megaphone',
+        10,
+        true
+    ),
+    (
+        'general',
+        '综合讨论',
+        '社区日常讨论与交流',
+        'messages-square',
+        20,
+        true
+    ),
+    (
+        'guides',
+        '攻略分享',
+        '经验、教程与技巧分享',
+        'book-open',
+        30,
+        true
+    ),
+    (
+        'feedback',
+        '建议反馈',
+        '功能建议与问题反馈',
+        'message-circle',
+        40,
+        true
+    ),
+    (
+        'off-topic',
+        '灌水闲聊',
+        '轻松闲聊与非主题讨论',
+        'coffee',
+        50,
+        true
+    )
+ON CONFLICT (slug) DO NOTHING;

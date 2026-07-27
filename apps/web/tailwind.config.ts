@@ -13,6 +13,16 @@ const config: Config = {
         },
         border: "hsl(var(--lf-border))",
         ring: "hsl(var(--lf-ring))",
+        primary: {
+          DEFAULT: "hsl(var(--lf-primary))",
+          foreground: "hsl(var(--lf-primary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--lf-destructive))",
+          foreground: "hsl(var(--lf-destructive-foreground))",
+        },
+        surface: "hsl(var(--lf-surface))",
+        accent: "hsl(var(--lf-accent))",
       },
       borderRadius: {
         lg: "0.5rem",

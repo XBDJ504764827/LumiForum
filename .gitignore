@@ -9,6 +9,7 @@ out/
 .next/
 .turbo/
 target/
+/uploads/
 *.tsbuildinfo
 
 # Env & secrets
