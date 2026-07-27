@@ -62,6 +62,10 @@ pub const PERMISSION_COMMENT_UPDATE_ANY: &str = "comment.update:any";
 pub const PERMISSION_COMMENT_DELETE_SELF: &str = "comment.delete:self";
 pub const PERMISSION_COMMENT_DELETE_ANY: &str = "comment.delete:any";
 pub const PERMISSION_COMMENT_RESTORE: &str = "comment.restore";
+pub const PERMISSION_TOPIC_LIKE: &str = "topic.like";
+pub const PERMISSION_COMMENT_LIKE: &str = "comment.like";
+pub const PERMISSION_TOPIC_FAVORITE: &str = "topic.favorite";
+pub const PERMISSION_USER_FOLLOW: &str = "user.follow";
 
 #[derive(Clone)]
 pub struct AuthenticatedPrincipal {

@@ -69,6 +69,8 @@ pub struct UserResponse {
     pub role: RoleSummary,
     pub status: UserStatus,
     pub email_verified: bool,
+    pub followers_count: i64,
+    pub following_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

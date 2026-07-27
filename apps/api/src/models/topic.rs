@@ -114,6 +114,9 @@ pub struct TopicDetail {
     pub last_reply_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub liked_by_me: bool,
+    pub favorited_by_me: bool,
+    pub following_author: bool,
 }
 
 #[derive(Default, Deserialize)]

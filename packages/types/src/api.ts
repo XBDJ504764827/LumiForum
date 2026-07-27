@@ -40,6 +40,8 @@ export interface User {
   role: RoleSummary;
   status: UserStatus;
   email_verified: boolean;
+  followers_count: number;
+  following_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +123,9 @@ export interface TopicSummary {
 
 export interface TopicDetail extends TopicSummary {
   content: string;
+  liked_by_me: boolean;
+  favorited_by_me: boolean;
+  following_author: boolean;
 }
 
 export interface PaginationMeta {
@@ -173,7 +178,50 @@ export interface CommentNode {
   edited_at: string | null;
   created_at: string;
   updated_at: string;
+  liked_by_me: boolean;
   replies: CommentNode[];
+}
+
+export interface TopicLikeState {
+  liked: boolean;
+  like_count: number;
+}
+
+export interface CommentLikeState {
+  liked: boolean;
+  like_count: number;
+}
+
+export interface FavoriteState {
+  favorited: boolean;
+}
+
+export interface FollowState {
+  following: boolean;
+  followers_count: number;
+  following_count: number;
+}
+
+export interface FavoriteItem {
+  favorited_at: string;
+  topic: TopicSummary;
+}
+
+export interface UserPublicSummary {
+  id: string;
+  username: string;
+  nickname: string | null;
+  avatar: string | null;
+  role: RoleSummary;
+  followers_count: number;
+  following_count: number;
+  is_following: boolean;
+  created_at: string;
+}
+
+export interface ReactionListParams {
+  page?: number;
+  page_size?: number;
 }
 
 export interface CommentListParams {

@@ -2,6 +2,7 @@ pub mod auth;
 mod categories;
 mod comments;
 mod health;
+mod reactions;
 mod response;
 mod topics;
 pub mod users;
@@ -25,6 +26,7 @@ pub fn create_router(state: AppState) -> Router {
         .merge(categories::router(state.clone()))
         .merge(topics::router(state.clone()))
         .merge(comments::router(state.clone()))
+        .merge(reactions::router(state.clone()))
         .layer(TraceLayer::new_for_http())
         .layer(RequestBodyLimitLayer::new(1024 * 1024))
         .layer(cors)

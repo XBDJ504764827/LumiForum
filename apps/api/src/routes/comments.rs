@@ -3,7 +3,7 @@ use axum::{
         rejection::{JsonRejection, PathRejection, QueryRejection},
         State,
     },
-    http::StatusCode,
+    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     middleware,
     routing::{get, patch, post},
     Extension, Json, Router,
@@ -71,13 +71,30 @@ fn restore_router(state: AppState) -> Router<AppState> {
 
 async fn list_for_topic(
     State(state): State<AppState>,
+    headers: HeaderMap,
     path: Result<axum::extract::Path<Uuid>, PathRejection>,
     query: Result<axum::extract::Query<CommentListQuery>, QueryRejection>,
 ) -> AppResult<Json<ApiResponse<Paginated<CommentNode>>>> {
     let topic_id = parse_path(path)?;
     let query = parse_query(query)?;
-    let comments = state.comments().list_for_topic(topic_id, query).await?;
+    let mut comments = state.comments().list_for_topic(topic_id, query).await?;
+    let viewer_id = optional_viewer(&state, &headers).await;
+    state
+        .reactions()
+        .mark_comment_likes(&mut comments.items, viewer_id)
+        .await?;
     Ok(Json(ApiResponse::new(comments)))
+}
+
+async fn optional_viewer(state: &AppState, headers: &HeaderMap) -> Option<Uuid> {
+    let value = headers.get(AUTHORIZATION)?.to_str().ok()?;
+    let (scheme, token) = value.split_once(' ')?;
+    if !scheme.eq_ignore_ascii_case("Bearer") || token.is_empty() || token.contains(' ') {
+        return None;
+    }
+    let claims = state.auth().token_service().decode_access_token(token).ok()?;
+    let principal = state.authorization().authenticate(claims).await.ok()?;
+    Some(principal.user_id)
 }
 
 async fn create_root(

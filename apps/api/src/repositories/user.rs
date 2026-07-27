@@ -19,6 +19,8 @@ pub struct RepositoryUser {
     pub status: String,
     pub email_verified: bool,
     pub auth_version: i32,
+    pub followers_count: i64,
+    pub following_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -69,6 +71,8 @@ impl UserRepository {
                 updated.status,
                 updated.email_verified,
                 updated.auth_version,
+                updated.followers_count,
+                updated.following_count,
                 updated.created_at,
                 updated.updated_at
             FROM updated
@@ -99,6 +103,8 @@ pub fn repository_user_to_response(user: RepositoryUser) -> Result<UserResponse,
         },
         status,
         email_verified: user.email_verified,
+        followers_count: user.followers_count,
+        following_count: user.following_count,
         created_at: user.created_at,
         updated_at: user.updated_at,
     })
@@ -117,6 +123,8 @@ const USER_WITH_ROLE_QUERY: &str = r#"
         users.status,
         users.email_verified,
         users.auth_version,
+        users.followers_count,
+        users.following_count,
         users.created_at,
         users.updated_at
     FROM users

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { ProfileUpdateRequest, User } from "@lumiforum/types";
 import { Alert, Avatar, AvatarFallback, AvatarImage, Button, Input, Label } from "@lumiforum/ui";
 import { useMutation } from "@tanstack/react-query";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -79,6 +80,17 @@ function ProfileContent({ user, onUpdated }: { user: User; onUpdated: (user: Use
           <div>
             <p className="text-sm text-muted-foreground">个人中心</p>
             <h1 className="mt-1 text-3xl font-semibold">{user.nickname || user.username}</h1>
+            <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
+              <Link href={`/users/${user.id}/followers`} className="hover:text-foreground">
+                <span className="font-medium text-foreground">{user.followers_count}</span> 粉丝
+              </Link>
+              <Link href={`/users/${user.id}/following`} className="hover:text-foreground">
+                <span className="font-medium text-foreground">{user.following_count}</span> 关注
+              </Link>
+              <Link href="/favorites" className="hover:text-foreground">
+                我的收藏
+              </Link>
+            </div>
           </div>
         </div>
         <div className="inline-flex items-center gap-2 text-sm text-primary">
@@ -103,6 +115,8 @@ function ProfileContent({ user, onUpdated }: { user: User; onUpdated: (user: Use
             <AccountRow label="邮箱" value={user.email} />
             <AccountRow label="状态" value={statusLabel(user.status)} />
             <AccountRow label="邮箱验证" value={user.email_verified ? "已验证" : "未验证"} />
+            <AccountRow label="粉丝" value={String(user.followers_count)} />
+            <AccountRow label="关注" value={String(user.following_count)} />
             <AccountRow label="加入时间" value={formatDate(user.created_at)} />
           </dl>
         </aside>

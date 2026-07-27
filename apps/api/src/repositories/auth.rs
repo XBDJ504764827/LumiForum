@@ -61,6 +61,8 @@ impl AuthRepository {
                 inserted.status,
                 inserted.email_verified,
                 inserted.auth_version,
+                inserted.followers_count,
+                inserted.following_count,
                 inserted.created_at,
                 inserted.updated_at
             FROM inserted
@@ -93,6 +95,8 @@ impl AuthRepository {
                 users.status,
                 users.email_verified,
                 users.auth_version,
+                users.followers_count,
+                users.following_count,
                 users.created_at,
                 users.updated_at
             FROM users
@@ -271,6 +275,8 @@ async fn find_user_by_id_for_update(
             users.status,
             users.email_verified,
             users.auth_version,
+            users.followers_count,
+            users.following_count,
             users.created_at,
             users.updated_at
         FROM users

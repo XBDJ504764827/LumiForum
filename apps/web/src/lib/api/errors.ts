@@ -43,4 +43,7 @@ const publicMessages: Record<string, string> = {
   invalid_refresh_token: "登录已过期，请重新登录",
   authentication_required: "请先登录",
   permission_denied: "当前账户没有此操作权限",
+  not_found: "资源不存在",
+  rate_limited: "操作过于频繁，请稍后再试",
+  validation_error: "输入内容不符合要求",
 };

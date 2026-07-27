@@ -1,10 +1,15 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { CommentNode, User } from "@lumiforum/types";
+import type { CommentNode, Paginated, User } from "@lumiforum/types";
 import { Alert, Avatar, AvatarFallback, AvatarImage, Button, Textarea } from "@lumiforum/ui";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, MessageSquare, Pencil, Reply, Trash2 } from "lucide-react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { InfiniteData } from "@tanstack/react-query";
+import { ChevronDown, Heart, MessageSquare, Pencil, Reply, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -18,8 +23,10 @@ import {
   createComment,
   deleteComment,
   forumKeys,
+  likeComment,
   listComments,
   replyToComment,
+  unlikeComment,
   updateComment,
 } from "@/lib/api/forum";
 import { commentEditorSchema, type CommentEditorValues } from "@/lib/forum/comment-schemas";
@@ -90,7 +97,13 @@ export function CommentSection({ topicId }: { topicId: string }) {
       ) : (
         <div className="divide-y divide-border border-y border-border">
           {items.map((comment) => (
-            <CommentItem key={comment.id} comment={comment} user={user} onChanged={invalidate} />
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              topicId={topicId}
+              user={user}
+              onChanged={invalidate}
+            />
           ))}
         </div>
       )}
@@ -118,11 +131,13 @@ export function CommentSection({ topicId }: { topicId: string }) {
 
 function CommentItem({
   comment,
+  topicId,
   user,
   onChanged,
   isChild = false,
 }: {
   comment: CommentNode;
+  topicId: string;
   user: User | null;
   onChanged: () => Promise<void>;
   isChild?: boolean;
@@ -133,6 +148,7 @@ function CommentItem({
     user && (user.id === comment.author.id || elevatedRoles.has(user.role.code)),
   );
   const canReply = Boolean(user) && !isChild;
+  const canLike = Boolean(user);
 
   const deletion = useMutation({
     mutationFn: () => deleteComment(comment.id),
@@ -179,6 +195,14 @@ function CommentItem({
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
+            {canLike ? (
+              <CommentLikeButton comment={comment} topicId={topicId} />
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2 text-xs text-muted-foreground">
+                <Heart className="size-3.5" aria-hidden="true" />
+                {comment.stats.likes}
+              </span>
+            )}
             {canReply ? (
               <Button
                 type="button"
@@ -258,6 +282,7 @@ function CommentItem({
                 <CommentItem
                   key={reply.id}
                   comment={reply}
+                  topicId={topicId}
                   user={user}
                   onChanged={onChanged}
                   isChild
@@ -269,6 +294,97 @@ function CommentItem({
       </div>
     </article>
   );
+}
+
+function CommentLikeButton({ comment, topicId }: { comment: CommentNode; topicId: string }) {
+  const queryClient = useQueryClient();
+  const commentsKey = forumKeys.comments(topicId, { page_size: PAGE_SIZE });
+  const mutation = useMutation({
+    mutationFn: () =>
+      comment.liked_by_me ? unlikeComment(comment.id) : likeComment(comment.id),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["forum", "comments", topicId] });
+      const previous =
+        queryClient.getQueryData<InfiniteData<Paginated<CommentNode>>>(commentsKey);
+      if (previous) {
+        queryClient.setQueryData<InfiniteData<Paginated<CommentNode>>>(commentsKey, {
+          ...previous,
+          pages: previous.pages.map((page) => ({
+            ...page,
+            items: mapCommentTree(page.items, comment.id, (node) => {
+              const liked = !node.liked_by_me;
+              return {
+                ...node,
+                liked_by_me: liked,
+                stats: {
+                  ...node.stats,
+                  likes: Math.max(0, node.stats.likes + (liked ? 1 : -1)),
+                },
+              };
+            }),
+          })),
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(commentsKey, context.previous);
+      }
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData<InfiniteData<Paginated<CommentNode>>>(commentsKey, (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          pages: current.pages.map((page) => ({
+            ...page,
+            items: mapCommentTree(page.items, comment.id, (node) => ({
+              ...node,
+              liked_by_me: result.liked,
+              stats: { ...node.stats, likes: result.like_count },
+            })),
+          })),
+        };
+      });
+    },
+  });
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className={`gap-1.5 ${comment.liked_by_me ? "text-primary" : ""}`}
+      disabled={mutation.isPending}
+      onClick={() => mutation.mutate()}
+    >
+      <Heart
+        className={`size-3.5 ${comment.liked_by_me ? "fill-current" : ""}`}
+        aria-hidden="true"
+      />
+      {comment.stats.likes > 0 ? comment.stats.likes : "赞"}
+    </Button>
+  );
+}
+
+function mapCommentTree(
+  nodes: CommentNode[],
+  targetId: string,
+  mapper: (node: CommentNode) => CommentNode,
+): CommentNode[] {
+  return nodes.map((node) => {
+    if (node.id === targetId) {
+      return mapper(node);
+    }
+    if (node.replies.length === 0) {
+      return node;
+    }
+    return {
+      ...node,
+      replies: mapCommentTree(node.replies, targetId, mapper),
+    };
+  });
 }
 
 function CommentComposer({
