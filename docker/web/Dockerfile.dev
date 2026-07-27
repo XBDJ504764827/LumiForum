@@ -1,5 +1,5 @@
 # Development image for apps/web — Next.js hot reload via pnpm
-FROM node:20-bookworm-slim
+FROM node:24-bookworm-slim
 
 RUN corepack enable \
   && corepack prepare pnpm@9.15.0 --activate \
