@@ -3,7 +3,7 @@ use axum::{
         rejection::{JsonRejection, PathRejection, QueryRejection},
         State,
     },
-    http::StatusCode,
+    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     middleware,
     routing::{get, patch, post},
     Extension, Json, Router,
@@ -58,11 +58,36 @@ async fn list(
 
 async fn get_by_slug(
     State(state): State<AppState>,
+    headers: HeaderMap,
     path: Result<axum::extract::Path<String>, PathRejection>,
 ) -> AppResult<Json<ApiResponse<TopicDetail>>> {
     let slug = parse_path(path)?;
-    let topic = state.topics().get_public(&slug).await?;
+    let mut topic = state.topics().get_public(&slug).await?;
+    if let Some(viewer_id) = optional_viewer(&state, &headers).await {
+        let (liked, favorited, following) = state
+            .reactions()
+            .viewer_topic_flags(topic.id, topic.author.id, Some(viewer_id))
+            .await?;
+        topic.liked_by_me = liked;
+        topic.favorited_by_me = favorited;
+        topic.following_author = following;
+    }
     Ok(Json(ApiResponse::new(topic)))
+}
+
+async fn optional_viewer(state: &AppState, headers: &HeaderMap) -> Option<Uuid> {
+    let value = headers.get(AUTHORIZATION)?.to_str().ok()?;
+    let (scheme, token) = value.split_once(' ')?;
+    if !scheme.eq_ignore_ascii_case("Bearer") || token.is_empty() || token.contains(' ') {
+        return None;
+    }
+    let claims = state
+        .auth()
+        .token_service()
+        .decode_access_token(token)
+        .ok()?;
+    let principal = state.authorization().authenticate(claims).await.ok()?;
+    Some(principal.user_id)
 }
 
 async fn create(

@@ -411,6 +411,7 @@ pub fn repository_comment_to_node(
         edited_at: comment.edited_at,
         created_at: comment.created_at,
         updated_at: comment.updated_at,
+        liked_by_me: false,
         replies,
     }
 }

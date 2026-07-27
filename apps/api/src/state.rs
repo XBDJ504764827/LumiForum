@@ -7,11 +7,11 @@ use sqlx::PgPool;
 use crate::config::Config;
 use crate::repositories::{
     AuthRepository, AuthorizationRepository, CategoryRepository, CommentRepository,
-    TopicRepository, UserRepository,
+    ReactionRepository, TopicRepository, UserRepository,
 };
 use crate::services::{
     AuthService, AuthServiceConfig, AuthorizationService, CategoryService, CommentService,
-    TopicService, UserService,
+    ReactionService, TopicService, UserService,
 };
 
 #[derive(Clone)]
@@ -29,6 +29,7 @@ struct AppStateInner {
     pub categories: CategoryService,
     pub topics: TopicService,
     pub comments: CommentService,
+    pub reactions: ReactionService,
 }
 
 impl AppState {
@@ -67,6 +68,7 @@ impl AppState {
             topic_repository,
             redis.clone(),
         );
+        let reactions = ReactionService::new(ReactionRepository::new(db.clone()), redis.clone());
 
         Ok(Self {
             inner: Arc::new(AppStateInner {
@@ -79,6 +81,7 @@ impl AppState {
                 categories,
                 topics,
                 comments,
+                reactions,
             }),
         })
     }
@@ -117,5 +120,9 @@ impl AppState {
 
     pub fn comments(&self) -> &CommentService {
         &self.inner.comments
+    }
+
+    pub fn reactions(&self) -> &ReactionService {
+        &self.inner.reactions
     }
 }

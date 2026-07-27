@@ -1,6 +1,6 @@
 "use client";
 
-import { LogIn, PenLine, UserRound } from "lucide-react";
+import { Bookmark, LogIn, PenLine, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -20,10 +20,22 @@ export function ForumHeader() {
           <Link href="/categories" className="text-muted-foreground hover:text-foreground">
             板块
           </Link>
+          {status === "authenticated" ? (
+            <Link href="/favorites" className="text-muted-foreground hover:text-foreground">
+              收藏
+            </Link>
+          ) : null}
         </nav>
         <div className="ml-auto flex min-w-28 items-center justify-end gap-2">
           {status === "authenticated" ? (
             <>
+              <Link
+                href="/favorites"
+                className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted sm:hidden"
+                aria-label="我的收藏"
+              >
+                <Bookmark className="size-4" aria-hidden="true" />
+              </Link>
               <Link
                 href="/topics/new"
                 className="hidden h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 sm:inline-flex"

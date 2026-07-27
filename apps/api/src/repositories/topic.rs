@@ -256,6 +256,9 @@ pub fn repository_topic_to_detail(topic: RepositoryTopic) -> Result<TopicDetail,
         last_reply_at: topic.last_reply_at,
         created_at: topic.created_at,
         updated_at: topic.updated_at,
+        liked_by_me: false,
+        favorited_by_me: false,
+        following_author: false,
     })
 }
 

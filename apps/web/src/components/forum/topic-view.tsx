@@ -1,9 +1,11 @@
 "use client";
 
 import type { Route } from "next";
+import type { TopicDetail } from "@lumiforum/types";
 import { Alert, Avatar, AvatarFallback, AvatarImage, Badge, Button } from "@lumiforum/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Bookmark,
   CalendarDays,
   Eye,
   Heart,
@@ -12,6 +14,8 @@ import {
   Pin,
   Sparkles,
   Trash2,
+  UserPlus,
+  UserMinus,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -22,7 +26,17 @@ import { MarkdownContent } from "@/components/forum/markdown-content";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
 import { CommentSection } from "@/components/forum/comment-section";
-import { deleteTopic, forumKeys, getTopic } from "@/lib/api/forum";
+import {
+  deleteTopic,
+  favoriteTopic,
+  followUser,
+  forumKeys,
+  getTopic,
+  likeTopic,
+  unfavoriteTopic,
+  unfollowUser,
+  unlikeTopic,
+} from "@/lib/api/forum";
 
 const elevatedRoles = new Set(["moderator", "administrator", "super_administrator"]);
 
@@ -55,6 +69,8 @@ export function TopicView({ slug }: { slug: string }) {
   const canEdit =
     status === "authenticated" &&
     Boolean(user && (user.id === data.author.id || elevatedRoles.has(user.role.code)));
+  const canReact = status === "authenticated";
+  const canFollow = status === "authenticated" && Boolean(user && user.id !== data.author.id);
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-9 sm:px-8">
@@ -100,6 +116,13 @@ export function TopicView({ slug }: { slug: string }) {
                 <p className="font-medium">{data.author.nickname || data.author.username}</p>
                 <p className="text-xs text-muted-foreground">{data.author.role.name}</p>
               </div>
+              {canFollow ? (
+                <FollowAuthorButton
+                  authorId={data.author.id}
+                  following={data.following_author}
+                  slug={slug}
+                />
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
               <Meta icon={CalendarDays} value={formatDate(data.created_at)} />
@@ -111,6 +134,22 @@ export function TopicView({ slug }: { slug: string }) {
         </header>
 
         <MarkdownContent content={data.content} className="py-4" />
+
+        <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-border pt-6">
+          {canReact ? (
+            <>
+              <TopicLikeButton topic={data} slug={slug} />
+              <TopicFavoriteButton topic={data} slug={slug} />
+            </>
+          ) : status === "unauthenticated" ? (
+            <p className="text-sm text-muted-foreground">
+              <Link href="/login" className="font-medium text-primary hover:underline">
+                登录
+              </Link>
+              后可点赞与收藏
+            </p>
+          ) : null}
+        </div>
 
         {canEdit ? (
           <footer className="mt-8 border-t border-border pt-6">
@@ -160,6 +199,160 @@ export function TopicView({ slug }: { slug: string }) {
 
       <CommentSection topicId={data.id} />
     </main>
+  );
+}
+
+function TopicLikeButton({ topic, slug }: { topic: TopicDetail; slug: string }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: () => (topic.liked_by_me ? unlikeTopic(topic.id) : likeTopic(topic.id)),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: forumKeys.topic(slug) });
+      const previous = queryClient.getQueryData<TopicDetail>(forumKeys.topic(slug));
+      if (previous) {
+        const liked = !previous.liked_by_me;
+        queryClient.setQueryData<TopicDetail>(forumKeys.topic(slug), {
+          ...previous,
+          liked_by_me: liked,
+          stats: {
+            ...previous.stats,
+            likes: Math.max(0, previous.stats.likes + (liked ? 1 : -1)),
+          },
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(forumKeys.topic(slug), context.previous);
+      }
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData<TopicDetail>(forumKeys.topic(slug), (current) =>
+        current
+          ? {
+              ...current,
+              liked_by_me: result.liked,
+              stats: { ...current.stats, likes: result.like_count },
+            }
+          : current,
+      );
+    },
+  });
+
+  return (
+    <Button
+      type="button"
+      variant={topic.liked_by_me ? "default" : "outline"}
+      size="sm"
+      className="gap-2"
+      disabled={mutation.isPending}
+      onClick={() => mutation.mutate()}
+    >
+      <Heart className={`size-4 ${topic.liked_by_me ? "fill-current" : ""}`} aria-hidden="true" />
+      {topic.liked_by_me ? "已点赞" : "点赞"}
+      <span className="text-xs opacity-80">{topic.stats.likes}</span>
+    </Button>
+  );
+}
+
+function TopicFavoriteButton({ topic, slug }: { topic: TopicDetail; slug: string }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: () => (topic.favorited_by_me ? unfavoriteTopic(topic.id) : favoriteTopic(topic.id)),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: forumKeys.topic(slug) });
+      const previous = queryClient.getQueryData<TopicDetail>(forumKeys.topic(slug));
+      if (previous) {
+        queryClient.setQueryData<TopicDetail>(forumKeys.topic(slug), {
+          ...previous,
+          favorited_by_me: !previous.favorited_by_me,
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(forumKeys.topic(slug), context.previous);
+      }
+    },
+    onSuccess: async (result) => {
+      queryClient.setQueryData<TopicDetail>(forumKeys.topic(slug), (current) =>
+        current ? { ...current, favorited_by_me: result.favorited } : current,
+      );
+      await queryClient.invalidateQueries({ queryKey: ["forum", "favorites"] });
+    },
+  });
+
+  return (
+    <Button
+      type="button"
+      variant={topic.favorited_by_me ? "default" : "outline"}
+      size="sm"
+      className="gap-2"
+      disabled={mutation.isPending}
+      onClick={() => mutation.mutate()}
+    >
+      <Bookmark
+        className={`size-4 ${topic.favorited_by_me ? "fill-current" : ""}`}
+        aria-hidden="true"
+      />
+      {topic.favorited_by_me ? "已收藏" : "收藏"}
+    </Button>
+  );
+}
+
+function FollowAuthorButton({
+  authorId,
+  following,
+  slug,
+}: {
+  authorId: string;
+  following: boolean;
+  slug: string;
+}) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: () => (following ? unfollowUser(authorId) : followUser(authorId)),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: forumKeys.topic(slug) });
+      const previous = queryClient.getQueryData<TopicDetail>(forumKeys.topic(slug));
+      if (previous) {
+        queryClient.setQueryData<TopicDetail>(forumKeys.topic(slug), {
+          ...previous,
+          following_author: !previous.following_author,
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(forumKeys.topic(slug), context.previous);
+      }
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData<TopicDetail>(forumKeys.topic(slug), (current) =>
+        current ? { ...current, following_author: result.following } : current,
+      );
+    },
+  });
+
+  return (
+    <Button
+      type="button"
+      variant={following ? "outline" : "default"}
+      size="sm"
+      className="gap-1.5"
+      disabled={mutation.isPending}
+      onClick={() => mutation.mutate()}
+    >
+      {following ? (
+        <UserMinus className="size-3.5" aria-hidden="true" />
+      ) : (
+        <UserPlus className="size-3.5" aria-hidden="true" />
+      )}
+      {following ? "已关注" : "关注"}
+    </Button>
   );
 }
 
