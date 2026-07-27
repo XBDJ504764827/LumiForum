@@ -228,7 +228,11 @@ async fn optional_viewer(state: &AppState, headers: &HeaderMap) -> Option<Uuid> 
     if !scheme.eq_ignore_ascii_case("Bearer") || token.is_empty() || token.contains(' ') {
         return None;
     }
-    let claims = state.auth().token_service().decode_access_token(token).ok()?;
+    let claims = state
+        .auth()
+        .token_service()
+        .decode_access_token(token)
+        .ok()?;
     let principal = state.authorization().authenticate(claims).await.ok()?;
     Some(principal.user_id)
 }

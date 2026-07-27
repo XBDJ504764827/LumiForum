@@ -70,8 +70,7 @@ export function TopicView({ slug }: { slug: string }) {
     status === "authenticated" &&
     Boolean(user && (user.id === data.author.id || elevatedRoles.has(user.role.code)));
   const canReact = status === "authenticated";
-  const canFollow =
-    status === "authenticated" && Boolean(user && user.id !== data.author.id);
+  const canFollow = status === "authenticated" && Boolean(user && user.id !== data.author.id);
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-9 sm:px-8">
@@ -250,10 +249,7 @@ function TopicLikeButton({ topic, slug }: { topic: TopicDetail; slug: string }) 
       disabled={mutation.isPending}
       onClick={() => mutation.mutate()}
     >
-      <Heart
-        className={`size-4 ${topic.liked_by_me ? "fill-current" : ""}`}
-        aria-hidden="true"
-      />
+      <Heart className={`size-4 ${topic.liked_by_me ? "fill-current" : ""}`} aria-hidden="true" />
       {topic.liked_by_me ? "已点赞" : "点赞"}
       <span className="text-xs opacity-80">{topic.stats.likes}</span>
     </Button>
@@ -263,8 +259,7 @@ function TopicLikeButton({ topic, slug }: { topic: TopicDetail; slug: string }) 
 function TopicFavoriteButton({ topic, slug }: { topic: TopicDetail; slug: string }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: () =>
-      topic.favorited_by_me ? unfavoriteTopic(topic.id) : favoriteTopic(topic.id),
+    mutationFn: () => (topic.favorited_by_me ? unfavoriteTopic(topic.id) : favoriteTopic(topic.id)),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: forumKeys.topic(slug) });
       const previous = queryClient.getQueryData<TopicDetail>(forumKeys.topic(slug));

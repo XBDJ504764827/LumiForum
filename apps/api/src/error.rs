@@ -7,7 +7,8 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::services::{
-    AuthError, AuthorizationError, CategoryError, CommentError, ReactionError, TopicError, UserError,
+    AuthError, AuthorizationError, CategoryError, CommentError, ReactionError, TopicError,
+    UserError,
 };
 
 #[derive(Debug, Error)]

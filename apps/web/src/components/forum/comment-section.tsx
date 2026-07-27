@@ -3,11 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { CommentNode, Paginated, User } from "@lumiforum/types";
 import { Alert, Avatar, AvatarFallback, AvatarImage, Button, Textarea } from "@lumiforum/ui";
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { InfiniteData } from "@tanstack/react-query";
 import { ChevronDown, Heart, MessageSquare, Pencil, Reply, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -300,12 +296,10 @@ function CommentLikeButton({ comment, topicId }: { comment: CommentNode; topicId
   const queryClient = useQueryClient();
   const commentsKey = forumKeys.comments(topicId, { page_size: PAGE_SIZE });
   const mutation = useMutation({
-    mutationFn: () =>
-      comment.liked_by_me ? unlikeComment(comment.id) : likeComment(comment.id),
+    mutationFn: () => (comment.liked_by_me ? unlikeComment(comment.id) : likeComment(comment.id)),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["forum", "comments", topicId] });
-      const previous =
-        queryClient.getQueryData<InfiniteData<Paginated<CommentNode>>>(commentsKey);
+      const previous = queryClient.getQueryData<InfiniteData<Paginated<CommentNode>>>(commentsKey);
       if (previous) {
         queryClient.setQueryData<InfiniteData<Paginated<CommentNode>>>(commentsKey, {
           ...previous,

@@ -164,8 +164,8 @@ impl ReactionService {
             .list_favorites(principal.user_id, i64::from(page_size), offset)
             .await
             .map_err(internal)?;
-        let total =
-            u64::try_from(total).map_err(|_| internal(anyhow::anyhow!("negative favorite count")))?;
+        let total = u64::try_from(total)
+            .map_err(|_| internal(anyhow::anyhow!("negative favorite count")))?;
         Ok(Paginated {
             items,
             pagination: PaginationMeta::new(page, page_size, total),
@@ -236,8 +236,8 @@ impl ReactionService {
             .list_followers(user_id, viewer_id, i64::from(page_size), offset)
             .await
             .map_err(internal)?;
-        let total =
-            u64::try_from(total).map_err(|_| internal(anyhow::anyhow!("negative follower count")))?;
+        let total = u64::try_from(total)
+            .map_err(|_| internal(anyhow::anyhow!("negative follower count")))?;
         Ok(Paginated {
             items,
             pagination: PaginationMeta::new(page, page_size, total),
@@ -401,12 +401,7 @@ impl ReactionService {
         }
     }
 
-    async fn cache_follow_stats(
-        &self,
-        user_id: Uuid,
-        followers_count: i64,
-        following_count: i64,
-    ) {
+    async fn cache_follow_stats(&self, user_id: Uuid, followers_count: i64, following_count: i64) {
         let mut redis = self.redis.clone();
         let followers_key = format!("stats:user:{user_id}:followers");
         let following_key = format!("stats:user:{user_id}:following");

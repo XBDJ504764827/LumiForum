@@ -228,10 +228,11 @@ impl ReactionRepository {
             .await?;
         }
 
-        let like_count = sqlx::query_scalar::<_, i64>("SELECT like_count FROM topics WHERE id = $1")
-            .bind(topic_id)
-            .fetch_one(&mut *tx)
-            .await?;
+        let like_count =
+            sqlx::query_scalar::<_, i64>("SELECT like_count FROM topics WHERE id = $1")
+                .bind(topic_id)
+                .fetch_one(&mut *tx)
+                .await?;
         tx.commit().await?;
         Ok(like_count)
     }
@@ -263,10 +264,11 @@ impl ReactionRepository {
             .await?;
         }
 
-        let like_count = sqlx::query_scalar::<_, i64>("SELECT like_count FROM topics WHERE id = $1")
-            .bind(topic_id)
-            .fetch_one(&mut *tx)
-            .await?;
+        let like_count =
+            sqlx::query_scalar::<_, i64>("SELECT like_count FROM topics WHERE id = $1")
+                .bind(topic_id)
+                .fetch_one(&mut *tx)
+                .await?;
         tx.commit().await?;
         Ok(like_count)
     }
@@ -363,11 +365,7 @@ impl ReactionRepository {
         Ok(())
     }
 
-    pub async fn unfavorite_topic(
-        &self,
-        user_id: Uuid,
-        topic_id: Uuid,
-    ) -> Result<(), sqlx::Error> {
+    pub async fn unfavorite_topic(&self, user_id: Uuid, topic_id: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             DELETE FROM favorites

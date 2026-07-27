@@ -8,13 +8,7 @@ import Link from "next/link";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
-import {
-  followUser,
-  forumKeys,
-  listFollowers,
-  listFollowing,
-  unfollowUser,
-} from "@/lib/api/forum";
+import { followUser, forumKeys, listFollowers, listFollowing, unfollowUser } from "@/lib/api/forum";
 
 type Mode = "followers" | "following";
 
@@ -23,7 +17,9 @@ export function FollowListView({ userId, mode }: { userId: string; mode: Mode })
   const queryClient = useQueryClient();
   const params = { page: 1, page_size: 30 };
   const queryKey =
-    mode === "followers" ? forumKeys.followers(userId, params) : forumKeys.following(userId, params);
+    mode === "followers"
+      ? forumKeys.followers(userId, params)
+      : forumKeys.following(userId, params);
   const list = useQuery({
     queryKey,
     queryFn: () =>

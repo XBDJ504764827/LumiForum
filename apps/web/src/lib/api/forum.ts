@@ -191,9 +191,7 @@ export function unfavoriteTopic(topicId: string): Promise<FavoriteState> {
   );
 }
 
-export function listMyFavorites(
-  params: ReactionListParams = {},
-): Promise<Paginated<FavoriteItem>> {
+export function listMyFavorites(params: ReactionListParams = {}): Promise<Paginated<FavoriteItem>> {
   const query = new URLSearchParams();
   if (params.page) query.set("page", String(params.page));
   if (params.page_size) query.set("page_size", String(params.page_size));
