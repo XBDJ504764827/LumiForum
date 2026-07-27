@@ -152,7 +152,10 @@ function CommentItem({
   });
 
   return (
-    <article className={isChild ? "py-4 pl-4 sm:pl-8" : "py-6"}>
+    <article
+      id={`comment-${comment.id}`}
+      className={isChild ? "scroll-mt-24 py-4 pl-4 sm:pl-8" : "scroll-mt-24 py-6"}
+    >
       <div className="flex items-start gap-3">
         <Avatar className="size-9 border border-border">
           {comment.author.avatar ? <AvatarImage src={comment.author.avatar} alt="" /> : null}

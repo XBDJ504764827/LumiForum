@@ -66,6 +66,8 @@ pub const PERMISSION_TOPIC_LIKE: &str = "topic.like";
 pub const PERMISSION_COMMENT_LIKE: &str = "comment.like";
 pub const PERMISSION_TOPIC_FAVORITE: &str = "topic.favorite";
 pub const PERMISSION_USER_FOLLOW: &str = "user.follow";
+pub const PERMISSION_NOTIFICATION_READ_SELF: &str = "notification.read:self";
+pub const PERMISSION_NOTIFICATION_UPDATE_SELF: &str = "notification.update:self";
 
 #[derive(Clone)]
 pub struct AuthenticatedPrincipal {

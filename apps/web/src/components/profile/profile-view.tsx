@@ -90,6 +90,9 @@ function ProfileContent({ user, onUpdated }: { user: User; onUpdated: (user: Use
               <Link href="/favorites" className="hover:text-foreground">
                 我的收藏
               </Link>
+              <Link href="/notifications" className="hover:text-foreground">
+                通知中心
+              </Link>
             </div>
           </div>
         </div>

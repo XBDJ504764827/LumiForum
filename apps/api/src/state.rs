@@ -7,11 +7,11 @@ use sqlx::PgPool;
 use crate::config::Config;
 use crate::repositories::{
     AuthRepository, AuthorizationRepository, CategoryRepository, CommentRepository,
-    ReactionRepository, TopicRepository, UserRepository,
+    NotificationRepository, ReactionRepository, TopicRepository, UserRepository,
 };
 use crate::services::{
     AuthService, AuthServiceConfig, AuthorizationService, CategoryService, CommentService,
-    ReactionService, TopicService, UserService,
+    NotificationService, ReactionService, TopicService, UserService,
 };
 
 #[derive(Clone)]
@@ -30,6 +30,7 @@ struct AppStateInner {
     pub topics: TopicService,
     pub comments: CommentService,
     pub reactions: ReactionService,
+    pub notifications: NotificationService,
 }
 
 impl AppState {
@@ -63,12 +64,22 @@ impl AppState {
         let topic_repository = TopicRepository::new(db.clone());
         let categories = CategoryService::new(category_repository.clone());
         let topics = TopicService::new(topic_repository.clone(), category_repository);
+        let notification_repository = NotificationRepository::new(db.clone());
+        let notifications =
+            NotificationService::new(notification_repository.clone(), redis.clone());
         let comments = CommentService::new(
             CommentRepository::new(db.clone()),
             topic_repository,
+            notifications.clone(),
+            notification_repository.clone(),
             redis.clone(),
         );
-        let reactions = ReactionService::new(ReactionRepository::new(db.clone()), redis.clone());
+        let reactions = ReactionService::new(
+            ReactionRepository::new(db.clone()),
+            notifications.clone(),
+            notification_repository,
+            redis.clone(),
+        );
 
         Ok(Self {
             inner: Arc::new(AppStateInner {
@@ -82,6 +93,7 @@ impl AppState {
                 topics,
                 comments,
                 reactions,
+                notifications,
             }),
         })
     }
@@ -124,5 +136,9 @@ impl AppState {
 
     pub fn reactions(&self) -> &ReactionService {
         &self.inner.reactions
+    }
+
+    pub fn notifications(&self) -> &NotificationService {
+        &self.inner.notifications
     }
 }

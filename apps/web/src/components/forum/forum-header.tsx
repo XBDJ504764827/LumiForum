@@ -1,13 +1,23 @@
 "use client";
 
-import { Bookmark, LogIn, PenLine, UserRound } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Bell, Bookmark, LogIn, PenLine, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Brand } from "@/components/brand";
+import { getUnreadCount, notificationKeys } from "@/lib/api/notifications";
 
 export function ForumHeader() {
   const { status, user } = useAuth();
+  const unread = useQuery({
+    queryKey: notificationKeys.unread,
+    queryFn: getUnreadCount,
+    enabled: status === "authenticated",
+    refetchInterval: 60_000,
+    staleTime: 15_000,
+  });
+  const unreadCount = unread.data?.count ?? 0;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white/95 backdrop-blur">
@@ -21,14 +31,31 @@ export function ForumHeader() {
             板块
           </Link>
           {status === "authenticated" ? (
-            <Link href="/favorites" className="text-muted-foreground hover:text-foreground">
-              收藏
-            </Link>
+            <>
+              <Link href="/favorites" className="text-muted-foreground hover:text-foreground">
+                收藏
+              </Link>
+              <Link href="/notifications" className="text-muted-foreground hover:text-foreground">
+                通知
+              </Link>
+            </>
           ) : null}
         </nav>
         <div className="ml-auto flex min-w-28 items-center justify-end gap-2">
           {status === "authenticated" ? (
             <>
+              <Link
+                href="/notifications"
+                className="relative inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted"
+                aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : "通知"}
+              >
+                <Bell className="size-4" aria-hidden="true" />
+                {unreadCount > 0 ? (
+                  <span className="absolute right-1 top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-4 text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                ) : null}
+              </Link>
               <Link
                 href="/favorites"
                 className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted sm:hidden"

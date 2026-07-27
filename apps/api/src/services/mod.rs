@@ -2,6 +2,7 @@ mod auth;
 mod authorization;
 mod category;
 mod comment;
+mod notification;
 mod password;
 mod reaction;
 mod token;
@@ -12,6 +13,7 @@ pub use auth::{AuthError, AuthService, AuthServiceConfig, IssuedSession, Refresh
 pub use authorization::{AuthorizationError, AuthorizationService};
 pub use category::{CategoryError, CategoryService};
 pub use comment::{CommentError, CommentService};
+pub use notification::{NotificationError, NotificationService};
 pub use password::PasswordService;
 pub use reaction::{ReactionError, ReactionService};
 pub use token::TokenService;
