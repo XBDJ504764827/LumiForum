@@ -55,6 +55,13 @@ pub const PERMISSION_TOPIC_DELETE_SELF: &str = "topic.delete:self";
 pub const PERMISSION_TOPIC_DELETE_ANY: &str = "topic.delete:any";
 pub const PERMISSION_TOPIC_PIN: &str = "topic.pin";
 pub const PERMISSION_TOPIC_FEATURE: &str = "topic.feature";
+pub const PERMISSION_COMMENT_CREATE: &str = "comment.create";
+pub const PERMISSION_COMMENT_REPLY: &str = "comment.reply";
+pub const PERMISSION_COMMENT_UPDATE_SELF: &str = "comment.update:self";
+pub const PERMISSION_COMMENT_UPDATE_ANY: &str = "comment.update:any";
+pub const PERMISSION_COMMENT_DELETE_SELF: &str = "comment.delete:self";
+pub const PERMISSION_COMMENT_DELETE_ANY: &str = "comment.delete:any";
+pub const PERMISSION_COMMENT_RESTORE: &str = "comment.restore";
 
 #[derive(Clone)]
 pub struct AuthenticatedPrincipal {

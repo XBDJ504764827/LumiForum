@@ -61,6 +61,7 @@ pub struct TopicRecord {
     pub is_pinned: bool,
     pub is_featured: bool,
     pub last_reply_at: Option<DateTime<Utc>>,
+    pub last_reply_user_id: Option<Uuid>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
