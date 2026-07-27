@@ -33,6 +33,32 @@ export function joinUrl(base: string, path: string): string {
   return `${normalizedBase}${normalizedPath}`;
 }
 
+/** Convert an HTTP(S) API base URL into a WebSocket base URL. */
+export function getWsBaseUrl(options?: {
+  publicUrl?: string;
+  internalUrl?: string;
+  isServer?: boolean;
+}): string {
+  const httpBase = getApiBaseUrl(options);
+  if (httpBase.startsWith("https://")) {
+    return `wss://${httpBase.slice("https://".length)}`;
+  }
+  if (httpBase.startsWith("http://")) {
+    return `ws://${httpBase.slice("http://".length)}`;
+  }
+  return httpBase;
+}
+
+export function buildWsUrl(
+  accessToken: string,
+  options?: Parameters<typeof getWsBaseUrl>[0],
+): string {
+  const base = getWsBaseUrl(options);
+  const url = new URL(`${stripTrailingSlash(base)}/ws`);
+  url.searchParams.set("access_token", accessToken);
+  return url.toString();
+}
+
 function stripTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }

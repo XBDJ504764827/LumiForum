@@ -29,6 +29,11 @@ pub struct Config {
     pub s3_secret_key: String,
     pub s3_force_path_style: bool,
     pub s3_public_url: String,
+    pub ws_max_connections_per_user: usize,
+    pub ws_heartbeat_secs: u64,
+    pub ws_idle_timeout_secs: u64,
+    pub presence_ttl_secs: u64,
+    pub ws_connect_rate_limit: u64,
 }
 
 impl Config {
@@ -70,6 +75,11 @@ impl Config {
         let s3_secret_key = std::env::var("S3_SECRET_KEY").unwrap_or_default();
         let s3_force_path_style = env_parse("S3_FORCE_PATH_STYLE", true)?;
         let s3_public_url = std::env::var("S3_PUBLIC_URL").unwrap_or_default();
+        let ws_max_connections_per_user = env_parse("WS_MAX_CONNECTIONS_PER_USER", 5_usize)?;
+        let ws_heartbeat_secs = env_parse("WS_HEARTBEAT_SECS", 30_u64)?;
+        let ws_idle_timeout_secs = env_parse("WS_IDLE_TIMEOUT_SECS", 90_u64)?;
+        let presence_ttl_secs = env_parse("PRESENCE_TTL_SECS", 60_u64)?;
+        let ws_connect_rate_limit = env_parse("WS_CONNECT_RATE_LIMIT", 30_u64)?;
 
         if jwt_secret.len() < 32 {
             bail!("JWT_SECRET must be at least 32 bytes");
@@ -82,6 +92,15 @@ impl Config {
         }
         if !matches!(storage_provider.as_str(), "local" | "s3") {
             bail!("STORAGE_PROVIDER must be local or s3");
+        }
+        if ws_max_connections_per_user == 0 || ws_max_connections_per_user > 50 {
+            bail!("WS_MAX_CONNECTIONS_PER_USER must be between 1 and 50");
+        }
+        if ws_heartbeat_secs == 0 || ws_idle_timeout_secs <= ws_heartbeat_secs {
+            bail!("WS_IDLE_TIMEOUT_SECS must be greater than WS_HEARTBEAT_SECS");
+        }
+        if presence_ttl_secs < 15 {
+            bail!("PRESENCE_TTL_SECS must be at least 15");
         }
 
         Ok(Self {
@@ -110,6 +129,11 @@ impl Config {
             s3_secret_key,
             s3_force_path_style,
             s3_public_url,
+            ws_max_connections_per_user,
+            ws_heartbeat_secs,
+            ws_idle_timeout_secs,
+            presence_ttl_secs,
+            ws_connect_rate_limit,
         })
     }
 }

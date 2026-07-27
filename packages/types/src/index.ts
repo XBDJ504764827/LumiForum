@@ -41,6 +41,7 @@ export type {
   NotificationType,
   Paginated,
   PaginationMeta,
+  PresenceStatus,
   ProfileUpdateRequest,
   ReactionListParams,
   ReadyResponse,

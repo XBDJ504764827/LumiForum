@@ -1,2 +1,2 @@
-export { getApiBaseUrl, joinUrl } from "./url";
+export { buildWsUrl, getApiBaseUrl, getWsBaseUrl, joinUrl } from "./url";
 export { isBrowser } from "./env";
