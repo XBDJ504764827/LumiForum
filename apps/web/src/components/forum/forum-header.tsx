@@ -9,12 +9,14 @@ import { useState, type FormEvent } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Brand } from "@/components/brand";
+import { useRealtime } from "@/components/realtime/realtime-provider";
 import { getUnreadCount, notificationKeys } from "@/lib/api/notifications";
 import { saveRecentSearch } from "@/lib/api/search";
 
 export function ForumHeader() {
   const router = useRouter();
   const { status, user } = useAuth();
+  const realtime = useRealtime();
   const [q, setQ] = useState("");
   const unread = useQuery({
     queryKey: notificationKeys.unread,
@@ -93,6 +95,27 @@ export function ForumHeader() {
           </Link>
           {status === "authenticated" ? (
             <>
+              <span
+                className="hidden h-9 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground sm:inline-flex"
+                title={`实时连接：${realtime.status}`}
+                aria-label={`实时连接状态 ${realtime.status}`}
+              >
+                <span
+                  className={`size-2 rounded-full ${
+                    realtime.status === "connected"
+                      ? "bg-emerald-500"
+                      : realtime.status === "connecting"
+                        ? "bg-amber-500"
+                        : "bg-muted-foreground/40"
+                  }`}
+                  aria-hidden="true"
+                />
+                {realtime.status === "connected"
+                  ? "在线"
+                  : realtime.status === "connecting"
+                    ? "连接中"
+                    : "离线"}
+              </span>
               <Link
                 href="/notifications"
                 className="relative inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted"

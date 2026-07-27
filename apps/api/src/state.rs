@@ -5,6 +5,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
 use crate::config::Config;
+use crate::realtime::{PresenceService, RealtimeBus, RealtimeHub};
 use crate::repositories::{
     AdminRepository, AuthRepository, AuthorizationRepository, CategoryRepository,
     CommentRepository, NotificationRepository, ReactionRepository, SearchRepository,
@@ -37,6 +38,8 @@ struct AppStateInner {
     pub search: SearchService,
     pub uploads: UploadService,
     pub admin: AdminService,
+    pub realtime: RealtimeBus,
+    pub presence: PresenceService,
 }
 
 impl AppState {
@@ -71,8 +74,15 @@ impl AppState {
         let categories = CategoryService::new(category_repository.clone());
         let topics = TopicService::new(topic_repository.clone(), category_repository);
         let notification_repository = NotificationRepository::new(db.clone());
-        let notifications =
-            NotificationService::new(notification_repository.clone(), redis.clone());
+        let hub = RealtimeHub::new(config.ws_max_connections_per_user);
+        let realtime = RealtimeBus::new(redis.clone(), config.redis_url.clone(), hub);
+        realtime.clone().spawn_subscriber();
+        let presence = PresenceService::new(redis.clone(), config.presence_ttl_secs);
+        let notifications = NotificationService::new(
+            notification_repository.clone(),
+            redis.clone(),
+            realtime.clone(),
+        );
         let comments = CommentService::new(
             CommentRepository::new(db.clone()),
             topic_repository,
@@ -131,6 +141,8 @@ impl AppState {
                 search,
                 uploads,
                 admin,
+                realtime,
+                presence,
             }),
         })
     }
@@ -189,5 +201,13 @@ impl AppState {
 
     pub fn admin(&self) -> &AdminService {
         &self.inner.admin
+    }
+
+    pub fn realtime(&self) -> &RealtimeBus {
+        &self.inner.realtime
+    }
+
+    pub fn presence(&self) -> &PresenceService {
+        &self.inner.presence
     }
 }

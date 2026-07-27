@@ -3,6 +3,7 @@ pub mod error;
 pub mod events;
 pub mod middleware;
 pub mod models;
+pub mod realtime;
 pub mod repositories;
 pub mod routes;
 pub mod services;

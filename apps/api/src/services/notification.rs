@@ -12,6 +12,7 @@ use crate::models::{
     NotificationType, Paginated, PaginationMeta, UnreadCountResponse,
     PERMISSION_NOTIFICATION_READ_SELF, PERMISSION_NOTIFICATION_UPDATE_SELF,
 };
+use crate::realtime::RealtimeBus;
 use crate::repositories::{NewNotification, NotificationListFilter, NotificationRepository};
 
 const DEFAULT_PAGE_SIZE: u32 = 20;
@@ -23,6 +24,7 @@ const UNREAD_CACHE_TTL_SECS: u64 = 300;
 pub struct NotificationService {
     notifications: NotificationRepository,
     redis: ConnectionManager,
+    realtime: RealtimeBus,
 }
 
 #[derive(Debug, Error)]
@@ -38,10 +40,15 @@ pub enum NotificationError {
 }
 
 impl NotificationService {
-    pub fn new(notifications: NotificationRepository, redis: ConnectionManager) -> Self {
+    pub fn new(
+        notifications: NotificationRepository,
+        redis: ConnectionManager,
+        realtime: RealtimeBus,
+    ) -> Self {
         Self {
             notifications,
             redis,
+            realtime,
         }
     }
 
@@ -301,8 +308,37 @@ impl NotificationService {
 
     async fn create_inbox(&self, input: NewNotification<'_>) -> Result<(), NotificationError> {
         let user_id = input.user_id;
-        self.notifications.create(input).await.map_err(internal)?;
+        let title = input.title.to_owned();
+        let content = input.content.to_owned();
+        let notification_type = input.notification_type;
+        let target_type = input.target_type;
+        let target_id = input.target_id;
+        let metadata = input.metadata.clone();
+        let actor_id = input.actor_id;
+
+        let notification_id = self.notifications.create(input).await.map_err(internal)?;
         self.invalidate_unread_cache(user_id).await;
+
+        let payload = serde_json::json!({
+            "id": notification_id,
+            "type": notification_type.as_str(),
+            "title": title,
+            "content": content,
+            "target_type": target_type.map(|value| value.as_str()),
+            "target_id": target_id,
+            "metadata": metadata,
+            "is_read": false,
+            "actor_id": actor_id,
+            "created_at": chrono::Utc::now(),
+            "stream_hint": "notifications",
+        });
+        if let Err(error) = self
+            .realtime
+            .publish_to_user(user_id, "notification.created", payload)
+            .await
+        {
+            tracing::warn!(%error, %user_id, %notification_id, "failed to publish notification realtime event");
+        }
         Ok(())
     }
 
