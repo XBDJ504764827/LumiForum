@@ -1,15 +1,21 @@
 "use client";
 
+import type { Route } from "next";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, Bookmark, LogIn, PenLine, UserRound } from "lucide-react";
+import { Bell, Bookmark, LogIn, PenLine, Search, UserRound } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Brand } from "@/components/brand";
 import { getUnreadCount, notificationKeys } from "@/lib/api/notifications";
+import { saveRecentSearch } from "@/lib/api/search";
 
 export function ForumHeader() {
+  const router = useRouter();
   const { status, user } = useAuth();
+  const [q, setQ] = useState("");
   const unread = useQuery({
     queryKey: notificationKeys.unread,
     queryFn: getUnreadCount,
@@ -19,11 +25,22 @@ export function ForumHeader() {
   });
   const unreadCount = unread.data?.count ?? 0;
 
+  const onSearch = (event: FormEvent) => {
+    event.preventDefault();
+    const value = q.trim();
+    if (!value) {
+      router.push("/search" as Route);
+      return;
+    }
+    saveRecentSearch(value);
+    router.push(`/search?q=${encodeURIComponent(value)}` as Route);
+  };
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white/95 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5 sm:px-8">
+      <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-5 sm:gap-6 sm:px-8">
         <Brand />
-        <nav className="hidden items-center gap-5 text-sm sm:flex" aria-label="主导航">
+        <nav className="hidden items-center gap-5 text-sm md:flex" aria-label="主导航">
           <Link href="/" className="text-muted-foreground hover:text-foreground">
             首页
           </Link>
@@ -41,7 +58,34 @@ export function ForumHeader() {
             </>
           ) : null}
         </nav>
-        <div className="ml-auto flex min-w-28 items-center justify-end gap-2">
+
+        <form
+          onSubmit={onSearch}
+          className="ml-auto hidden min-w-0 max-w-xs flex-1 items-center gap-2 lg:flex"
+        >
+          <label className="relative block w-full">
+            <span className="sr-only">搜索</span>
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <input
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              placeholder="搜索帖子 / 用户"
+              className="h-9 w-full rounded-md border border-border bg-white pl-9 pr-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </label>
+        </form>
+
+        <div className="flex min-w-28 items-center justify-end gap-2 lg:ml-0">
+          <Link
+            href="/search"
+            className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted lg:hidden"
+            aria-label="搜索"
+          >
+            <Search className="size-4" aria-hidden="true" />
+          </Link>
           {status === "authenticated" ? (
             <>
               <Link

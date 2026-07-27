@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::services::{
     AuthError, AuthorizationError, CategoryError, CommentError, NotificationError, ReactionError,
-    TopicError, UserError,
+    SearchError, TopicError, UserError,
 };
 
 #[derive(Debug, Error)]
@@ -231,6 +231,16 @@ impl From<NotificationError> for AppError {
             NotificationError::NotFound => Self::NotFound,
             NotificationError::Forbidden => Self::Forbidden,
             NotificationError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<SearchError> for AppError {
+    fn from(error: SearchError) -> Self {
+        match error {
+            SearchError::Validation(message) => Self::Validation(message),
+            SearchError::RateLimited => Self::RateLimited,
+            SearchError::Internal(error) => Self::Internal(error),
         }
     }
 }
