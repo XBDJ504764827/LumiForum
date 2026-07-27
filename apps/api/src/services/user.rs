@@ -41,43 +41,18 @@ impl UserService {
         user_id: Uuid,
         request: ProfileUpdateRequest,
     ) -> Result<UserResponse, UserError> {
-        let (avatar_changed, avatar) = normalize_avatar(request.avatar)?;
         let (nickname_changed, nickname) = normalize_nickname(request.nickname)?;
-        if !avatar_changed && !nickname_changed {
+        if !nickname_changed {
             return Err(UserError::EmptyUpdate);
         }
 
         let user = self
             .repository
-            .update_profile(
-                user_id,
-                avatar_changed,
-                avatar.as_deref(),
-                nickname_changed,
-                nickname.as_deref(),
-            )
+            .update_profile(user_id, nickname_changed, nickname.as_deref())
             .await
             .map_err(internal)?
             .ok_or(UserError::NotFound)?;
         to_response(user)
-    }
-}
-
-fn normalize_avatar(field: PatchField<String>) -> Result<(bool, Option<String>), UserError> {
-    match field {
-        PatchField::Missing => Ok((false, None)),
-        PatchField::Set(value) => {
-            let value = value
-                .map(|value| value.trim().to_owned())
-                .filter(|value| !value.is_empty());
-            if value
-                .as_ref()
-                .is_some_and(|value| value.len() > 2_048 || value.chars().any(char::is_control))
-            {
-                return Err(UserError::Validation("invalid avatar"));
-            }
-            Ok((true, value))
-        }
     }
 }
 
@@ -112,15 +87,10 @@ fn internal(error: impl Into<anyhow::Error>) -> UserError {
 mod tests {
     use crate::models::{PatchField, ProfileUpdateRequest};
 
-    use super::{normalize_avatar, normalize_nickname};
+    use super::normalize_nickname;
 
     #[test]
     fn distinguishes_missing_and_cleared_fields() {
-        assert!(!normalize_avatar(PatchField::Missing).unwrap().0);
-        assert_eq!(
-            normalize_avatar(PatchField::Set(None)).unwrap(),
-            (true, None)
-        );
         assert_eq!(
             normalize_nickname(PatchField::Set(Some("  Lumi  ".into()))).unwrap(),
             (true, Some("Lumi".into()))
@@ -130,9 +100,9 @@ mod tests {
     #[test]
     fn deserializes_patch_field_states() {
         let missing: ProfileUpdateRequest = serde_json::from_str("{}").unwrap();
-        let cleared: ProfileUpdateRequest = serde_json::from_str(r#"{"avatar":null}"#).unwrap();
+        let cleared: ProfileUpdateRequest = serde_json::from_str(r#"{"nickname":null}"#).unwrap();
 
-        assert!(matches!(missing.avatar, PatchField::Missing));
-        assert!(matches!(cleared.avatar, PatchField::Set(None)));
+        assert!(matches!(missing.nickname, PatchField::Missing));
+        assert!(matches!(cleared.nickname, PatchField::Set(None)));
     }
 }

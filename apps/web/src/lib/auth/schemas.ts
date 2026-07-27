@@ -29,7 +29,6 @@ export const registerSchema = z
 
 export const profileSchema = z.object({
   nickname: z.string().trim().max(64, "昵称不能超过 64 个字符"),
-  avatar: z.string().trim().max(2048, "头像地址过长"),
 });
 
 export type LoginFormValues = z.infer<typeof loginSchema>;

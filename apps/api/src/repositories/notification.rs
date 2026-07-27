@@ -119,7 +119,7 @@ impl NotificationRepository {
                 a.id AS actor_id,
                 a.username AS actor_username,
                 a.nickname AS actor_nickname,
-                a.avatar AS actor_avatar,
+                a.avatar_url AS actor_avatar,
                 r.code AS actor_role_code,
                 r.name AS actor_role_name
             FROM notifications n

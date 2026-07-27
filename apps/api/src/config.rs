@@ -19,6 +19,16 @@ pub struct Config {
     pub refresh_cookie_secure: bool,
     pub authorization_cache_ttl_seconds: u64,
     pub cors_origin: String,
+    pub storage_provider: String,
+    pub storage_local_root: String,
+    pub storage_public_url: String,
+    pub s3_endpoint: Option<String>,
+    pub s3_region: String,
+    pub s3_bucket: String,
+    pub s3_access_key: String,
+    pub s3_secret_key: String,
+    pub s3_force_path_style: bool,
+    pub s3_public_url: String,
 }
 
 impl Config {
@@ -46,6 +56,20 @@ impl Config {
         let authorization_cache_ttl_seconds = env_parse("AUTHORIZATION_CACHE_TTL_SECONDS", 30_u64)?;
         let cors_origin =
             std::env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".into());
+        let storage_provider = std::env::var("STORAGE_PROVIDER").unwrap_or_else(|_| "local".into());
+        let storage_local_root =
+            std::env::var("STORAGE_LOCAL_ROOT").unwrap_or_else(|_| "./uploads".into());
+        let storage_public_url = std::env::var("STORAGE_PUBLIC_URL")
+            .unwrap_or_else(|_| "http://localhost:8080/storage".into());
+        let s3_endpoint = std::env::var("S3_ENDPOINT")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
+        let s3_region = std::env::var("S3_REGION").unwrap_or_else(|_| "auto".into());
+        let s3_bucket = std::env::var("S3_BUCKET").unwrap_or_else(|_| "lumiforum".into());
+        let s3_access_key = std::env::var("S3_ACCESS_KEY").unwrap_or_default();
+        let s3_secret_key = std::env::var("S3_SECRET_KEY").unwrap_or_default();
+        let s3_force_path_style = env_parse("S3_FORCE_PATH_STYLE", true)?;
+        let s3_public_url = std::env::var("S3_PUBLIC_URL").unwrap_or_default();
 
         if jwt_secret.len() < 32 {
             bail!("JWT_SECRET must be at least 32 bytes");
@@ -55,6 +79,9 @@ impl Config {
             || !(cors_origin.starts_with("http://") || cors_origin.starts_with("https://"))
         {
             bail!("CORS_ORIGIN must be one explicit http(s) origin without a trailing slash");
+        }
+        if !matches!(storage_provider.as_str(), "local" | "s3") {
+            bail!("STORAGE_PROVIDER must be local or s3");
         }
 
         Ok(Self {
@@ -73,6 +100,16 @@ impl Config {
             refresh_cookie_secure,
             authorization_cache_ttl_seconds,
             cors_origin,
+            storage_provider,
+            storage_local_root,
+            storage_public_url,
+            s3_endpoint,
+            s3_region,
+            s3_bucket,
+            s3_access_key,
+            s3_secret_key,
+            s3_force_path_style,
+            s3_public_url,
         })
     }
 }

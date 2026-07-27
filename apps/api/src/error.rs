@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::services::{
     AuthError, AuthorizationError, CategoryError, CommentError, NotificationError, ReactionError,
-    SearchError, TopicError, UserError,
+    SearchError, TopicError, UploadError, UserError,
 };
 
 #[derive(Debug, Error)]
@@ -37,6 +37,12 @@ pub enum AppError {
     NotFound,
     #[error("rate limit exceeded")]
     RateLimited,
+    #[error("request body is too large")]
+    PayloadTooLarge,
+    #[error("unsupported media type")]
+    UnsupportedMediaType,
+    #[error("storage is unavailable")]
+    StorageUnavailable,
     #[error("refresh token reuse detected")]
     RefreshTokenReused,
     #[error(transparent)]
@@ -112,6 +118,21 @@ impl IntoResponse for AppError {
                 StatusCode::TOO_MANY_REQUESTS,
                 "rate_limited",
                 "too many requests",
+            ),
+            Self::PayloadTooLarge => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "payload_too_large",
+                "uploaded file is too large",
+            ),
+            Self::UnsupportedMediaType => (
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "unsupported_media_type",
+                "file type is not allowed",
+            ),
+            Self::StorageUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "storage_unavailable",
+                "file storage is temporarily unavailable",
             ),
             Self::RefreshTokenReused => {
                 tracing::warn!("refresh token reuse detected; token family revoked");
@@ -241,6 +262,20 @@ impl From<SearchError> for AppError {
             SearchError::Validation(message) => Self::Validation(message),
             SearchError::RateLimited => Self::RateLimited,
             SearchError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<UploadError> for AppError {
+    fn from(error: UploadError) -> Self {
+        match error {
+            UploadError::Validation(message) => Self::Validation(message),
+            UploadError::TooLarge => Self::PayloadTooLarge,
+            UploadError::UnsupportedMediaType => Self::UnsupportedMediaType,
+            UploadError::NotFound => Self::NotFound,
+            UploadError::Forbidden => Self::Forbidden,
+            UploadError::StorageUnavailable => Self::StorageUnavailable,
+            UploadError::Internal(error) => Self::Internal(error),
         }
     }
 }

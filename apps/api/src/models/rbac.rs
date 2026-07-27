@@ -68,6 +68,9 @@ pub const PERMISSION_TOPIC_FAVORITE: &str = "topic.favorite";
 pub const PERMISSION_USER_FOLLOW: &str = "user.follow";
 pub const PERMISSION_NOTIFICATION_READ_SELF: &str = "notification.read:self";
 pub const PERMISSION_NOTIFICATION_UPDATE_SELF: &str = "notification.update:self";
+pub const PERMISSION_UPLOAD_CREATE: &str = "upload.create";
+pub const PERMISSION_UPLOAD_READ_SELF: &str = "upload.read:self";
+pub const PERMISSION_UPLOAD_DELETE_SELF: &str = "upload.delete:self";
 
 #[derive(Clone)]
 pub struct AuthenticatedPrincipal {

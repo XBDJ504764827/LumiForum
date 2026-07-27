@@ -7,12 +7,14 @@ use sqlx::PgPool;
 use crate::config::Config;
 use crate::repositories::{
     AuthRepository, AuthorizationRepository, CategoryRepository, CommentRepository,
-    NotificationRepository, ReactionRepository, SearchRepository, TopicRepository, UserRepository,
+    NotificationRepository, ReactionRepository, SearchRepository, TopicRepository,
+    UploadRepository, UserRepository,
 };
 use crate::services::{
     AuthService, AuthServiceConfig, AuthorizationService, CategoryService, CommentService,
-    NotificationService, ReactionService, SearchService, TopicService, UserService,
+    NotificationService, ReactionService, SearchService, TopicService, UploadService, UserService,
 };
+use crate::storage::{LocalStorage, S3Storage, S3StorageConfig, StorageProvider};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -32,6 +34,7 @@ struct AppStateInner {
     pub reactions: ReactionService,
     pub notifications: NotificationService,
     pub search: SearchService,
+    pub uploads: UploadService,
 }
 
 impl AppState {
@@ -82,6 +85,26 @@ impl AppState {
             redis.clone(),
         );
         let search = SearchService::new(SearchRepository::new(db.clone()), redis.clone());
+        let storage: Arc<dyn StorageProvider> = match config.storage_provider.as_str() {
+            "local" => Arc::new(
+                LocalStorage::new(
+                    &config.storage_local_root,
+                    config.storage_public_url.clone(),
+                )
+                .await?,
+            ),
+            "s3" => Arc::new(S3Storage::new(S3StorageConfig {
+                endpoint: config.s3_endpoint.clone(),
+                region: config.s3_region.clone(),
+                bucket: config.s3_bucket.clone(),
+                access_key: config.s3_access_key.clone(),
+                secret_key: config.s3_secret_key.clone(),
+                force_path_style: config.s3_force_path_style,
+                public_url: config.s3_public_url.clone(),
+            })?),
+            _ => unreachable!("storage provider is validated by Config"),
+        };
+        let uploads = UploadService::new(UploadRepository::new(db.clone()), storage);
 
         Ok(Self {
             inner: Arc::new(AppStateInner {
@@ -97,6 +120,7 @@ impl AppState {
                 reactions,
                 notifications,
                 search,
+                uploads,
             }),
         })
     }
@@ -147,5 +171,9 @@ impl AppState {
 
     pub fn search(&self) -> &SearchService {
         &self.inner.search
+    }
+
+    pub fn uploads(&self) -> &UploadService {
+        &self.inner.uploads
     }
 }

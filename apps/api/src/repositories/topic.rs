@@ -350,7 +350,7 @@ const TOPIC_LIST_SELECT: &str = r#"
         c.is_visible AS category_is_visible,
         u.username AS author_username,
         u.nickname AS author_nickname,
-        u.avatar AS author_avatar,
+        u.avatar_url AS author_avatar,
         r.code AS author_role_code,
         r.name AS author_role_name
     FROM topics t
@@ -384,7 +384,7 @@ const TOPIC_BY_ID: &str = r#"
         c.is_visible AS category_is_visible,
         u.username AS author_username,
         u.nickname AS author_nickname,
-        u.avatar AS author_avatar,
+        u.avatar_url AS author_avatar,
         r.code AS author_role_code,
         r.name AS author_role_name
     FROM topics t
@@ -432,7 +432,7 @@ const TOPIC_BY_SLUG_AND_INCREMENT: &str = r#"
         c.is_visible AS category_is_visible,
         u.username AS author_username,
         u.nickname AS author_nickname,
-        u.avatar AS author_avatar,
+        u.avatar_url AS author_avatar,
         r.code AS author_role_code,
         r.name AS author_role_name
     FROM viewed

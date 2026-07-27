@@ -45,8 +45,6 @@ impl UserRepository {
     pub async fn update_profile(
         &self,
         user_id: Uuid,
-        avatar_changed: bool,
-        avatar: Option<&str>,
         nickname_changed: bool,
         nickname: Option<&str>,
     ) -> Result<Option<RepositoryUser>, sqlx::Error> {
@@ -54,8 +52,7 @@ impl UserRepository {
             r#"
             WITH updated AS (
                 UPDATE users
-                SET avatar = CASE WHEN $2 THEN $3 ELSE avatar END,
-                    nickname = CASE WHEN $4 THEN $5 ELSE nickname END
+                SET nickname = CASE WHEN $2 THEN $3 ELSE nickname END
                 WHERE id = $1
                 RETURNING *
             )
@@ -64,7 +61,7 @@ impl UserRepository {
                 updated.username,
                 updated.email,
                 updated.password_hash,
-                updated.avatar,
+                updated.avatar_url AS avatar,
                 updated.nickname,
                 roles.code AS role_code,
                 roles.name AS role_name,
@@ -80,8 +77,6 @@ impl UserRepository {
             "#,
         )
         .bind(user_id)
-        .bind(avatar_changed)
-        .bind(avatar)
         .bind(nickname_changed)
         .bind(nickname)
         .fetch_optional(&self.pool)
@@ -116,7 +111,7 @@ const USER_WITH_ROLE_QUERY: &str = r#"
         users.username,
         users.email,
         users.password_hash,
-        users.avatar,
+        users.avatar_url AS avatar,
         users.nickname,
         roles.code AS role_code,
         roles.name AS role_name,

@@ -8,6 +8,8 @@ mod reaction;
 mod search;
 mod token;
 mod topic;
+mod upload;
+mod upload_image;
 mod user;
 
 pub use auth::{AuthError, AuthService, AuthServiceConfig, IssuedSession, RefreshedSession};
@@ -20,4 +22,5 @@ pub use reaction::{ReactionError, ReactionService};
 pub use search::{SearchError, SearchService};
 pub use token::TokenService;
 pub use topic::{TopicError, TopicService};
+pub use upload::{UploadError, UploadInput, UploadService};
 pub use user::{UserError, UserService};

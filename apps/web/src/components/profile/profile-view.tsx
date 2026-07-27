@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Brand } from "@/components/brand";
 import { LoadingIndicator } from "@/components/loading-indicator";
+import { AvatarUpload } from "@/components/uploads/avatar-upload";
 import { errorMessage, updateProfile } from "@/lib/api/auth";
 import { profileSchema, type ProfileFormValues } from "@/lib/auth/schemas";
 
@@ -133,7 +134,6 @@ function ProfileEditor({ user, onUpdated }: { user: User; onUpdated: (user: User
     resolver: zodResolver(profileSchema),
     defaultValues: {
       nickname: user.nickname ?? "",
-      avatar: user.avatar ?? "",
     },
   });
   const mutation = useMutation({
@@ -148,53 +148,41 @@ function ProfileEditor({ user, onUpdated }: { user: User; onUpdated: (user: User
     if (form.formState.dirtyFields.nickname) {
       patch.nickname = values.nickname || null;
     }
-    if (form.formState.dirtyFields.avatar) {
-      patch.avatar = values.avatar || null;
-    }
     if (Object.keys(patch).length > 0) {
       mutation.mutate(patch);
     }
   });
 
   return (
-    <form className="mt-7 max-w-xl space-y-5" onSubmit={submit}>
-      {form.formState.errors.root?.message ? (
-        <Alert>{form.formState.errors.root.message}</Alert>
-      ) : null}
+    <div className="max-w-xl">
+      <AvatarUpload user={user} onUpdated={onUpdated} />
+      <form className="mt-6 space-y-5" onSubmit={submit}>
+        {form.formState.errors.root?.message ? (
+          <Alert>{form.formState.errors.root.message}</Alert>
+        ) : null}
 
-      <div className="space-y-2">
-        <Label htmlFor="profile-nickname">昵称</Label>
-        <Input
-          id="profile-nickname"
-          aria-invalid={Boolean(form.formState.errors.nickname)}
-          {...form.register("nickname")}
-        />
-        <p className="min-h-5 text-sm text-destructive">
-          {form.formState.errors.nickname?.message}
-        </p>
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor="profile-nickname">昵称</Label>
+          <Input
+            id="profile-nickname"
+            aria-invalid={Boolean(form.formState.errors.nickname)}
+            {...form.register("nickname")}
+          />
+          <p className="min-h-5 text-sm text-destructive">
+            {form.formState.errors.nickname?.message}
+          </p>
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="profile-avatar">头像地址</Label>
-        <Input
-          id="profile-avatar"
-          inputMode="url"
-          placeholder="https://"
-          aria-invalid={Boolean(form.formState.errors.avatar)}
-          {...form.register("avatar")}
-        />
-        <p className="min-h-5 text-sm text-destructive">{form.formState.errors.avatar?.message}</p>
-      </div>
-
-      <Button
-        type="submit"
-        className="gap-2"
-        disabled={mutation.isPending || !form.formState.isDirty}
-      >
-        {mutation.isPending ? <LoadingIndicator /> : null}
-        {mutation.isPending ? "正在保存" : "保存修改"}
-      </Button>
-    </form>
+        <Button
+          type="submit"
+          className="gap-2"
+          disabled={mutation.isPending || !form.formState.isDirty}
+        >
+          {mutation.isPending ? <LoadingIndicator /> : null}
+          {mutation.isPending ? "正在保存" : "保存修改"}
+        </Button>
+      </form>
+    </div>
   );
 }
 
