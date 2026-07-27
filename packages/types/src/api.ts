@@ -72,8 +72,32 @@ export interface TokenRefreshResponse {
 }
 
 export interface ProfileUpdateRequest {
-  avatar?: string | null;
   nickname?: string | null;
+}
+
+export type UploadCategory = "avatar" | "topic_image" | "comment_image" | "attachment";
+
+export interface Upload {
+  id: string;
+  user_id: string;
+  filename: string;
+  original_filename: string;
+  storage_provider: "local" | "s3";
+  mime_type: string;
+  file_size: number;
+  category: UploadCategory;
+  url: string;
+  thumbnail_url: string | null;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UploadListParams {
+  category?: UploadCategory;
+  page?: number;
+  page_size?: number;
 }
 
 export interface CategorySummary {

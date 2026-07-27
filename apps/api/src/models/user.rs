@@ -101,7 +101,5 @@ where
 #[derive(Default, Deserialize)]
 pub struct ProfileUpdateRequest {
     #[serde(default)]
-    pub avatar: PatchField<String>,
-    #[serde(default)]
     pub nickname: PatchField<String>,
 }

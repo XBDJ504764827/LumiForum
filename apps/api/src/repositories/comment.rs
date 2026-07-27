@@ -68,7 +68,7 @@ impl CommentRepository {
                 c.like_count, c.reply_count, c.edited_at, c.created_at, c.updated_at, c.deleted_at,
                 u.username AS author_username,
                 u.nickname AS author_nickname,
-                u.avatar AS author_avatar,
+                u.avatar_url AS author_avatar,
                 r.code AS author_role_code,
                 r.name AS author_role_name
             FROM comments c
@@ -99,7 +99,7 @@ impl CommentRepository {
                 c.like_count, c.reply_count, c.edited_at, c.created_at, c.updated_at, c.deleted_at,
                 u.username AS author_username,
                 u.nickname AS author_nickname,
-                u.avatar AS author_avatar,
+                u.avatar_url AS author_avatar,
                 r.code AS author_role_code,
                 r.name AS author_role_name
             FROM comments c
@@ -261,7 +261,7 @@ impl CommentRepository {
                 c.like_count, c.reply_count, c.edited_at, c.created_at, c.updated_at, c.deleted_at,
                 u.username AS author_username,
                 u.nickname AS author_nickname,
-                u.avatar AS author_avatar,
+                u.avatar_url AS author_avatar,
                 r.code AS author_role_code,
                 r.name AS author_role_name
             FROM comments c
@@ -422,7 +422,7 @@ const COMMENT_BY_ID: &str = r#"
         c.like_count, c.reply_count, c.edited_at, c.created_at, c.updated_at, c.deleted_at,
         u.username AS author_username,
         u.nickname AS author_nickname,
-        u.avatar AS author_avatar,
+        u.avatar_url AS author_avatar,
         r.code AS author_role_code,
         r.name AS author_role_name
     FROM comments c

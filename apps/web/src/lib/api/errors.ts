@@ -46,4 +46,7 @@ const publicMessages: Record<string, string> = {
   not_found: "资源不存在",
   rate_limited: "操作过于频繁，请稍后再试",
   validation_error: "输入内容不符合要求",
+  payload_too_large: "文件超过允许大小",
+  unsupported_media_type: "不支持此文件类型",
+  storage_unavailable: "文件存储暂时不可用，请稍后重试",
 };

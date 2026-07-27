@@ -6,6 +6,7 @@ mod notification;
 mod reaction;
 mod search;
 mod topic;
+mod upload;
 mod user;
 
 pub use auth::{AuthRepository, RefreshRotation};
@@ -22,4 +23,5 @@ pub use topic::{
     repository_topic_to_detail, repository_topic_to_summary, NewTopic, RepositoryTopic,
     TopicListOptions, TopicModeration, TopicRepository, TopicUpdate,
 };
+pub use upload::{repository_upload_to_response, NewUpload, RepositoryUpload, UploadRepository};
 pub use user::{repository_user_to_response, RepositoryUser, UserRepository};

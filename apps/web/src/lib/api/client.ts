@@ -11,7 +11,7 @@ export async function apiRequest<T>(
   retryAfterRefresh = true,
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body) {
+  if (init.body && !(init.body instanceof FormData)) {
     headers.set("content-type", "application/json");
   }
   if (authenticated) {

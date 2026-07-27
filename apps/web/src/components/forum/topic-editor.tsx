@@ -8,12 +8,13 @@ import { CircleAlert, Eye, FilePenLine, PenLine, Send } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { MarkdownContent } from "@/components/forum/markdown-content";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
+import { FileUpload } from "@/components/uploads/file-upload";
 import { errorMessage } from "@/lib/api/errors";
 import { createTopic, forumKeys, listCategories, updateTopic } from "@/lib/api/forum";
 import { topicEditorSchema, type TopicEditorValues } from "@/lib/forum/schemas";
@@ -23,6 +24,7 @@ type Props = { mode: "create"; topic?: never } | { mode: "edit"; topic: TopicDet
 export function TopicEditor(props: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const contentRef = useRef<HTMLTextAreaElement | null>(null);
   const [view, setView] = useState<"write" | "preview">("write");
   const categories = useQuery({ queryKey: forumKeys.categories, queryFn: listCategories });
   const form = useForm<TopicEditorValues>({
@@ -62,6 +64,26 @@ export function TopicEditor(props: Props) {
     onError: (error) => form.setError("root", { message: errorMessage(error) }),
   });
   const content = useWatch({ control: form.control, name: "content" });
+  const contentField = form.register("content");
+
+  const insertImage = (url: string, originalFilename: string) => {
+    const current = form.getValues("content");
+    const cursor = contentRef.current?.selectionStart ?? current.length;
+    const alt = originalFilename.replace(/[\[\]]/g, "");
+    const markdown = `![${alt || "image"}](${url})`;
+    const prefix = cursor > 0 && current[cursor - 1] !== "\n" ? "\n" : "";
+    const suffix = cursor < current.length && current[cursor] !== "\n" ? "\n" : "";
+    const insertion = `${prefix}${markdown}${suffix}`;
+    form.setValue("content", `${current.slice(0, cursor)}${insertion}${current.slice(cursor)}`, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    requestAnimationFrame(() => {
+      const nextCursor = cursor + insertion.length;
+      contentRef.current?.focus();
+      contentRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
 
   if (categories.isPending) return <QueryLoading label="正在加载编辑器" />;
   if (categories.isError) return <QueryError message="无法加载板块，请稍后重试" />;
@@ -137,7 +159,11 @@ export function TopicEditor(props: Props) {
                   className="min-h-[420px] font-mono"
                   placeholder="# 标题&#10;&#10;使用 Markdown 编写内容..."
                   aria-invalid={Boolean(form.formState.errors.content)}
-                  {...form.register("content")}
+                  {...contentField}
+                  ref={(element) => {
+                    contentRef.current = element;
+                    contentField.ref(element);
+                  }}
                 />
               ) : (
                 <div className="min-h-[420px] border border-border bg-white px-5 py-2">
@@ -148,6 +174,16 @@ export function TopicEditor(props: Props) {
                   )}
                 </div>
               )}
+              {view === "write" ? (
+                <div className="mt-3">
+                  <FileUpload
+                    category="topic_image"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    maxBytes={10 * 1024 * 1024}
+                    onUploaded={(upload) => insertImage(upload.url, upload.original_filename)}
+                  />
+                </div>
+              ) : null}
               <p className="mt-2 min-h-5 text-sm text-destructive">
                 {form.formState.errors.content?.message}
               </p>

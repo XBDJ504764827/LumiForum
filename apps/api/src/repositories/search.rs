@@ -177,7 +177,7 @@ impl SearchRepository {
                 u.id AS author_id,
                 u.username AS author_username,
                 u.nickname AS author_nickname,
-                u.avatar AS author_avatar,
+                u.avatar_url AS author_avatar,
                 r.code AS author_role_code,
                 r.name AS author_role_name
             FROM topics t
@@ -279,7 +279,7 @@ impl SearchRepository {
                 u.id AS author_id,
                 u.username AS author_username,
                 u.nickname AS author_nickname,
-                u.avatar AS author_avatar,
+                u.avatar_url AS author_avatar,
                 r.code AS author_role_code,
                 r.name AS author_role_name
             FROM comments cm
@@ -349,7 +349,7 @@ impl SearchRepository {
                 u.id,
                 u.username,
                 u.nickname,
-                u.avatar,
+                u.avatar_url AS avatar,
                 r.code AS role_code,
                 r.name AS role_name,
                 u.followers_count,

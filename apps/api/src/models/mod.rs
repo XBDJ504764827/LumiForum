@@ -8,6 +8,7 @@ mod reaction;
 mod refresh_token;
 mod search;
 mod topic;
+mod upload;
 mod user;
 
 pub use auth::{
@@ -35,7 +36,8 @@ pub use rbac::{
     PERMISSION_PROFILE_UPDATE_SELF, PERMISSION_TOPIC_CREATE, PERMISSION_TOPIC_DELETE_ANY,
     PERMISSION_TOPIC_DELETE_SELF, PERMISSION_TOPIC_FAVORITE, PERMISSION_TOPIC_FEATURE,
     PERMISSION_TOPIC_LIKE, PERMISSION_TOPIC_PIN, PERMISSION_TOPIC_UPDATE_ANY,
-    PERMISSION_TOPIC_UPDATE_SELF, PERMISSION_USER_FOLLOW, ROLE_ADMINISTRATOR, ROLE_GUEST,
+    PERMISSION_TOPIC_UPDATE_SELF, PERMISSION_UPLOAD_CREATE, PERMISSION_UPLOAD_DELETE_SELF,
+    PERMISSION_UPLOAD_READ_SELF, PERMISSION_USER_FOLLOW, ROLE_ADMINISTRATOR, ROLE_GUEST,
     ROLE_MODERATOR, ROLE_SUPER_ADMINISTRATOR, ROLE_USER,
 };
 pub use reaction::{
@@ -52,4 +54,5 @@ pub use topic::{
     CreateTopicRequest, ModerateTopicRequest, TopicAuthorSummary, TopicDetail, TopicListQuery,
     TopicListSort, TopicRecord, TopicStats, TopicStatus, TopicSummary, UpdateTopicRequest,
 };
+pub use upload::{UploadCategory, UploadListQuery, UploadResponse, UploadStatus};
 pub use user::{PatchField, ProfileUpdateRequest, UserRecord, UserResponse, UserStatus};
