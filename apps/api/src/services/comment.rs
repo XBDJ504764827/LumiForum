@@ -208,12 +208,14 @@ impl CommentService {
         if existing.status != "published" {
             return Err(CommentError::NotFound);
         }
-        require_owner_or_any(
-            principal,
-            existing.author_id,
-            PERMISSION_COMMENT_DELETE_SELF,
-            PERMISSION_COMMENT_DELETE_ANY,
-        )?;
+        if !principal.has_permission(crate::models::PERMISSION_COMMENT_MANAGE) {
+            require_owner_or_any(
+                principal,
+                existing.author_id,
+                PERMISSION_COMMENT_DELETE_SELF,
+                PERMISSION_COMMENT_DELETE_ANY,
+            )?;
+        }
         if self
             .comments
             .soft_delete(comment_id)
@@ -231,7 +233,11 @@ impl CommentService {
         principal: &AuthenticatedPrincipal,
         comment_id: Uuid,
     ) -> Result<CommentNode, CommentError> {
-        require(principal, PERMISSION_COMMENT_RESTORE)?;
+        if !principal.has_permission(PERMISSION_COMMENT_RESTORE)
+            && !principal.has_permission(crate::models::PERMISSION_COMMENT_MANAGE)
+        {
+            return Err(CommentError::Forbidden);
+        }
         let comment = self
             .comments
             .restore(comment_id)

@@ -1,3 +1,4 @@
+mod admin;
 pub mod auth;
 mod categories;
 mod comments;
@@ -35,7 +36,9 @@ pub fn create_router(state: AppState) -> Router {
         .merge(reactions::router(state.clone()))
         .merge(notifications::router(state.clone()))
         .merge(search::router())
-        .merge(uploads::router(state.clone()));
+        .merge(uploads::router(state.clone()))
+        .merge(admin::router(state.clone()))
+        .merge(admin::public_report_router(state.clone()));
     let router = if state.config().storage_provider == "local" {
         let files = Router::new()
             .nest_service(

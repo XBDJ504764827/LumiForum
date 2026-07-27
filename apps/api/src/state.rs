@@ -6,13 +6,14 @@ use sqlx::PgPool;
 
 use crate::config::Config;
 use crate::repositories::{
-    AuthRepository, AuthorizationRepository, CategoryRepository, CommentRepository,
-    NotificationRepository, ReactionRepository, SearchRepository, TopicRepository,
-    UploadRepository, UserRepository,
+    AdminRepository, AuthRepository, AuthorizationRepository, CategoryRepository,
+    CommentRepository, NotificationRepository, ReactionRepository, SearchRepository,
+    TopicRepository, UploadRepository, UserRepository,
 };
 use crate::services::{
-    AuthService, AuthServiceConfig, AuthorizationService, CategoryService, CommentService,
-    NotificationService, ReactionService, SearchService, TopicService, UploadService, UserService,
+    AdminService, AuthService, AuthServiceConfig, AuthorizationService, CategoryService,
+    CommentService, NotificationService, ReactionService, SearchService, TopicService,
+    UploadService, UserService,
 };
 use crate::storage::{LocalStorage, S3Storage, S3StorageConfig, StorageProvider};
 
@@ -35,6 +36,7 @@ struct AppStateInner {
     pub notifications: NotificationService,
     pub search: SearchService,
     pub uploads: UploadService,
+    pub admin: AdminService,
 }
 
 impl AppState {
@@ -105,6 +107,13 @@ impl AppState {
             _ => unreachable!("storage provider is validated by Config"),
         };
         let uploads = UploadService::new(UploadRepository::new(db.clone()), storage);
+        let admin = AdminService::new(
+            AdminRepository::new(db.clone()),
+            categories.clone(),
+            comments.clone(),
+            uploads.clone(),
+            authorization.clone(),
+        );
 
         Ok(Self {
             inner: Arc::new(AppStateInner {
@@ -121,6 +130,7 @@ impl AppState {
                 notifications,
                 search,
                 uploads,
+                admin,
             }),
         })
     }
@@ -175,5 +185,9 @@ impl AppState {
 
     pub fn uploads(&self) -> &UploadService {
         &self.inner.uploads
+    }
+
+    pub fn admin(&self) -> &AdminService {
+        &self.inner.admin
     }
 }

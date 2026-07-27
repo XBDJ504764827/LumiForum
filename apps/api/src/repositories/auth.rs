@@ -33,6 +33,14 @@ impl AuthRepository {
         Self { pool }
     }
 
+    pub async fn touch_last_login(&self, user_id: Uuid) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE users SET last_login_at = now() WHERE id = $1")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn create_user(
         &self,
         username: &str,

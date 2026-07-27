@@ -43,6 +43,14 @@ impl CategoryService {
             .collect())
     }
 
+    pub async fn list_admin(&self) -> Result<Vec<CategoryResponse>, CategoryError> {
+        let categories = self.repository.list(true).await.map_err(internal)?;
+        Ok(categories
+            .into_iter()
+            .map(repository_category_to_response)
+            .collect())
+    }
+
     pub async fn get_public(&self, slug: &str) -> Result<CategoryResponse, CategoryError> {
         let slug = normalize_slug(slug, 64)?;
         self.repository

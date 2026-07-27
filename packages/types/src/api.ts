@@ -397,3 +397,227 @@ export interface HotKeyword {
 export interface HotKeywordsResponse {
   keywords: HotKeyword[];
 }
+
+export interface DailyCount {
+  date: string;
+  count: number;
+}
+
+export interface HotTopicStat {
+  id: string;
+  title: string;
+  slug: string;
+  view_count: number;
+  reply_count: number;
+  like_count: number;
+}
+
+export interface AdminDashboard {
+  users_total: number;
+  topics_total: number;
+  comments_total: number;
+  uploads_total: number;
+  reports_open: number;
+  users_today: number;
+  topics_today: number;
+  active_users_7d: number;
+  registrations_7d: DailyCount[];
+  topics_7d: DailyCount[];
+  hot_topics: HotTopicStat[];
+}
+
+export interface AdminUserItem {
+  id: string;
+  username: string;
+  email: string;
+  avatar: string | null;
+  nickname: string | null;
+  role: RoleSummary;
+  status: UserStatus;
+  email_verified: boolean;
+  followers_count: number;
+  following_count: number;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminUserListParams {
+  q?: string;
+  status?: UserStatus;
+  role?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface AdminUserUpdateRequest {
+  status?: UserStatus;
+  role?: string;
+}
+
+export interface RoleOption {
+  code: string;
+  name: string;
+  priority: number;
+}
+
+export interface AdminTopicItem {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  summary: string | null;
+  category_id: string;
+  category_name: string;
+  category_slug: string;
+  author_id: string;
+  author_username: string;
+  view_count: number;
+  reply_count: number;
+  like_count: number;
+  is_pinned: boolean;
+  is_featured: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminTopicListParams {
+  q?: string;
+  status?: string;
+  category_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface AdminTopicUpdateRequest {
+  status?: string;
+  is_pinned?: boolean;
+  is_featured?: boolean;
+}
+
+export interface AdminCommentItem {
+  id: string;
+  topic_id: string;
+  topic_title: string;
+  topic_slug: string;
+  parent_id: string | null;
+  content: string;
+  status: string;
+  author_id: string;
+  author_username: string;
+  like_count: number;
+  reply_count: number;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminCommentListParams {
+  q?: string;
+  status?: string;
+  topic_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface AdminFileItem {
+  id: string;
+  user_id: string;
+  username: string;
+  filename: string;
+  original_filename: string;
+  mime_type: string;
+  file_size: number;
+  category: UploadCategory;
+  url: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminFileListParams {
+  q?: string;
+  category?: UploadCategory;
+  status?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export type ReportTargetType = "topic" | "comment" | "user";
+export type ReportStatus = "open" | "reviewing" | "resolved" | "rejected";
+
+export interface CreateReportRequest {
+  target_type: ReportTargetType;
+  target_id: string;
+  reason: string;
+  details?: string;
+}
+
+export interface ResolveReportRequest {
+  status: ReportStatus;
+  resolution_note?: string;
+}
+
+export interface ReportItem {
+  id: string;
+  reporter_id: string;
+  reporter_username: string;
+  target_type: ReportTargetType;
+  target_id: string;
+  reason: string;
+  details: string | null;
+  status: ReportStatus;
+  handler_id: string | null;
+  handler_username: string | null;
+  resolution_note: string | null;
+  handled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReportListParams {
+  status?: ReportStatus;
+  target_type?: ReportTargetType;
+  page?: number;
+  page_size?: number;
+}
+
+export interface AdminLogItem {
+  id: string;
+  admin_id: string;
+  admin_username: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  summary: string;
+  metadata: Record<string, unknown>;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface AdminLogListParams {
+  q?: string;
+  action?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface CreateCategoryRequest {
+  slug?: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  sort_order?: number;
+  is_visible?: boolean;
+}
+
+export interface UpdateCategoryRequest {
+  slug?: string;
+  name?: string;
+  description?: string | null;
+  icon?: string | null;
+  sort_order?: number;
+  is_visible?: boolean;
+}

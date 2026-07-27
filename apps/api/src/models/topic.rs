@@ -11,6 +11,7 @@ use super::{CategorySummary, PatchField, RoleSummary};
 pub enum TopicStatus {
     #[default]
     Published,
+    Hidden,
     Deleted,
 }
 
@@ -18,6 +19,7 @@ impl TopicStatus {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Published => "published",
+            Self::Hidden => "hidden",
             Self::Deleted => "deleted",
         }
     }
@@ -29,6 +31,7 @@ impl FromStr for TopicStatus {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "published" => Ok(Self::Published),
+            "hidden" => Ok(Self::Hidden),
             "deleted" => Ok(Self::Deleted),
             _ => Err("unknown topic status"),
         }

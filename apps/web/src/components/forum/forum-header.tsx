@@ -55,6 +55,11 @@ export function ForumHeader() {
               <Link href="/notifications" className="text-muted-foreground hover:text-foreground">
                 通知
               </Link>
+              {user?.role.code === "administrator" || user?.role.code === "super_administrator" ? (
+                <Link href="/admin" className="text-muted-foreground hover:text-foreground">
+                  后台
+                </Link>
+              ) : null}
             </>
           ) : null}
         </nav>
