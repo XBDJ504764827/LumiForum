@@ -38,9 +38,24 @@ export function MarkdownContent({ content, className }: { content: string; class
           ),
           pre: ({ children }) => <pre className="my-5 overflow-x-auto">{children}</pre>,
           a: ({ href, children }) => (
-            <a href={href} className="text-primary underline underline-offset-4" rel="noreferrer">
+            <a
+              href={href}
+              className="text-primary underline underline-offset-4"
+              rel="noopener noreferrer"
+              target={href?.startsWith("http") ? "_blank" : undefined}
+            >
               {children}
             </a>
+          ),
+          img: ({ src, alt }) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={src}
+              alt={alt || ""}
+              loading="lazy"
+              decoding="async"
+              className="my-5 h-auto max-w-full rounded-md border border-border"
+            />
           ),
           hr: () => <hr className="my-8 border-border" />,
           table: ({ children }) => (

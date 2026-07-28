@@ -1,11 +1,8 @@
-import type { Metadata } from "next";
-
 import { RequireAuth } from "@/components/auth/route-guards";
 import { TopicEditor } from "@/components/forum/topic-editor";
+import { privatePageMetadata } from "@/lib/seo/metadata";
 
-export const metadata: Metadata = {
-  title: "发布帖子 | LumiForum",
-};
+export const metadata = privatePageMetadata("发布帖子");
 
 export default function NewTopicPage() {
   return (

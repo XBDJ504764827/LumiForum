@@ -1,12 +1,16 @@
-import type { Metadata } from "next";
-
 import { ForumHome } from "@/components/forum/forum-home";
+import { JsonLd } from "@/components/seo/json-ld";
+import { websiteJsonLd } from "@/lib/seo/json-ld";
+import { homeMetadata } from "@/lib/seo/metadata";
 
-export const metadata: Metadata = {
-  title: "LumiForum",
-  description: "社区最新讨论与板块导航",
-};
+export const metadata = homeMetadata();
+export const revalidate = 60;
 
 export default function HomePage() {
-  return <ForumHome />;
+  return (
+    <>
+      <JsonLd data={websiteJsonLd()} />
+      <ForumHome />
+    </>
+  );
 }

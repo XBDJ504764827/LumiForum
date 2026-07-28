@@ -1,11 +1,8 @@
-import type { Metadata } from "next";
-
-import { ProfileView } from "@/components/profile/profile-view";
 import { RequireAuth } from "@/components/auth/route-guards";
+import { ProfileView } from "@/components/profile/profile-view";
+import { privatePageMetadata } from "@/lib/seo/metadata";
 
-export const metadata: Metadata = {
-  title: "个人中心 | LumiForum",
-};
+export const metadata = privatePageMetadata("个人中心");
 
 export default function ProfilePage() {
   return (

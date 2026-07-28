@@ -1,14 +1,11 @@
-import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { Providers } from "@/components/providers";
+import { rootMetadata } from "@/lib/seo/metadata";
 
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "LumiForum",
-  description: "现代化社区论坛",
-};
+export const metadata = rootMetadata();
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
