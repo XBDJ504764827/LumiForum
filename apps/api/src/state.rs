@@ -5,14 +5,16 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
 use crate::config::Config;
+use crate::realtime::{PresenceService, RealtimeBus, RealtimeHub};
 use crate::repositories::{
-    AuthRepository, AuthorizationRepository, CategoryRepository, CommentRepository,
-    NotificationRepository, ReactionRepository, SearchRepository, TopicRepository,
-    UploadRepository, UserRepository,
+    AdminRepository, AuthRepository, AuthorizationRepository, CategoryRepository,
+    CommentRepository, NotificationRepository, ReactionRepository, SearchRepository,
+    TopicRepository, UploadRepository, UserRepository,
 };
 use crate::services::{
-    AuthService, AuthServiceConfig, AuthorizationService, CategoryService, CommentService,
-    NotificationService, ReactionService, SearchService, TopicService, UploadService, UserService,
+    AdminService, AuthService, AuthServiceConfig, AuthorizationService, CategoryService,
+    CommentService, NotificationService, ReactionService, SearchService, TopicService,
+    UploadService, UserService,
 };
 use crate::storage::{LocalStorage, S3Storage, S3StorageConfig, StorageProvider};
 
@@ -35,6 +37,9 @@ struct AppStateInner {
     pub notifications: NotificationService,
     pub search: SearchService,
     pub uploads: UploadService,
+    pub admin: AdminService,
+    pub realtime: RealtimeBus,
+    pub presence: PresenceService,
 }
 
 impl AppState {
@@ -69,8 +74,15 @@ impl AppState {
         let categories = CategoryService::new(category_repository.clone());
         let topics = TopicService::new(topic_repository.clone(), category_repository);
         let notification_repository = NotificationRepository::new(db.clone());
-        let notifications =
-            NotificationService::new(notification_repository.clone(), redis.clone());
+        let hub = RealtimeHub::new(config.ws_max_connections_per_user);
+        let realtime = RealtimeBus::new(redis.clone(), config.redis_url.clone(), hub);
+        realtime.clone().spawn_subscriber();
+        let presence = PresenceService::new(redis.clone(), config.presence_ttl_secs);
+        let notifications = NotificationService::new(
+            notification_repository.clone(),
+            redis.clone(),
+            realtime.clone(),
+        );
         let comments = CommentService::new(
             CommentRepository::new(db.clone()),
             topic_repository,
@@ -105,6 +117,13 @@ impl AppState {
             _ => unreachable!("storage provider is validated by Config"),
         };
         let uploads = UploadService::new(UploadRepository::new(db.clone()), storage);
+        let admin = AdminService::new(
+            AdminRepository::new(db.clone()),
+            categories.clone(),
+            comments.clone(),
+            uploads.clone(),
+            authorization.clone(),
+        );
 
         Ok(Self {
             inner: Arc::new(AppStateInner {
@@ -121,6 +140,9 @@ impl AppState {
                 notifications,
                 search,
                 uploads,
+                admin,
+                realtime,
+                presence,
             }),
         })
     }
@@ -175,5 +197,17 @@ impl AppState {
 
     pub fn uploads(&self) -> &UploadService {
         &self.inner.uploads
+    }
+
+    pub fn admin(&self) -> &AdminService {
+        &self.inner.admin
+    }
+
+    pub fn realtime(&self) -> &RealtimeBus {
+        &self.inner.realtime
+    }
+
+    pub fn presence(&self) -> &PresenceService {
+        &self.inner.presence
     }
 }

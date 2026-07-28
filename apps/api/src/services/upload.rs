@@ -230,7 +230,25 @@ impl UploadService {
             .await
             .map_err(internal)?
             .ok_or(UploadError::NotFound)?;
-        if self.delete_objects(&upload).await.is_err() {
+        self.finish_delete(upload_id, &upload).await
+    }
+
+    pub async fn admin_delete(&self, upload_id: Uuid) -> Result<(), UploadError> {
+        let upload = self
+            .repository
+            .begin_delete_any(upload_id)
+            .await
+            .map_err(internal)?
+            .ok_or(UploadError::NotFound)?;
+        self.finish_delete(upload_id, &upload).await
+    }
+
+    async fn finish_delete(
+        &self,
+        upload_id: Uuid,
+        upload: &crate::repositories::RepositoryUpload,
+    ) -> Result<(), UploadError> {
+        if self.delete_objects(upload).await.is_err() {
             self.repository
                 .restore_ready(upload_id)
                 .await

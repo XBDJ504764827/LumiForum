@@ -12,7 +12,7 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 # Filled in when apps/api is scaffolded (step ⑤)
-axum = { version = "0.8", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -38,6 +38,7 @@ sha2 = "0.10"
 time = "0.3"
 async-trait = "0.1"
 bytes = "1"
+futures-util = "0.3"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
 infer = "0.19"
 object_store = { version = "0.12", features = ["aws"] }

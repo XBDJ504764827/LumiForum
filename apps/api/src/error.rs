@@ -7,8 +7,8 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::services::{
-    AuthError, AuthorizationError, CategoryError, CommentError, NotificationError, ReactionError,
-    SearchError, TopicError, UploadError, UserError,
+    AdminError, AuthError, AuthorizationError, CategoryError, CommentError, NotificationError,
+    ReactionError, SearchError, TopicError, UploadError, UserError,
 };
 
 #[derive(Debug, Error)]
@@ -262,6 +262,17 @@ impl From<SearchError> for AppError {
             SearchError::Validation(message) => Self::Validation(message),
             SearchError::RateLimited => Self::RateLimited,
             SearchError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<AdminError> for AppError {
+    fn from(error: AdminError) -> Self {
+        match error {
+            AdminError::Validation(message) => Self::Validation(message),
+            AdminError::NotFound => Self::NotFound,
+            AdminError::Forbidden => Self::Forbidden,
+            AdminError::Internal(error) => Self::Internal(error),
         }
     }
 }

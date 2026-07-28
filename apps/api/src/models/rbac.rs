@@ -71,6 +71,15 @@ pub const PERMISSION_NOTIFICATION_UPDATE_SELF: &str = "notification.update:self"
 pub const PERMISSION_UPLOAD_CREATE: &str = "upload.create";
 pub const PERMISSION_UPLOAD_READ_SELF: &str = "upload.read:self";
 pub const PERMISSION_UPLOAD_DELETE_SELF: &str = "upload.delete:self";
+pub const PERMISSION_ADMIN_ACCESS: &str = "admin.access";
+pub const PERMISSION_USER_MANAGE: &str = "user.manage";
+pub const PERMISSION_USER_ROLE_ASSIGN: &str = "user.role.assign";
+pub const PERMISSION_TOPIC_MANAGE: &str = "topic.manage";
+pub const PERMISSION_COMMENT_MANAGE: &str = "comment.manage";
+pub const PERMISSION_FILE_MANAGE: &str = "file.manage";
+pub const PERMISSION_REPORT_MANAGE: &str = "report.manage";
+pub const PERMISSION_REPORT_CREATE: &str = "report.create";
+pub const PERMISSION_SYSTEM_MANAGE: &str = "system.manage";
 
 #[derive(Clone)]
 pub struct AuthenticatedPrincipal {

@@ -1,17 +1,21 @@
+mod admin;
 pub mod auth;
 mod categories;
 mod comments;
 mod health;
 mod notifications;
+mod presence;
 mod reactions;
 mod response;
 mod search;
 mod topics;
 mod uploads;
 pub mod users;
+mod ws;
 
 use axum::{
     http::{header, HeaderValue, Method},
+    routing::get,
     Router,
 };
 use tower_http::{
@@ -35,7 +39,11 @@ pub fn create_router(state: AppState) -> Router {
         .merge(reactions::router(state.clone()))
         .merge(notifications::router(state.clone()))
         .merge(search::router())
-        .merge(uploads::router(state.clone()));
+        .merge(uploads::router(state.clone()))
+        .merge(admin::router(state.clone()))
+        .merge(admin::public_report_router(state.clone()))
+        .merge(presence::router())
+        .route("/ws", get(ws::ws_handler));
     let router = if state.config().storage_provider == "local" {
         let files = Router::new()
             .nest_service(
