@@ -30,9 +30,10 @@ LumiForum/
 
 ## Status
 
-Phase 1 monorepo foundation. No forum product features are implemented.
+Application phases 1–11 are implemented (forum product + SEO). Phase 12 adds
+production Docker Compose, Nginx/TLS, GHCR release, backups, and monitoring.
 
-## Quick start
+## Quick start (development)
 
 ```bash
 cp .env.example .env
@@ -51,6 +52,17 @@ For host-side development, start PostgreSQL and Redis first, then run:
 pnpm install --frozen-lockfile
 pnpm dev:web
 cargo run -p lumiforum-api
+```
+
+## Production
+
+See [`docs/deployment/README.md`](docs/deployment/README.md).
+
+```bash
+cp .env.production.example .env
+# edit DOMAIN, secrets, public URLs
+./scripts/deploy/up.sh
+./scripts/deploy/init-certs.sh
 ```
 
 ## Quality checks

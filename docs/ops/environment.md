@@ -74,8 +74,17 @@ docker build \
 | `REDIS_PORT`                      | Compose       | Host port mapping                      |
 | `API_PORT` / `WEB_PORT`           | Compose       | Host port mapping                      |
 | `NEXT_PUBLIC_API_URL`             | Web (browser) | Public API base URL                    |
+| `NEXT_PUBLIC_SITE_URL`            | Web           | Canonical site origin (SEO/OG)         |
+| `NEXT_PUBLIC_SITE_NAME`           | Web           | Brand name                             |
+| `NEXT_PUBLIC_SITE_DESCRIPTION`    | Web           | Default meta description               |
 | `API_INTERNAL_URL`                | Web (server)  | In-network API base URL                |
-| `S3_*`                            | Future        | S3-compatible object storage           |
+| `DOMAIN`                          | Nginx/Certbot | Public hostname                        |
+| `CERTBOT_EMAIL`                   | Certbot       | ACME registration email                |
+| `IMAGE_API` / `IMAGE_WEB`         | Compose prod  | GHCR image pins                        |
+| `STORAGE_*` / `S3_*`              | API           | Object storage                         |
+| `WS_*` / `PRESENCE_TTL_SECS`      | API           | Realtime limits                        |
+| `BACKUP_RETENTION_DAYS`           | Backup        | Dump retention                         |
+| `GRAFANA_*`                       | Monitoring    | Optional Grafana login                 |
 
 ## Docker vs local
 

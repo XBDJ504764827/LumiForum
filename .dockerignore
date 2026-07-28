@@ -2,6 +2,7 @@
 .github
 .turbo
 .next
+**/.next
 node_modules
 **/node_modules
 **/dist
@@ -14,7 +15,9 @@ docker/volumes
 .env
 .env.*
 !.env.example
-docs
 **/.DS_Store
 **/*.md
 !README.md
+!docs/deployment/**
+uploads
+apps/web/tsconfig.tsbuildinfo
