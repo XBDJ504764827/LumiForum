@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { SearchView } from "@/components/forum/search-view";
 import { QueryLoading } from "@/components/forum/query-state";
+import { SearchView } from "@/components/forum/search-view";
+import { searchMetadata } from "@/lib/seo/metadata";
 
-export const metadata: Metadata = {
-  title: "搜索 | LumiForum",
+type Props = {
+  searchParams: Promise<{ q?: string }>;
 };
+
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const query = await searchParams;
+  return searchMetadata(query.q);
+}
 
 export default function SearchPage() {
   return (
