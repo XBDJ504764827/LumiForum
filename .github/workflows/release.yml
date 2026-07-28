@@ -1,0 +1,148 @@
+name: Release images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: Build and push
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      api_image: ${{ steps.meta_api.outputs.tags }}
+      web_image: ${{ steps.meta_web.outputs.tags }}
+      version: ${{ steps.vars.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Image version
+        id: vars
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "owner=${owner}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (API)
+        id: meta_api
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.vars.outputs.owner }}/lumiforum-api
+          tags: |
+            type=raw,value=${{ steps.vars.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Docker metadata (Web)
+        id: meta_web
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.vars.outputs.owner }}/lumiforum-web
+          tags: |
+            type=raw,value=${{ steps.vars.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push API
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/api/Dockerfile
+          push: true
+          tags: ${{ steps.meta_api.outputs.tags }}
+          labels: ${{ steps.meta_api.outputs.labels }}
+          cache-from: type=gha,scope=api-release
+          cache-to: type=gha,mode=max,scope=api-release
+
+      - name: Build and push Web
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/web/Dockerfile
+          push: true
+          tags: ${{ steps.meta_web.outputs.tags }}
+          labels: ${{ steps.meta_web.outputs.labels }}
+          cache-from: type=gha,scope=web-release
+          cache-to: type=gha,mode=max,scope=web-release
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://forum.example.com/api' }}
+            NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL || 'https://forum.example.com' }}
+            NEXT_PUBLIC_SITE_NAME=${{ vars.NEXT_PUBLIC_SITE_NAME || 'LumiForum' }}
+            NEXT_PUBLIC_SITE_DESCRIPTION=${{ vars.NEXT_PUBLIC_SITE_DESCRIPTION || '现代化社区论坛' }}
+
+  deploy:
+    name: Deploy
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        continue-on-error: true
+        env:
+          IMAGE_VERSION: ${{ needs.build-and-push.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+          DEPLOY_DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          envs: IMAGE_VERSION,OWNER,DEPLOY_DOMAIN,DEPLOY_PATH
+          script: |
+            set -euo pipefail
+            cd "${DEPLOY_PATH:-/opt/lumiforum}"
+            owner="$(echo "${OWNER}" | tr '[:upper:]' '[:lower:]')"
+            export IMAGE_API="ghcr.io/${owner}/lumiforum-api:${IMAGE_VERSION}"
+            export IMAGE_WEB="ghcr.io/${owner}/lumiforum-web:${IMAGE_VERSION}"
+            tmp="$(mktemp)"
+            grep -vE '^(IMAGE_API|IMAGE_WEB)=' .env > "${tmp}" || cp .env "${tmp}"
+            {
+              cat "${tmp}"
+              echo "IMAGE_API=${IMAGE_API}"
+              echo "IMAGE_WEB=${IMAGE_WEB}"
+            } > .env.deploy
+            rm -f "${tmp}"
+            docker compose -f docker-compose.prod.yml --env-file .env.deploy pull api web
+            ENV_FILE=.env.deploy ./scripts/deploy/up.sh
+            if [[ -n "${DEPLOY_DOMAIN:-}" ]]; then
+              ./scripts/deploy/smoke.sh "https://${DEPLOY_DOMAIN}"
+            else
+              ./scripts/deploy/smoke.sh "http://127.0.0.1"
+            fi
