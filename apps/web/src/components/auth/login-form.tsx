@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { LoadingIndicator } from "@/components/loading-indicator";
-import { errorMessage } from "@/lib/api/auth";
+import { errorMessage, steamLoginUrl } from "@/lib/api/auth";
 import { loginSchema, type LoginFormValues } from "@/lib/auth/schemas";
 
 export function LoginForm() {
@@ -83,6 +83,22 @@ export function LoginForm() {
           {mutation.isPending ? "正在登录" : "登录"}
         </Button>
       </form>
+
+      <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="h-px flex-1 bg-border" />
+        或
+        <span className="h-px flex-1 bg-border" />
+      </div>
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => window.location.assign(steamLoginUrl())}
+      >
+        使用 Steam 登录
+      </Button>
+      <p className="mt-2 text-center text-xs text-muted-foreground">
+        无需注册，首次登录会自动创建论坛账户
+      </p>
 
       <p className="mt-7 text-center text-sm text-muted-foreground">
         还没有账户？{" "}

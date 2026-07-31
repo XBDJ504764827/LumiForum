@@ -5,7 +5,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { getMe, login, logout, register } from "@/lib/api/auth";
-import { clearAccessToken, setAccessToken, subscribeSession } from "@/lib/auth/session";
+import {
+  clearAccessToken,
+  sessionAccessToken,
+  setAccessToken,
+  subscribeSession,
+} from "@/lib/auth/session";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -15,6 +20,7 @@ interface AuthContextValue {
   signIn: (input: LoginRequest) => Promise<void>;
   signUp: (input: RegisterRequest) => Promise<void>;
   signOut: () => Promise<void>;
+  restoreSession: () => Promise<User>;
   setCurrentUser: (user: User) => void;
 }
 
@@ -74,6 +80,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     commitUser(response.user);
   };
 
+  const restoreSession = async () => {
+    await sessionAccessToken(true);
+    const currentUser = await getMe();
+    commitUser(currentUser);
+    return currentUser;
+  };
+
   const signOut = async () => {
     try {
       await logout();
@@ -87,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ status, user, signIn, signUp, signOut, setCurrentUser: commitUser }}
+      value={{ status, user, signIn, signUp, signOut, restoreSession, setCurrentUser: commitUser }}
     >
       {children}
     </AuthContext.Provider>

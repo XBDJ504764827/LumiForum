@@ -6,6 +6,7 @@ mod comment;
 mod notification;
 mod reaction;
 mod search;
+mod steam_auth;
 mod topic;
 mod upload;
 mod user;
@@ -21,6 +22,7 @@ pub use comment::{repository_comment_to_node, CommentRepository, NewComment, Rep
 pub use notification::{NewNotification, NotificationListFilter, NotificationRepository};
 pub use reaction::{FollowCounters, ReactionRepository};
 pub use search::{CommentSearchFilter, SearchRepository, TopicSearchFilter, UserSearchFilter};
+pub use steam_auth::{is_unique_violation, SteamAuthRepository};
 pub use topic::{
     repository_topic_to_detail, repository_topic_to_summary, NewTopic, RepositoryTopic,
     TopicListOptions, TopicModeration, TopicRepository, TopicUpdate,

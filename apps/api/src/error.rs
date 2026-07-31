@@ -45,6 +45,14 @@ pub enum AppError {
     StorageUnavailable,
     #[error("refresh token reuse detected")]
     RefreshTokenReused,
+    #[error("Steam authentication is unavailable")]
+    SteamUnavailable,
+    #[error("Steam authentication failed")]
+    SteamAuthenticationFailed,
+    #[error("Steam account is already linked")]
+    SteamAccountConflict,
+    #[error("Steam is the only login method")]
+    SoleLoginMethod,
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -142,6 +150,26 @@ impl IntoResponse for AppError {
                     "refresh token is invalid or expired",
                 )
             }
+            Self::SteamUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "steam_unavailable",
+                "Steam authentication is unavailable",
+            ),
+            Self::SteamAuthenticationFailed => (
+                StatusCode::UNAUTHORIZED,
+                "steam_auth_failed",
+                "Steam authentication failed",
+            ),
+            Self::SteamAccountConflict => (
+                StatusCode::CONFLICT,
+                "steam_account_conflict",
+                "Steam account is already linked",
+            ),
+            Self::SoleLoginMethod => (
+                StatusCode::CONFLICT,
+                "sole_login_method",
+                "Steam is the only login method",
+            ),
             Self::Internal(error) => {
                 tracing::error!(error = %error, "internal error");
                 (

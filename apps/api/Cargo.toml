@@ -43,6 +43,9 @@ futures-util = { workspace = true }
 image = { workspace = true }
 infer = { workspace = true }
 object_store = { workspace = true }
+reqwest = { workspace = true }
+url = { workspace = true }
+urlencoding = { workspace = true }
 
 [dev-dependencies]
 tower = { workspace = true, features = ["util"] }

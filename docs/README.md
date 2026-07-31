@@ -4,11 +4,11 @@ Architecture and operations documentation.
 
 ## Layout
 
-| Path | Responsibility |
-| --- | --- |
-| `architecture/` | System design, boundaries, ADRs |
-| `deployment/` | Production install, TLS, CI/CD release, rollback |
-| `ops/` | Environments, CI notes, runbooks |
+| Path            | Responsibility                                   |
+| --------------- | ------------------------------------------------ |
+| `architecture/` | System design, boundaries, ADRs                  |
+| `deployment/`   | Production install, TLS, CI/CD release, rollback |
+| `ops/`          | Environments, CI notes, runbooks                 |
 
 ## Start here
 

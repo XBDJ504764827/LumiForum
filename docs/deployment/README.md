@@ -1,216 +1,264 @@
-# Deployment guide
+# Manual production deployment
 
-Production deployment for LumiForum using Docker Compose, Nginx, Let’s Encrypt, GHCR images, backups, and optional monitoring.
+LumiForum is built on a compatible Linux build machine and uploaded as runtime
+artifacts. The production server does not need the repository, Git, Rust,
+Cargo, pnpm, TypeScript, or a compiler.
 
-## Architecture
+## Runtime requirements
 
-See [architecture.md](./architecture.md).
+The production server needs:
 
-## Server requirements
+- Linux and user-level systemd
+- Node.js 24+ for the Next.js standalone server
+- PostgreSQL 14-17 and Redis reachable by the API
+- a TLS reverse proxy such as 1Panel, nginx, or Caddy
+- `tar`, `sha256sum`, and `curl`
 
-| Resource | Minimum | Recommended |
-| --- | --- | --- |
-| CPU | 2 vCPU | 4 vCPU |
-| RAM | 4 GB | 8 GB |
-| Disk | 40 GB SSD | 80 GB+ SSD |
-| OS | Ubuntu 22.04/24.04 LTS | same |
-| Network | public IPv4 + DNS A/AAAA for `DOMAIN` | |
+The API binary is platform-specific. Build for the same CPU architecture as the
+server. A GNU target also depends on a compatible glibc; building on a newer
+Linux distribution can produce a binary that will not run on an older server.
+Use the same/older distribution as the production host, or a separately tested
+musl target. Next.js standalone can contain native `sharp` binaries and must
+also be built for the production OS and CPU architecture.
 
-Install:
+## Environment boundary
 
-- Docker Engine 24+
-- Docker Compose plugin v2
-- `curl`, `git`, `uFW` (or equivalent firewall)
+Use a private `.env` on the build machine for Web build values. Never upload
+that combined file to production.
 
-## 1. Bootstrap the host
+- `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SITE_*` are embedded into browser
+  assets. Changing them requires rebuilding the Web artifact.
+- `API_INTERNAL_URL`, `HOSTNAME`, and `PORT` are Web runtime values.
+- The API reads its configuration from process environment variables. It also
+  loads `.env` from its working directory when started directly, but systemd
+  should use `EnvironmentFile`.
 
-```bash
-sudo mkdir -p /opt/lumiforum
-sudo chown "$USER:$USER" /opt/lumiforum
-cd /opt/lumiforum
-git clone <your-fork-or-repo> .
-cp .env.production.example .env
-chmod 600 .env
-```
+## 1. Build the artifacts
 
-Edit `.env`:
-
-- `DOMAIN`, `CERTBOT_EMAIL`
-- `POSTGRES_PASSWORD`, `JWT_SECRET` (≥ 32 chars)
-- `CORS_ORIGIN` / `NEXT_PUBLIC_SITE_URL` / `NEXT_PUBLIC_API_URL`
-- storage credentials if using R2/S3
-
-Firewall (example):
+From the repository root on the Linux build machine:
 
 ```bash
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
+cargo build --release --locked -p lumiforum-api \
+  --bin lumiforum-api --bin migrate
+
+NODE_ENV=production pnpm exec dotenv -e .env -- pnpm build:web
 ```
 
-SSH hardening tips: key-only auth, disable root password login, optional `Fail2ban`.
-
-## 2. First start (HTTP bootstrap)
+Create one release directory. Replace the example stamp with a version, commit,
+or UTC timestamp:
 
 ```bash
-chmod +x scripts/deploy/*.sh scripts/backup/*.sh
-./scripts/deploy/up.sh
-./scripts/deploy/smoke.sh http://127.0.0.1
+STAMP=20260731-01
+RELEASE_DIR=".release/${STAMP}"
+mkdir -p "${RELEASE_DIR}/api" "${RELEASE_DIR}/web/apps/web/.next"
+
+install -m 755 target/release/lumiforum-api "${RELEASE_DIR}/api/"
+install -m 755 target/release/migrate "${RELEASE_DIR}/api/"
+cp -a apps/web/.next/standalone/. "${RELEASE_DIR}/web/"
+cp -a apps/web/.next/static "${RELEASE_DIR}/web/apps/web/.next/static"
+cp -a apps/web/public "${RELEASE_DIR}/web/apps/web/public"
+
+printf '%s\n' \
+  "git_commit=$(git rev-parse HEAD)" \
+  "rustc=$(rustc --version)" \
+  "node=$(node --version)" \
+  > "${RELEASE_DIR}/BUILD-INFO"
+
+tar -C .release -czf ".release/lumiforum-${STAMP}.tar.gz" "${STAMP}"
+(cd .release && sha256sum "lumiforum-${STAMP}.tar.gz" \
+  > "lumiforum-${STAMP}.tar.gz.sha256")
 ```
 
-On first boot without certificates, Nginx uses the HTTP bootstrap template so ACME can succeed.
+Do not upload only `apps/web/server.js`. The standalone root `node_modules`,
+`apps/web/.next` contents, static files, and `public` directory must keep the
+layout above. After extraction, start the bundle from its root with
+`node apps/web/server.js`.
 
-## 3. HTTPS
-
-Point DNS `DOMAIN` to the server, then:
+Inspect compatibility before uploading:
 
 ```bash
-./scripts/deploy/init-certs.sh
-./scripts/deploy/smoke.sh "https://$DOMAIN"
+file target/release/lumiforum-api target/release/migrate
+ldd target/release/lumiforum-api
 ```
 
-Renew daily via cron:
+## 2. Initialize the server
 
-```cron
-0 4 * * * cd /opt/lumiforum && docker compose -f docker-compose.prod.yml --env-file .env run --rm --profile certs certbot renew && docker compose -f docker-compose.prod.yml --env-file .env exec nginx nginx -s reload
-```
-
-## 4. CI/CD
-
-### GitHub configuration
-
-Repository **Variables** (build-time public URLs):
-
-- `NEXT_PUBLIC_API_URL` e.g. `https://forum.example.com/api`
-- `NEXT_PUBLIC_SITE_URL` e.g. `https://forum.example.com`
-- optional `NEXT_PUBLIC_SITE_NAME`, `NEXT_PUBLIC_SITE_DESCRIPTION`
-
-Repository / environment **Secrets** for deploy:
-
-- `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
-- optional `DEPLOY_PORT`, `DEPLOY_PATH` (default `/opt/lumiforum`)
-- optional `DEPLOY_DOMAIN` for HTTPS smoke tests
-
-Create a GitHub Environment named `production` if you want approval gates.
-
-### Pipelines
-
-| Workflow | Trigger | Purpose |
-| --- | --- | --- |
-| `ci.yml` | PR / push | lint, test, compose validate, image build (no push) |
-| `release.yml` | push `main` / tags `v*` | build+push GHCR, optional SSH deploy |
-
-Images:
-
-- `ghcr.io/<owner>/lumiforum-api:<version>`
-- `ghcr.io/<owner>/lumiforum-web:<version>`
-
-`<version>` is `sha-<fullsha>` on branch pushes or the semver tag on releases.
-
-### Manual deploy
+Run as the dedicated deployment user. The example path is
+`/home/lumiforum/lumiforum`; replace it everywhere with your absolute path.
 
 ```bash
-export IMAGE_API=ghcr.io/<owner>/lumiforum-api:sha-...
-export IMAGE_WEB=ghcr.io/<owner>/lumiforum-web:sha-...
-# write into .env or:
-ENV_FILE=.env ./scripts/deploy/up.sh
+DEPLOY_PATH=/home/lumiforum/lumiforum
+install -d -m 755 "$DEPLOY_PATH" "$DEPLOY_PATH/releases" "$DEPLOY_PATH/uploads"
+install -d -m 700 "$DEPLOY_PATH/env"
+install -d -m 755 "$HOME/.config/systemd/user"
 ```
 
-### Rollback
+User services must survive logout. Check the current state:
 
 ```bash
-IMAGE_TAG=sha-<previous> ./scripts/deploy/rollback.sh
-# or
-IMAGE_API=... IMAGE_WEB=... ./scripts/deploy/rollback.sh
+loginctl show-user "$USER" -p Linger
 ```
 
-## 5. Database migrations
+If it reports `Linger=no`, an administrator must run:
 
-`./scripts/deploy/up.sh` runs `/usr/local/bin/lumiforum-migrate` before recreating API/Web.
+```bash
+sudo loginctl enable-linger lumiforum
+```
 
-The API process also applies migrations on boot as a safety net. Prefer the explicit migrate step in deploys so schema changes fail before traffic cutover.
+## 3. Create runtime environment files
 
-## 6. Backups
+Create `$DEPLOY_PATH/env/api.env` with mode `600`:
 
-The `backup` service dumps Postgres daily (default 03:00 UTC) into the `backup_data` volume:
+```env
+APP_ENV=production
+HOST=127.0.0.1
+PORT=8080
+RUST_LOG=info,tower_http=info,sqlx=warn
+DATABASE_URL=postgres://lumiforum:CHANGE_ME@127.0.0.1:5432/lumiforum
+REDIS_URL=redis://:CHANGE_ME@127.0.0.1:6379
+JWT_SECRET=CHANGE_ME_AT_LEAST_32_BYTES
+JWT_ISSUER=lumiforum-api
+JWT_AUDIENCE=lumiforum-web
+REFRESH_COOKIE_SECURE=true
+CORS_ORIGIN=https://forum.example.com
+STORAGE_PROVIDER=local
+STORAGE_LOCAL_ROOT=/home/lumiforum/lumiforum/uploads
+STORAGE_PUBLIC_URL=https://api.example.com/storage
+```
+
+Append optional token, S3, realtime, and Steam settings from
+`.env.production.example` as needed. `STORAGE_LOCAL_ROOT` must be an absolute
+persistent path outside release directories when local storage is used.
+
+Create `$DEPLOY_PATH/env/web.env` with mode `600`:
+
+```env
+NODE_ENV=production
+HOSTNAME=127.0.0.1
+PORT=3000
+API_INTERNAL_URL=http://127.0.0.1:8080
+NEXT_PUBLIC_SITE_URL=https://forum.example.com
+NEXT_PUBLIC_SITE_NAME=LumiForum
+NEXT_PUBLIC_SITE_DESCRIPTION="Community forum"
+```
+
+The `NEXT_PUBLIC_SITE_*` runtime values keep dynamic rendering and ISR
+consistent, but cannot replace the values already embedded during build.
+
+```bash
+chmod 600 "$DEPLOY_PATH/env/api.env" "$DEPLOY_PATH/env/web.env"
+```
+
+## 4. Install user systemd services
+
+Upload or copy the two templates in `scripts/deploy/systemd/`. Replace
+`__DEPLOY_PATH__` with the absolute deployment path in both files. In the Web
+unit also replace `__NODE_BIN__` with the output of `command -v node` on the
+server, for example `/usr/bin/node`.
+
+Install them as:
 
 ```text
-/backups/lumiforum-<db>-<timestamp>.sql.gz
+~/.config/systemd/user/lumiforum-api.service
+~/.config/systemd/user/lumiforum-web.service
 ```
 
-Retention: `BACKUP_RETENTION_DAYS` (default 14).
-
-Restore (destructive):
+Then reload systemd:
 
 ```bash
-# copy dump out if needed
-docker compose -f docker-compose.prod.yml --env-file .env cp backup:/backups/<file> ./
-POSTGRES_USER=... POSTGRES_DB=lumiforum ./scripts/backup/restore-postgres.sh ./<file>
+systemctl --user daemon-reload
 ```
 
-Schedule a host-level copy of `/var/lib/docker/volumes/..._backup_data` or `docker run --rm -v ...` sync to offsite object storage.
+## 5. Upload and activate a release
 
-## 7. Logs
-
-Compose uses `json-file` rotation (`20m` × 7 files) per service.
+From the build machine:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env logs -f api
-docker compose -f docker-compose.prod.yml --env-file .env logs -f nginx
+scp ".release/lumiforum-${STAMP}.tar.gz" \
+    ".release/lumiforum-${STAMP}.tar.gz.sha256" \
+    lumiforum@server.example.com:/tmp/
 ```
 
-Nginx logs also live in the `nginx_logs` volume.
-
-## 8. Monitoring (optional)
+On the production server:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env --profile monitoring up -d
+DEPLOY_PATH=/home/lumiforum/lumiforum
+STAMP=20260731-01
+cd /tmp
+sha256sum -c "lumiforum-${STAMP}.tar.gz.sha256"
+tar -xzf "lumiforum-${STAMP}.tar.gz" -C "$DEPLOY_PATH/releases"
 ```
 
-- Prometheus: internal only
-- Grafana: `127.0.0.1:3001` (SSH tunnel recommended)
-- Exporters: Postgres + Redis
+Run the embedded migrations before switching the API symlink. `systemd-run`
+loads the same env file without executing it as a shell script:
 
-Application `/metrics` can be added later without changing the scrape layout.
+```bash
+systemd-run --user --wait --pipe --collect \
+  --property="EnvironmentFile=$DEPLOY_PATH/env/api.env" \
+  --property="WorkingDirectory=$DEPLOY_PATH/releases/$STAMP/api" \
+  "$DEPLOY_PATH/releases/$STAMP/api/migrate"
+```
 
-## 9. Security checklist
+Activate the release and start services:
 
-- [ ] `.env` mode `600`, not in git
-- [ ] UFW/security group: only 22/80/443
-- [ ] `JWT_SECRET` long random value
-- [ ] `REFRESH_COOKIE_SECURE=true`
-- [ ] S3 credentials rotated and least-privilege
-- [ ] GHCR packages private unless intentional
-- [ ] Deploy SSH key is ed25519, limited to deploy user
-- [ ] Regular backup restore drill
+```bash
+ln -sfn "releases/$STAMP/api" "$DEPLOY_PATH/current-api"
+ln -sfn "releases/$STAMP/web" "$DEPLOY_PATH/current-web"
+systemctl --user enable --now lumiforum-api lumiforum-web
+systemctl --user restart lumiforum-api lumiforum-web
+```
 
-## 10. Routing map
+Verify locally on the production server:
 
-| Public path | Upstream |
-| --- | --- |
-| `/` | `web:3000` |
-| `/api/*` | `api:8080/*` (prefix stripped) |
-| `/ws` | `api:8080/ws` |
-| `/storage/*` | `api:8080/storage/*` |
-| `/health`, `/ready` | `api` |
+```bash
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS http://127.0.0.1:8080/ready
+curl -fsSI http://127.0.0.1:3000/
+systemctl --user --no-pager status lumiforum-api lumiforum-web
+```
 
-Browser `NEXT_PUBLIC_API_URL` should be `https://<domain>/api` when using this edge layout.
+Inspect failures with:
 
-## 11. Troubleshooting
+```bash
+journalctl --user -u lumiforum-api -u lumiforum-web -n 100 --no-pager
+```
 
-| Symptom | Check |
-| --- | --- |
-| Nginx restart loop | cert missing → bootstrap path; `docker compose logs nginx` |
-| API unhealthy | `DATABASE_URL` / Redis; `logs api` |
-| Web 500 on SEO routes | `API_INTERNAL_URL=http://api:8080` |
-| WS fails | Nginx `/ws` upgrade headers; browser uses `wss://` |
-| Migrate fails | fix SQL before traffic switch; do not skip |
+## 6. Reverse proxy
 
-## Related docs
+Expose only ports 22, 80, and 443 publicly. Configure two HTTPS sites:
 
-- [architecture.md](./architecture.md)
-- [../ops/environment.md](../ops/environment.md)
-- [../ops/ci.md](../ops/ci.md)
+| Public URL                  | Upstream                |
+| --------------------------- | ----------------------- |
+| `https://forum.example.com` | `http://127.0.0.1:3000` |
+| `https://api.example.com`   | `http://127.0.0.1:8080` |
+
+Enable WebSocket upgrade for the API `/ws` route. If a panel proxy runs in a
+container and cannot reach host loopback, bind the apps to a private host/LAN
+address and firewall those ports to the proxy network.
+
+## 7. Manual rollback
+
+Database migrations are not automatically reversed. Confirm that the older
+application is compatible with the current schema, then switch symlinks:
+
+```bash
+DEPLOY_PATH=/home/lumiforum/lumiforum
+OLD_STAMP=20260730-02
+
+test -x "$DEPLOY_PATH/releases/$OLD_STAMP/api/lumiforum-api"
+test -f "$DEPLOY_PATH/releases/$OLD_STAMP/web/server.js"
+ln -sfn "releases/$OLD_STAMP/api" "$DEPLOY_PATH/current-api"
+ln -sfn "releases/$OLD_STAMP/web" "$DEPLOY_PATH/current-web"
+systemctl --user restart lumiforum-api lumiforum-web
+curl -fsS http://127.0.0.1:8080/ready
+curl -fsSI http://127.0.0.1:3000/
+```
+
+Keep the release currently referenced by each symlink when deleting old
+releases.
+
+## Backups
+
+The repository keeps manual PostgreSQL backup helpers in `scripts/backup/`.
+No automatic schedule is installed. Run them on the server or through a 1Panel
+scheduled task, copy backups off-site, and regularly test restoration.

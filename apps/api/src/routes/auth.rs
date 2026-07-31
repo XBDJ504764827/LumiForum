@@ -124,26 +124,32 @@ async fn me(
     Ok(Json(ApiResponse::new(user)))
 }
 
-fn refresh_cookie(state: &AppState, value: String) -> Cookie<'static> {
-    Cookie::build((state.config().refresh_cookie_name.clone(), value))
+pub(crate) fn refresh_cookie(state: &AppState, value: String) -> Cookie<'static> {
+    let mut cookie = Cookie::build((state.config().refresh_cookie_name.clone(), value))
         .http_only(true)
         .secure(state.config().refresh_cookie_secure)
         .same_site(axum_extra::extract::cookie::SameSite::Lax)
         .path("/auth")
         .max_age(time::Duration::seconds(
             state.auth().refresh_token_ttl_seconds(),
-        ))
-        .build()
+        ));
+    if let Some(domain) = &state.config().cookie_domain {
+        cookie = cookie.domain(domain.clone());
+    }
+    cookie.build()
 }
 
 fn removal_cookie(state: &AppState) -> Cookie<'static> {
-    Cookie::build((state.config().refresh_cookie_name.clone(), String::new()))
+    let mut cookie = Cookie::build((state.config().refresh_cookie_name.clone(), String::new()))
         .http_only(true)
         .secure(state.config().refresh_cookie_secure)
         .same_site(axum_extra::extract::cookie::SameSite::Lax)
         .path("/auth")
-        .max_age(time::Duration::ZERO)
-        .build()
+        .max_age(time::Duration::ZERO);
+    if let Some(domain) = &state.config().cookie_domain {
+        cookie = cookie.domain(domain.clone());
+    }
+    cookie.build()
 }
 
 fn peer_ip(peer: SocketAddr) -> Option<IpNetwork> {
