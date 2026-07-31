@@ -122,9 +122,13 @@ impl AuthService {
             return Err(AuthError::InvalidCredentials);
         };
 
+        let Some(password_hash) = user.password_hash.clone() else {
+            self.passwords.consume_dummy_work(request.password).await?;
+            return Err(AuthError::InvalidCredentials);
+        };
         let valid = self
             .passwords
-            .verify(request.password, user.password_hash.clone())
+            .verify(request.password, password_hash)
             .await?;
         if !valid {
             return Err(AuthError::InvalidCredentials);
@@ -206,7 +210,7 @@ impl AuthService {
         self.refresh_token_ttl.num_seconds()
     }
 
-    async fn issue_session(
+    pub(crate) async fn issue_session(
         &self,
         user: RepositoryUser,
         client_ip: Option<IpNetwork>,

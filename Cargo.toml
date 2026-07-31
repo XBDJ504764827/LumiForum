@@ -42,3 +42,6 @@ futures-util = "0.3"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
 infer = "0.19"
 object_store = { version = "0.12", features = ["aws"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+url = "2"
+urlencoding = "2"

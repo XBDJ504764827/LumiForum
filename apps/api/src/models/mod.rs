@@ -8,6 +8,7 @@ mod rbac;
 mod reaction;
 mod refresh_token;
 mod search;
+mod steam_auth;
 mod topic;
 mod upload;
 mod user;
@@ -60,6 +61,7 @@ pub use search::{
     SearchResponse, SearchSort, SearchSuggestionsResponse, SearchTopicStats, SearchType,
     TopicSearchHit, UserSearchHit,
 };
+pub use steam_auth::{SteamAuthorizationResponse, SteamUnbindRequest};
 pub use topic::{
     CreateTopicRequest, ModerateTopicRequest, TopicAuthorSummary, TopicDetail, TopicListQuery,
     TopicListSort, TopicRecord, TopicStats, TopicStatus, TopicSummary, UpdateTopicRequest,

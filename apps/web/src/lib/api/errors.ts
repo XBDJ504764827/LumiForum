@@ -49,4 +49,11 @@ const publicMessages: Record<string, string> = {
   payload_too_large: "文件超过允许大小",
   unsupported_media_type: "不支持此文件类型",
   storage_unavailable: "文件存储暂时不可用，请稍后重试",
+  steam_access_denied: "你已取消 Steam 授权",
+  steam_account_conflict: "该 Steam 账户已绑定其他用户",
+  steam_invalid_state: "Steam 授权已失效，请重新尝试",
+  steam_auth_failed: "Steam 认证失败，请重新尝试",
+  steam_unbind_requires_password: "请先设置密码，再解除 Steam 绑定",
+  sole_login_method: "请先设置密码，再解除 Steam 绑定",
+  steam_unavailable: "Steam 登录暂时不可用，请稍后重试",
 };
