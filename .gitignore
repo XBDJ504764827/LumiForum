@@ -12,6 +12,7 @@ target/
 /uploads/
 *.tsbuildinfo
 .deploy/
+.release/
 
 # Env & secrets
 .env
