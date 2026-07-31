@@ -42,6 +42,14 @@ export interface User {
   email_verified: boolean;
   followers_count: number;
   following_count: number;
+  steam_id: string | null;
+  steam_persona_name: string | null;
+  steam_avatar: string | null;
+  steam_avatar_medium: string | null;
+  steam_avatar_full: string | null;
+  steam_profile_url: string | null;
+  steam_country_code: string | null;
+  has_password: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -69,6 +77,14 @@ export interface TokenRefreshResponse {
   access_token: string;
   token_type: "Bearer";
   expires_in: number;
+}
+
+export interface SteamAuthorizationResponse {
+  authorization_url: string;
+}
+
+export interface SteamUnbindRequest {
+  password: string;
 }
 
 export interface ProfileUpdateRequest {

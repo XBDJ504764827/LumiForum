@@ -5,13 +5,14 @@ import type { ProfileUpdateRequest, User } from "@lumiforum/types";
 import { Alert, Avatar, AvatarFallback, AvatarImage, Button, Input, Label } from "@lumiforum/ui";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Brand } from "@/components/brand";
 import { LoadingIndicator } from "@/components/loading-indicator";
 import { AvatarUpload } from "@/components/uploads/avatar-upload";
-import { errorMessage, updateProfile } from "@/lib/api/auth";
+import { bindSteam, errorMessage, syncSteam, unbindSteam, updateProfile } from "@/lib/api/auth";
 import { profileSchema, type ProfileFormValues } from "@/lib/auth/schemas";
 
 export function ProfileView() {
@@ -123,6 +124,7 @@ function ProfileContent({ user, onUpdated }: { user: User; onUpdated: (user: Use
             <AccountRow label="关注" value={String(user.following_count)} />
             <AccountRow label="加入时间" value={formatDate(user.created_at)} />
           </dl>
+          <SteamAccount user={user} onUpdated={onUpdated} />
         </aside>
       </div>
     </div>
@@ -183,6 +185,137 @@ function ProfileEditor({ user, onUpdated }: { user: User; onUpdated: (user: User
         </Button>
       </form>
     </div>
+  );
+}
+
+function SteamAccount({ user, onUpdated }: { user: User; onUpdated: (user: User) => void }) {
+  const [password, setPassword] = useState("");
+  const [confirmingUnbind, setConfirmingUnbind] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const bindMutation = useMutation({
+    mutationFn: bindSteam,
+    onSuccess: ({ authorization_url }) => window.location.assign(authorization_url),
+    onError: (cause) => setError(errorMessage(cause)),
+  });
+  const unbindMutation = useMutation({
+    mutationFn: unbindSteam,
+    onSuccess: (updated) => {
+      onUpdated(updated);
+      setPassword("");
+      setConfirmingUnbind(false);
+      setError(null);
+    },
+    onError: (cause) => setError(errorMessage(cause)),
+  });
+  const syncMutation = useMutation({
+    mutationFn: syncSteam,
+    onSuccess: onUpdated,
+    onError: (cause) => setError(errorMessage(cause)),
+  });
+  const pending = bindMutation.isPending || unbindMutation.isPending || syncMutation.isPending;
+
+  return (
+    <section className="mt-8" aria-labelledby="steam-account-title">
+      <h3 id="steam-account-title" className="font-semibold">
+        Steam 账户
+      </h3>
+      {error ? <Alert className="mt-4">{error}</Alert> : null}
+      {user.steam_id ? (
+        <div className="mt-4 space-y-4 text-sm">
+          <div className="flex items-center gap-3">
+            <Avatar className="size-10 border border-border">
+              {user.steam_avatar_medium ? (
+                <AvatarImage src={user.steam_avatar_medium} alt="" />
+              ) : null}
+              <AvatarFallback>ST</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate font-medium">{user.steam_persona_name || user.steam_id}</p>
+              <p className="text-xs text-muted-foreground">
+                SteamID64: {user.steam_id}
+                {user.steam_country_code ? ` · ${user.steam_country_code}` : ""}
+              </p>
+              {user.steam_profile_url ? (
+                <a
+                  href={user.steam_profile_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  查看 Steam 资料
+                </a>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                setError(null);
+                syncMutation.mutate();
+              }}
+            >
+              {syncMutation.isPending ? "同步中" : "同步资料"}
+            </Button>
+            {user.has_password ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={pending}
+                onClick={() => setConfirmingUnbind((value) => !value)}
+              >
+                解除绑定
+              </Button>
+            ) : null}
+          </div>
+          {!user.has_password ? (
+            <p className="text-muted-foreground">
+              Steam 是当前唯一登录方式，请先设置密码再解除绑定。
+            </p>
+          ) : null}
+          {user.has_password && confirmingUnbind ? (
+            <div className="space-y-3 border-t border-border pt-4">
+              <Label htmlFor="steam-unbind-password">输入当前密码确认</Label>
+              <Input
+                id="steam-unbind-password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <Button
+                size="sm"
+                disabled={!password || pending}
+                onClick={() => {
+                  setError(null);
+                  unbindMutation.mutate({ password });
+                }}
+              >
+                {unbindMutation.isPending ? "正在解绑" : "确认解绑"}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-4">
+          <p className="text-sm text-muted-foreground">尚未绑定 Steam 账户。</p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            disabled={pending}
+            onClick={() => {
+              setError(null);
+              bindMutation.mutate();
+            }}
+          >
+            {bindMutation.isPending ? "正在连接" : "绑定 Steam"}
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -1,99 +1,129 @@
-# Production Deployment Architecture
+# Production deployment architecture
 
 **Status:** Accepted for phase 12  
-**Scope:** Single-host or small-cluster Docker Compose production topology
+**Scope:** Single-host production without application containers
 
 ## Goals
 
-- Ship a repeatable production stack without rewriting application code.
-- Keep public traffic on Nginx only; app containers stay on an internal network.
-- Support image-based deploys, migration gates, backups, logs, and basic observability.
-- Prefer simple rollback via immutable image tags over in-place mutable containers.
+- Build API and Web artifacts on a compatible Linux build machine.
+- Keep source code and build toolchains off the production server.
+- Run both applications on loopback under user-level systemd.
+- Let an existing panel, nginx, or Caddy own TLS and reverse proxying.
+- Keep releases immutable and make application rollback a symlink switch.
 
 ## Topology
 
 ```text
 Internet
    |
-   v
-[ Nginx :80/:443 ]
-   |-- /           --> web:3000   (Next.js standalone)
-   |-- /api/       --> api:8080   (Axum, path rewritten)
-   |-- /ws         --> api:8080   (WebSocket upgrade)
-   |-- /storage/   --> api:8080   (local object storage, optional)
-   |
-[ internal docker network: lumiforum ]
-   |-- api
-   |-- web
-   |-- postgres
-   |-- redis
-   |-- backup (cron sidecar / host cron)
-   |-- prometheus + grafana + exporters (optional profile)
+[ TLS reverse proxy :443 ]
+   |-- forum.example.com -> 127.0.0.1:3000 (Next.js standalone)
+   `-- api.example.com   -> 127.0.0.1:8080 (Axum + WebSocket)
+
+[ user systemd ]
+   |-- lumiforum-web -> current-web/apps/web/server.js (Node 24+)
+   `-- lumiforum-api -> current-api/lumiforum-api
+
+[ host services ]
+   |-- PostgreSQL
+   `-- Redis
 ```
 
-## Design choices
+The browser uses the public API URL embedded at Web build time. Next.js
+server-side fetching uses `API_INTERNAL_URL=http://127.0.0.1:8080`.
 
-### Compose over Kubernetes (this phase)
+## Runtime artifacts
 
-Compose is enough for a single VPS / small dedicated host. It keeps ops cost low while still supporting:
-
-- healthchecks
-- restart policies
-- image pull + recreate deploys
-- optional monitoring profile
-
-Kubernetes can replace the orchestrator later without changing app images.
-
-### Edge Nginx
-
-Nginx terminates TLS, applies security headers, rate limits, and routes:
-
-- browser pages to Next.js
-- JSON API under `/api/*` to Axum (strip `/api` prefix so existing routes stay `/health`, `/topics`, …)
-- WebSocket `/ws` with long-lived upgrade timeouts
-
-This avoids exposing Postgres/Redis/app ports publicly.
-
-### Image tags
-
-| Tag | Meaning |
-| --- | --- |
-| `sha-<gitsha>` | immutable build artifact |
-| `main` / `develop` | moving branch tip |
-| `vX.Y.Z` | release |
-
-Production hosts pin to a digest or release tag. Rollback = redeploy previous tag.
-
-### Data plane
-
-- PostgreSQL volume is the source of truth.
-- Redis is cache/session/realtime fan-out; AOF enabled in production config.
-- Object storage prefers S3/R2 in production; local `/data/uploads` remains supported for small installs.
-- API runs SQL migrations on startup (existing behavior) and also has an explicit `migrate` binary for pre-deploy gates.
-
-### Security boundaries
-
-- Only `80/443` (and optionally `22`) on the host firewall.
-- Secrets only in host `.env` / secret manager; never in git.
-- App containers run as non-root.
-- Refresh cookies require HTTPS (`REFRESH_COOKIE_SECURE=true`).
-
-## Deployment flow
+The API release contains:
 
 ```text
-CI build + test
-  -> push ghcr.io/<owner>/lumiforum-{api,web}:sha-...
-  -> deploy job SSHs to host
-  -> compose pull
-  -> migrate (explicit)
-  -> compose up -d --no-deps api web nginx
-  -> health checks
+api/
+├── lumiforum-api
+└── migrate
 ```
 
-Blue/green is not required for phase 12. Recreate with healthchecks is the default; for near-zero downtime, run two API replicas behind Nginx upstream later.
+SQL migrations are embedded by `sqlx::migrate!`; migration files and source
+code are not required at runtime. A GNU binary still depends on the target
+CPU architecture, glibc compatibility, and basic runtime libraries.
+
+The Web release is Next.js standalone output plus copied static assets:
+
+```text
+web/
+├── server.js
+├── node_modules/
+└── apps/web/
+    ├── public/
+    └── .next/static/
+```
+
+It runs with Node 24+ and does not require pnpm or dependency installation on
+the server. Native packages in the output must match the server OS and CPU.
+
+## Filesystem layout
+
+```text
+/home/lumiforum/lumiforum/
+├── env/                 # mode 700; service env files mode 600
+├── uploads/             # persistent local object storage
+├── releases/
+│   └── <stamp>/
+│       ├── api/
+│       ├── web/
+│       └── BUILD-INFO
+├── current-api -> releases/<stamp>/api
+└── current-web -> releases/<stamp>/web
+```
+
+Local uploads must never live under a release directory. S3/R2 is preferred
+when external object storage is available. Next.js release files remain
+writable by the service user because ISR may update its cache.
+
+## Configuration boundary
+
+- API runtime configuration is supplied by `env/api.env`.
+- Web runtime configuration is supplied by `env/web.env`.
+- Public browser variables (`NEXT_PUBLIC_*`) are embedded during `next build`.
+  Updating them on the server alone does not alter browser assets.
+- Secrets never belong in `NEXT_PUBLIC_*` or release archives.
+
+## Release flow
+
+```text
+compatible Linux build host
+  -> cargo release binaries + Next standalone
+  -> preserve Web static/public layout
+  -> tar + SHA-256
+  -> upload and verify checksum
+  -> extract immutable release
+  -> run embedded migrations against candidate API
+  -> switch symlinks
+  -> restart user services
+  -> loopback health checks
+```
+
+There is intentionally no repository deployment automation. The exact manual
+commands are documented in `docs/deployment/README.md`.
+
+## Rollback boundary
+
+Application rollback switches `current-api` and `current-web` to a retained
+release and restarts the services. Database migrations are not automatically
+reversed, so an older binary must remain compatible with the migrated schema.
+
+## Security boundaries
+
+- Public firewall ports are limited to SSH and HTTP(S).
+- PostgreSQL, Redis, API, and Web bind loopback or a tightly firewalled private
+  network.
+- Services run as a non-root deployment user with systemd hardening.
+- Runtime env files are readable only by that user.
+- The API reverse proxy must support WebSocket upgrade on `/ws`.
 
 ## Out of scope
 
-- Multi-region active-active databases
-- Full service mesh
-- Managed cloud-only IaC (Terraform modules can be added later)
+- Automatic deployment or rollback scripts
+- Building on the production server
+- Container orchestration
+- Multi-host or multi-region operation
+- Automatic database downgrade migrations

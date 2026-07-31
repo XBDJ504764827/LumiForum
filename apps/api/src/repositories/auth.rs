@@ -71,6 +71,13 @@ impl AuthRepository {
                 inserted.auth_version,
                 inserted.followers_count,
                 inserted.following_count,
+                inserted.steam_id,
+                inserted.steam_persona_name,
+                inserted.steam_avatar,
+                inserted.steam_avatar_medium,
+                inserted.steam_avatar_full,
+                inserted.steam_profile_url,
+                inserted.steam_country_code,
                 inserted.created_at,
                 inserted.updated_at
             FROM inserted
@@ -105,6 +112,13 @@ impl AuthRepository {
                 users.auth_version,
                 users.followers_count,
                 users.following_count,
+                users.steam_id,
+                users.steam_persona_name,
+                users.steam_avatar,
+                users.steam_avatar_medium,
+                users.steam_avatar_full,
+                users.steam_profile_url,
+                users.steam_country_code,
                 users.created_at,
                 users.updated_at
             FROM users
@@ -285,6 +299,13 @@ async fn find_user_by_id_for_update(
             users.auth_version,
             users.followers_count,
             users.following_count,
+            users.steam_id,
+            users.steam_persona_name,
+            users.steam_avatar,
+            users.steam_avatar_medium,
+            users.steam_avatar_full,
+            users.steam_profile_url,
+            users.steam_country_code,
             users.created_at,
             users.updated_at
         FROM users

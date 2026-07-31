@@ -97,51 +97,16 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-targets --locked
 
-  docker:
-    name: Docker validation
+  scripts:
+    name: Shell scripts validation
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Validate Compose (dev)
-        run: docker compose --env-file .env.example config --quiet
-
-      - name: Validate Compose (prod)
+      - name: Shell syntax check
         run: |
-          cp .env.production.example .env.ci-prod
-          # Satisfy required placeholders for config validation only
-          sed -i \
-            -e 's/CHANGE_ME_USE_AT_LEAST_32_RANDOM_CHARACTERS/ci-validation-secret-at-least-32b/g' \
-            -e 's/CHANGE_ME/ci-validation/g' \
-            .env.ci-prod
-          echo 'DOMAIN=forum.example.com' >> .env.ci-prod
-          echo 'CERTBOT_EMAIL=ops@example.com' >> .env.ci-prod
-          docker compose -f docker-compose.prod.yml --env-file .env.ci-prod config --quiet
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build API image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/api/Dockerfile
-          push: false
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
-
-      - name: Build web image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/web/Dockerfile
-          push: false
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web
-          build-args: |
-            NEXT_PUBLIC_API_URL=http://localhost:8080
-            NEXT_PUBLIC_SITE_URL=http://localhost:3000
-            NEXT_PUBLIC_SITE_NAME=LumiForum
-            NEXT_PUBLIC_SITE_DESCRIPTION=CI build
+          for f in scripts/backup/*.sh; do
+            bash -n "$f"
+          done

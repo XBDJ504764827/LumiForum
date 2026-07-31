@@ -11,6 +11,8 @@ out/
 target/
 /uploads/
 *.tsbuildinfo
+.deploy/
+.release/
 
 # Env & secrets
 .env
@@ -42,10 +44,6 @@ Thumbs.db
 coverage/
 .nyc_output/
 *.lcov
-
-# Docker volumes (local)
-docker/data/
-docker/volumes/
 
 # Misc
 *.local
