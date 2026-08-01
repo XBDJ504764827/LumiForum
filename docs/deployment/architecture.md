@@ -21,8 +21,8 @@ Internet
    `-- api.example.com   -> 127.0.0.1:8080 (Axum + WebSocket)
 
 [ user systemd ]
-   |-- lumiforum-web -> current-web/apps/web/server.js (Node 24+)
-   `-- lumiforum-api -> current-api/lumiforum-api
+   |-- lumiforum-web -> web/current/apps/web/server.js (Node 24+)
+   `-- lumiforum-api -> api/lumiforum-api
 
 [ host services ]
    |-- PostgreSQL
@@ -63,16 +63,16 @@ the server. Native packages in the output must match the server OS and CPU.
 ## Filesystem layout
 
 ```text
-/home/lumiforum/lumiforum/
-├── env/                 # mode 700; service env files mode 600
-├── uploads/             # persistent local object storage
-├── releases/
-│   └── <stamp>/
-│       ├── api/
-│       ├── web/
-│       └── BUILD-INFO
-├── current-api -> releases/<stamp>/api
-└── current-web -> releases/<stamp>/web
+/mnt/1panel/apps/lumiforum/
+├── api/
+│   ├── .env
+│   ├── lumiforum-api
+│   ├── migrate
+│   └── releases/<stamp>/
+└── web/
+    ├── .env
+    ├── current -> releases/<stamp>
+    └── releases/<stamp>/
 ```
 
 Local uploads must never live under a release directory. S3/R2 is preferred
@@ -81,8 +81,8 @@ writable by the service user because ISR may update its cache.
 
 ## Configuration boundary
 
-- API runtime configuration is supplied by `env/api.env`.
-- Web runtime configuration is supplied by `env/web.env`.
+- API runtime configuration is supplied by `api/.env`.
+- Web runtime configuration is supplied by `web/.env`.
 - Public browser variables (`NEXT_PUBLIC_*`) are embedded during `next build`.
   Updating them on the server alone does not alter browser assets.
 - Secrets never belong in `NEXT_PUBLIC_*` or release archives.
@@ -97,19 +97,22 @@ compatible Linux build host
   -> upload and verify checksum
   -> extract immutable release
   -> run embedded migrations against candidate API
-  -> switch symlinks
+  -> atomically replace API binaries and switch the Web symlink
   -> restart user services
   -> loopback health checks
 ```
 
-There is intentionally no repository deployment automation. The exact manual
-commands are documented in `docs/deployment/README.md`.
+The `main` branch can deploy this release layout through the GitHub Actions
+workflow documented in `docs/deployment/github-actions.md`. The exact manual
+commands remain documented in `docs/deployment/README.md` for initialization,
+recovery, and controlled manual releases.
 
 ## Rollback boundary
 
-Application rollback switches `current-api` and `current-web` to a retained
-release and restarts the services. Database migrations are not automatically
-reversed, so an older binary must remain compatible with the migrated schema.
+Application rollback restores retained API binaries, switches `web/current` to
+the retained Web release, and restarts the services. Database migrations are
+not automatically reversed, so an older binary must remain compatible with the
+migrated schema.
 
 ## Security boundaries
 
@@ -122,7 +125,7 @@ reversed, so an older binary must remain compatible with the migrated schema.
 
 ## Out of scope
 
-- Automatic deployment or rollback scripts
+- Multi-host deployment orchestration
 - Building on the production server
 - Container orchestration
 - Multi-host or multi-region operation

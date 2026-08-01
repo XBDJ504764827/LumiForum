@@ -166,16 +166,18 @@ Steam login only seeds the normal refresh-cookie session. Startup and completion
 
 ## Configuration
 
-| Environment variable | Purpose                                                      |
-| -------------------- | ------------------------------------------------------------ |
-| `STEAM_API_KEY`      | Server-only Steam Web API key for player summaries           |
-| `STEAM_OPENID_REALM` | Exact OpenID realm, normally the public site origin          |
-| `STEAM_RETURN_URL`   | Absolute API callback URL                                    |
-| `STEAM_WEB_ORIGIN`   | Allowed frontend origin for completion redirects             |
-| `STEAM_WEB_API_KEY`  | Alias for `STEAM_API_KEY`; values must match if both are set |
-| `COOKIE_DOMAIN`      | Optional refresh-cookie domain; empty keeps it host-only     |
+| Environment variable         | Purpose                                                                |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| `STEAM_API_KEY`              | Server-only Steam Web API key for player summaries                     |
+| `STEAM_OPENID_REALM`         | Exact OpenID realm, normally the public site origin                    |
+| `STEAM_RETURN_URL`           | Absolute API callback URL                                              |
+| `STEAM_WEB_ORIGIN`           | Allowed frontend origin for completion redirects                       |
+| `STEAM_WEB_API_KEY`          | Alias for `STEAM_API_KEY`; values must match if both are set           |
+| `STEAM_PROXY_URL`            | Optional outbound HTTP(S) proxy used only for Steam requests           |
+| `STEAM_HTTP_TIMEOUT_SECONDS` | Steam request timeout in seconds; defaults to 15 (allowed range 1–120) |
+| `COOKIE_DOMAIN`              | Optional refresh-cookie domain; empty keeps it host-only               |
 
-These values are server configuration. None should use a `NEXT_PUBLIC_` prefix or be added to the web application's environment. For the current production topology use `STEAM_OPENID_REALM=https://chatapi.cngokz.com`, `STEAM_RETURN_URL=https://chatapi.cngokz.com/auth/steam/callback`, and `STEAM_WEB_ORIGIN=https://chat.cngokz.com`.
+These values are server configuration. None should use a `NEXT_PUBLIC_` prefix or be added to the web application's environment. For the current production topology use `STEAM_OPENID_REALM=https://chatapi.cngokz.com`, `STEAM_RETURN_URL=https://chatapi.cngokz.com/auth/steam/callback`, and `STEAM_WEB_ORIGIN=https://chat.cngokz.com`. If the production host cannot connect to Steam directly, configure `STEAM_PROXY_URL` with an outbound HTTP(S) proxy reachable by the API process; do not point it at the site's reverse proxy.
 
 ## Out of scope
 

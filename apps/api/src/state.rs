@@ -74,7 +74,13 @@ impl AppState {
                 auth.clone(),
                 config.password_hash_concurrency,
                 redis.clone(),
-                SteamOpenIdClient::new(api_key, realm, return_url)?,
+                SteamOpenIdClient::new(
+                    api_key,
+                    realm,
+                    return_url,
+                    config.steam_proxy_url.clone(),
+                    config.steam_http_timeout_seconds,
+                )?,
             )?),
             _ => None,
         };

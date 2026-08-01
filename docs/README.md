@@ -13,6 +13,7 @@ Architecture and operations documentation.
 ## Start here
 
 - [Deployment guide](deployment/README.md)
+- [GitHub Actions production deployment](deployment/github-actions.md)
 - [Production architecture](deployment/architecture.md)
 - [Environment variables](ops/environment.md)
 - [CI / release](ops/ci.md)
