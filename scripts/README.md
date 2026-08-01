@@ -2,7 +2,7 @@
 
 ## Deploy (`scripts/deploy`)
 
-This directory contains user-level systemd templates and the server-side
+This directory contains system-level systemd templates and the server-side
 release activation helper. The helper is uploaded and invoked by the
 main-branch production workflow; manual deployment remains documented in
 `docs/deployment/README.md`.

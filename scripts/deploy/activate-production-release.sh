@@ -34,6 +34,58 @@ api_binary="${api_root}/lumiforum-api"
 migrate_binary="${api_root}/migrate"
 web_current="${web_root}/current"
 
+systemctl_command=()
+systemd_run_command=()
+
+# Production uses root-managed systemd units. The SSH deployment account must
+# therefore be root or have passwordless sudo for systemctl/systemd-run.
+detect_service_manager() {
+  if [[ "$(id -u)" == 0 ]] \
+    && systemctl cat lumiforum-api.service >/dev/null 2>&1 \
+    && systemctl cat lumiforum-web.service >/dev/null 2>&1; then
+    systemctl_command=(systemctl)
+    systemd_run_command=(systemd-run)
+    return
+  fi
+
+  if command -v sudo >/dev/null 2>&1 \
+    && sudo -n systemctl cat lumiforum-api.service >/dev/null 2>&1 \
+    && sudo -n systemctl cat lumiforum-web.service >/dev/null 2>&1 \
+    && sudo -n systemd-run --version >/dev/null 2>&1; then
+    systemctl_command=(sudo -n systemctl)
+    systemd_run_command=(sudo -n systemd-run)
+    return
+  fi
+
+  if systemctl cat lumiforum-api.service >/dev/null 2>&1 \
+    && systemctl cat lumiforum-web.service >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+System-level LumiForum units exist, but this SSH user cannot control them.
+Use root for PROD_SSH_USER, or grant the deployment user passwordless sudo for
+systemctl and systemd-run.
+EOF
+    exit 1
+  fi
+
+  cat >&2 <<'EOF'
+System-level LumiForum units were not found.
+Install lumiforum-api.service and lumiforum-web.service under
+/etc/systemd/system, then run systemctl daemon-reload.
+EOF
+  exit 1
+}
+
+run_systemctl() {
+  "${systemctl_command[@]}" "$@"
+}
+
+run_migration() {
+  "${systemd_run_command[@]}" --wait --pipe --collect \
+    --property="EnvironmentFile=$api_root/.env" \
+    --property="WorkingDirectory=$api_release_dir" \
+    "$api_release_dir/migrate"
+}
+
 cleanup() {
   rm -rf -- "$staging_dir" "$web_candidate_dir"
   rm -f -- "${api_binary}.next" "${migrate_binary}.next" "${web_root}/current.next"
@@ -55,6 +107,11 @@ if [[ -e "$api_release_dir" || -e "$web_release_dir" ]]; then
   exit 1
 fi
 
+# Resolve the process manager before writing candidate release files. This
+# prevents a missing service unit from causing a partial deployment.
+detect_service_manager
+echo "Using system-level systemd services"
+
 install -d -m 755 "$api_root/releases" "$web_root/releases"
 install -d -m 755 "$api_release_dir" "$web_candidate_dir"
 install -m 755 lumiforum-api "$api_release_dir/lumiforum-api"
@@ -69,10 +126,7 @@ test -f "$web_candidate_dir/apps/web/server.js"
 mv "$web_candidate_dir" "$web_release_dir"
 
 # Migrations are embedded in the candidate binary and run before activation.
-systemd-run --user --wait --pipe --collect \
-  --property="EnvironmentFile=$api_root/.env" \
-  --property="WorkingDirectory=$api_release_dir" \
-  "$api_release_dir/migrate"
+run_migration
 
 backup_id="rollback-${release_id}"
 api_backup_dir="${api_root}/releases/${backup_id}"
@@ -148,8 +202,8 @@ rollback() {
   else
     rm -f "$web_current"
   fi
-  systemctl --user restart lumiforum-api lumiforum-web || true
-  systemctl --user show lumiforum-api lumiforum-web \
+  run_systemctl restart lumiforum-api lumiforum-web || true
+  run_systemctl show lumiforum-api lumiforum-web \
     --property=Id --property=ActiveState --property=SubState --property=Result || true
 }
 
@@ -162,7 +216,7 @@ if ! activate_web "releases/$release_id"; then
   exit 1
 fi
 
-if ! systemctl --user restart lumiforum-api lumiforum-web; then
+if ! run_systemctl restart lumiforum-api lumiforum-web; then
   rollback
   exit 1
 fi
@@ -175,6 +229,6 @@ if ! wait_for_url "http://127.0.0.1:${web_port}/"; then
   exit 1
 fi
 
-systemctl --user show lumiforum-api lumiforum-web \
+run_systemctl show lumiforum-api lumiforum-web \
   --property=Id --property=ActiveState --property=SubState --property=Result
 echo "Production release activated: $release_id"
