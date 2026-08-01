@@ -9,12 +9,12 @@ use crate::realtime::{PresenceService, RealtimeBus, RealtimeHub};
 use crate::repositories::{
     AdminRepository, AuthRepository, AuthorizationRepository, CategoryRepository,
     CommentRepository, NotificationRepository, ReactionRepository, SearchRepository,
-    TopicRepository, UploadRepository, UserRepository,
+    SteamAuthRepository, TopicRepository, UploadRepository, UserRepository,
 };
 use crate::services::{
     AdminService, AuthService, AuthServiceConfig, AuthorizationService, CategoryService,
-    CommentService, NotificationService, ReactionService, SearchService, TopicService,
-    UploadService, UserService,
+    CommentService, NotificationService, ReactionService, SearchService, SteamAuthService,
+    SteamOpenIdClient, TopicService, UploadService, UserService,
 };
 use crate::storage::{LocalStorage, S3Storage, S3StorageConfig, StorageProvider};
 
@@ -28,6 +28,7 @@ struct AppStateInner {
     pub db: PgPool,
     pub redis: ConnectionManager,
     pub auth: AuthService,
+    pub steam_auth: Option<SteamAuthService>,
     pub users: UserService,
     pub authorization: AuthorizationService,
     pub categories: CategoryService,
@@ -63,6 +64,26 @@ impl AppState {
                 password_hash_concurrency: config.password_hash_concurrency,
             },
         )?;
+        let steam_auth = match (
+            config.steam_api_key.clone(),
+            config.steam_openid_realm.clone(),
+            config.steam_return_url.clone(),
+        ) {
+            (Some(api_key), Some(realm), Some(return_url)) => Some(SteamAuthService::new(
+                SteamAuthRepository::new(db.clone()),
+                auth.clone(),
+                config.password_hash_concurrency,
+                redis.clone(),
+                SteamOpenIdClient::new(
+                    api_key,
+                    realm,
+                    return_url,
+                    config.steam_proxy_url.clone(),
+                    config.steam_http_timeout_seconds,
+                )?,
+            )?),
+            _ => None,
+        };
         let users = UserService::new(UserRepository::new(db.clone()));
         let authorization = AuthorizationService::new(
             AuthorizationRepository::new(db.clone()),
@@ -131,6 +152,7 @@ impl AppState {
                 db,
                 redis,
                 auth,
+                steam_auth,
                 users,
                 authorization,
                 categories,
@@ -161,6 +183,10 @@ impl AppState {
 
     pub fn auth(&self) -> &AuthService {
         &self.inner.auth
+    }
+
+    pub fn steam_auth(&self) -> Option<&SteamAuthService> {
+        self.inner.steam_auth.as_ref()
     }
 
     pub fn users(&self) -> &UserService {

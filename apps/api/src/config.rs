@@ -17,6 +17,7 @@ pub struct Config {
     pub password_hash_concurrency: usize,
     pub refresh_cookie_name: String,
     pub refresh_cookie_secure: bool,
+    pub cookie_domain: Option<String>,
     pub authorization_cache_ttl_seconds: u64,
     pub cors_origin: String,
     pub storage_provider: String,
@@ -34,6 +35,12 @@ pub struct Config {
     pub ws_idle_timeout_secs: u64,
     pub presence_ttl_secs: u64,
     pub ws_connect_rate_limit: u64,
+    pub steam_api_key: Option<String>,
+    pub steam_openid_realm: Option<String>,
+    pub steam_return_url: Option<String>,
+    pub steam_web_origin: Option<String>,
+    pub steam_proxy_url: Option<String>,
+    pub steam_http_timeout_seconds: u64,
 }
 
 impl Config {
@@ -52,12 +59,15 @@ impl Config {
         let jwt_secret = std::env::var("JWT_SECRET").context("JWT_SECRET is required")?;
         let jwt_issuer = std::env::var("JWT_ISSUER").unwrap_or_else(|_| "lumiforum-api".into());
         let jwt_audience = std::env::var("JWT_AUDIENCE").unwrap_or_else(|_| "lumiforum-web".into());
-        let access_token_ttl_seconds = env_parse("ACCESS_TOKEN_TTL_SECONDS", 900_i64)?;
-        let refresh_token_ttl_seconds = env_parse("REFRESH_TOKEN_TTL_SECONDS", 2_592_000_i64)?;
+        let access_token_ttl_seconds =
+            env_parse_alias("ACCESS_TOKEN_TTL_SECONDS", "JWT_EXPIRE", 900_i64)?;
+        let refresh_token_ttl_seconds =
+            env_parse_alias("REFRESH_TOKEN_TTL_SECONDS", "REFRESH_EXPIRE", 864_000_i64)?;
         let password_hash_concurrency = env_parse("PASSWORD_HASH_CONCURRENCY", 4_usize)?;
         let refresh_cookie_name =
             std::env::var("REFRESH_COOKIE_NAME").unwrap_or_else(|_| "lumiforum_refresh".into());
         let refresh_cookie_secure = env_parse("REFRESH_COOKIE_SECURE", app_env == "production")?;
+        let cookie_domain = optional_env("COOKIE_DOMAIN");
         let authorization_cache_ttl_seconds = env_parse("AUTHORIZATION_CACHE_TTL_SECONDS", 30_u64)?;
         let cors_origin =
             std::env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".into());
@@ -80,6 +90,19 @@ impl Config {
         let ws_idle_timeout_secs = env_parse("WS_IDLE_TIMEOUT_SECS", 90_u64)?;
         let presence_ttl_secs = env_parse("PRESENCE_TTL_SECS", 60_u64)?;
         let ws_connect_rate_limit = env_parse("WS_CONNECT_RATE_LIMIT", 30_u64)?;
+        let steam_api_key = aliased_optional_env("STEAM_API_KEY", "STEAM_WEB_API_KEY")?;
+        let steam_openid_realm = optional_env("STEAM_OPENID_REALM");
+        let steam_return_url = optional_env("STEAM_RETURN_URL");
+        let steam_web_origin = optional_env("STEAM_WEB_ORIGIN");
+        let steam_proxy_url = optional_env("STEAM_PROXY_URL");
+        let steam_http_timeout_seconds = env_parse("STEAM_HTTP_TIMEOUT_SECONDS", 15_u64)?;
+        validate_steam_config(
+            &app_env,
+            steam_api_key.as_ref(),
+            steam_openid_realm.as_ref(),
+            steam_return_url.as_ref(),
+            steam_web_origin.as_ref(),
+        )?;
 
         if jwt_secret.len() < 32 {
             bail!("JWT_SECRET must be at least 32 bytes");
@@ -102,6 +125,9 @@ impl Config {
         if presence_ttl_secs < 15 {
             bail!("PRESENCE_TTL_SECS must be at least 15");
         }
+        if !(1..=120).contains(&steam_http_timeout_seconds) {
+            bail!("STEAM_HTTP_TIMEOUT_SECONDS must be between 1 and 120");
+        }
 
         Ok(Self {
             app_env,
@@ -117,6 +143,7 @@ impl Config {
             password_hash_concurrency,
             refresh_cookie_name,
             refresh_cookie_secure,
+            cookie_domain,
             authorization_cache_ttl_seconds,
             cors_origin,
             storage_provider,
@@ -134,8 +161,97 @@ impl Config {
             ws_idle_timeout_secs,
             presence_ttl_secs,
             ws_connect_rate_limit,
+            steam_api_key,
+            steam_openid_realm,
+            steam_return_url,
+            steam_web_origin,
+            steam_proxy_url,
+            steam_http_timeout_seconds,
         })
     }
+}
+
+fn validate_steam_config(
+    app_env: &str,
+    api_key: Option<&String>,
+    realm: Option<&String>,
+    return_url: Option<&String>,
+    web_origin: Option<&String>,
+) -> anyhow::Result<()> {
+    let configured = [
+        api_key.is_some(),
+        realm.is_some(),
+        return_url.is_some(),
+        web_origin.is_some(),
+    ];
+    if configured.iter().any(|value| *value) && !configured.iter().all(|value| *value) {
+        bail!("STEAM_API_KEY, STEAM_OPENID_REALM, STEAM_RETURN_URL, and STEAM_WEB_ORIGIN must be configured together");
+    }
+    let (Some(realm), Some(return_url), Some(web_origin)) = (realm, return_url, web_origin) else {
+        return Ok(());
+    };
+    let realm = crate::services::parse_origin(realm, "STEAM_OPENID_REALM")?;
+    let web_origin = crate::services::parse_origin(web_origin, "STEAM_WEB_ORIGIN")?;
+    let return_url = url::Url::parse(return_url).context("invalid STEAM_RETURN_URL")?;
+    if return_url.host_str().is_none()
+        || return_url.query().is_some()
+        || return_url.fragment().is_some()
+    {
+        bail!("STEAM_RETURN_URL must be an absolute URL without query or fragment");
+    }
+    if app_env == "production"
+        && (realm.scheme() != "https"
+            || web_origin.scheme() != "https"
+            || return_url.scheme() != "https")
+    {
+        bail!("Steam URLs must use HTTPS in production");
+    }
+    Ok(())
+}
+
+fn aliased_optional_env(primary: &str, alias: &str) -> anyhow::Result<Option<String>> {
+    let primary_value = optional_env(primary);
+    let alias_value = optional_env(alias);
+    if let (Some(left), Some(right)) = (&primary_value, &alias_value) {
+        if left != right {
+            bail!("{primary} and {alias} must match when both are set");
+        }
+    }
+    Ok(primary_value.or(alias_value))
+}
+
+fn optional_env(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+fn env_parse_alias<T>(primary: &str, alias: &str, default: T) -> anyhow::Result<T>
+where
+    T: std::str::FromStr + PartialEq,
+    T::Err: std::error::Error + Send + Sync + 'static,
+{
+    let primary_value = optional_env(primary)
+        .map(|value| {
+            value
+                .parse::<T>()
+                .with_context(|| format!("invalid {primary}"))
+        })
+        .transpose()?;
+    let alias_value = optional_env(alias)
+        .map(|value| {
+            value
+                .parse::<T>()
+                .with_context(|| format!("invalid {alias}"))
+        })
+        .transpose()?;
+    if let (Some(left), Some(right)) = (&primary_value, &alias_value) {
+        if left != right {
+            bail!("{primary} and {alias} must match when both are set");
+        }
+    }
+    Ok(primary_value.or(alias_value).unwrap_or(default))
 }
 
 fn env_parse<T>(name: &str, default: T) -> anyhow::Result<T>

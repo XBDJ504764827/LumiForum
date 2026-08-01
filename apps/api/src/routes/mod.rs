@@ -8,6 +8,7 @@ mod presence;
 mod reactions;
 mod response;
 mod search;
+mod steam_auth;
 mod topics;
 mod uploads;
 pub mod users;
@@ -32,6 +33,8 @@ pub fn create_router(state: AppState) -> Router {
         .merge(health::router())
         .merge(auth::public_router(state.clone()))
         .merge(auth::protected_router(state.clone()))
+        .merge(steam_auth::public_router(state.clone()))
+        .merge(steam_auth::protected_router(state.clone()))
         .merge(users::protected_router(state.clone()))
         .merge(categories::router(state.clone()))
         .merge(topics::router(state.clone()))

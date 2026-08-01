@@ -2,41 +2,46 @@
 
 Modern, long-lived community forum monorepo. Game-agnostic architecture; initially intended for a CS2 community.
 
-## Stack (target)
+## Stack
 
 | Layer   | Technology                                                                    |
 | ------- | ----------------------------------------------------------------------------- |
 | Web     | Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query, RHF, Zod |
 | API     | Rust, Axum, Tokio, SQLx, JWT                                                  |
 | Data    | PostgreSQL, Redis, S3-compatible object storage                               |
-| Tooling | pnpm, Turborepo, Docker Compose, GitHub Actions                               |
+| Tooling | pnpm, Turborepo, GitHub Actions, systemd                                      |
 
 ## Repository layout
 
 ```text
 LumiForum/
 ├── apps/           # Deployable applications
-│   ├── web/        # Next.js frontend
-│   └── api/        # Rust Axum backend
+│   ├── web/        # Next.js frontend (standalone build)
+│   └── api/        # Rust Axum backend (release binary)
 ├── packages/       # Shared libraries (not deployed alone)
 │   ├── ui/         # Design system / shadcn components
 │   ├── types/      # Shared TypeScript contracts
 │   └── shared/     # Cross-cutting TS utilities
-├── docker/         # Dockerfiles & compose overlays
-├── scripts/        # Dev / CI helper scripts
+├── scripts/        # Deploy / backup / helper scripts
 ├── docs/           # Architecture & ops docs
-└── .github/        # CI/CD workflows
+└── .github/        # CI workflows
 ```
 
 ## Status
 
-Phase 1 monorepo foundation. No forum product features are implemented.
+Application phases 1–11 are implemented (forum product + SEO). Phase 12 adds
+production deployment: locally-built binaries, host PostgreSQL/Redis, Nginx/TLS,
+systemd, and backups.
 
-## Quick start
+## Quick start (development)
+
+For host-side development, start PostgreSQL and Redis first, then run:
 
 ```bash
 cp .env.example .env
-docker compose up --build
+pnpm install --frozen-lockfile
+pnpm dev:web
+cargo run -p lumiforum-api
 ```
 
 Services become available at:
@@ -45,13 +50,22 @@ Services become available at:
 - API health: <http://192.168.0.138:8080/health>
 - API readiness: <http://192.168.0.138:8080/ready>
 
-For host-side development, start PostgreSQL and Redis first, then run:
+## Production
+
+See [`docs/deployment/README.md`](docs/deployment/README.md).
+
+Build production artifacts on a compatible Linux machine, then upload them to
+the server. The server runs the API binary and Next.js standalone bundle with
+user-level systemd services; it does not need Rust, pnpm, or the repository.
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm dev:web
-cargo run -p lumiforum-api
+cargo build --release --locked -p lumiforum-api \
+  --bin lumiforum-api --bin migrate
+NODE_ENV=production pnpm exec dotenv -e .env -- pnpm build:web
 ```
+
+See the deployment guide for the required artifact layout, environment files,
+manual upload, migration, service installation, and rollback commands.
 
 ## Quality checks
 

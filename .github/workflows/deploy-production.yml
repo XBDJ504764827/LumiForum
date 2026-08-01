@@ -1,0 +1,230 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CI: true
+  TURBO_TELEMETRY_DISABLED: 1
+  NEXT_TELEMETRY_DISABLED: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy main
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: https://chat.cngokz.com
+
+    steps:
+      - name: Checkout deployed commit
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Install Web dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Web source
+        run: pnpm check
+
+      - name: Validate Rust source
+        run: |
+          cargo fmt --all -- --check
+          cargo test --workspace --all-targets --locked
+
+      - name: Build API release binaries
+        run: >-
+          cargo build --release --locked -p lumiforum-api
+          --bin lumiforum-api --bin migrate
+
+      - name: Validate production configuration
+        shell: bash
+        env:
+          PROD_API_PUBLIC_URL: ${{ vars.PROD_API_PUBLIC_URL }}
+          PROD_SITE_URL: ${{ vars.PROD_SITE_URL }}
+          PROD_SITE_NAME: ${{ vars.PROD_SITE_NAME }}
+          PROD_SITE_DESCRIPTION: ${{ vars.PROD_SITE_DESCRIPTION }}
+          PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH }}
+          PROD_API_PORT: ${{ vars.PROD_API_PORT }}
+          PROD_WEB_PORT: ${{ vars.PROD_WEB_PORT }}
+        run: |
+          set -Eeuo pipefail
+          required_vars=(
+            PROD_API_PUBLIC_URL
+            PROD_SITE_URL
+            PROD_SITE_NAME
+            PROD_SITE_DESCRIPTION
+            PROD_DEPLOY_PATH
+            PROD_API_PORT
+            PROD_WEB_PORT
+          )
+          for name in "${required_vars[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing production variable: $name" >&2
+              exit 1
+            fi
+          done
+          [[ "$PROD_API_PUBLIC_URL" == https://* ]]
+          [[ "$PROD_SITE_URL" == https://* ]]
+          [[ "$PROD_DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]]
+          [[ "$PROD_API_PORT" =~ ^[0-9]{1,5}$ ]]
+          [[ "$PROD_WEB_PORT" =~ ^[0-9]{1,5}$ ]]
+
+      - name: Build production Web bundle
+        run: pnpm build:web
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_API_URL: ${{ vars.PROD_API_PUBLIC_URL }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.PROD_SITE_URL }}
+          NEXT_PUBLIC_SITE_NAME: ${{ vars.PROD_SITE_NAME }}
+          NEXT_PUBLIC_SITE_DESCRIPTION: ${{ vars.PROD_SITE_DESCRIPTION }}
+          # The GitHub runner cannot use the production host's loopback URL.
+          # The server's runtime value still comes from web/.env.
+          API_INTERNAL_URL: ${{ vars.PROD_API_PUBLIC_URL }}
+
+      - name: Package release artifacts
+        id: release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          release_id="${DEPLOY_SHA}-$(date -u +%Y%m%d%H%M%S)"
+          artifact_dir="$RUNNER_TEMP/lumiforum-$release_id"
+          web_dir="$RUNNER_TEMP/lumiforum-web-$release_id"
+          mkdir -p "$artifact_dir" "$web_dir/apps/web/.next"
+
+          install -m 755 target/release/lumiforum-api "$artifact_dir/lumiforum-api"
+          install -m 755 target/release/migrate "$artifact_dir/migrate"
+          cp -a apps/web/.next/standalone/. "$web_dir/"
+          cp -a apps/web/.next/static "$web_dir/apps/web/.next/static"
+          cp -a apps/web/public "$web_dir/apps/web/public"
+          tar -C "$web_dir" -czf "$artifact_dir/lumiforum-web.tar.gz" .
+          install -m 755 scripts/deploy/activate-production-release.sh \
+            "$artifact_dir/activate-production-release.sh"
+
+          printf '%s\n' \
+            "git_commit=$DEPLOY_SHA" \
+            "git_ref=refs/heads/main" \
+            "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "rustc=$(rustc --version)" \
+            "node=$(node --version)" \
+            "pnpm=$(pnpm --version)" \
+            > "$artifact_dir/BUILD-INFO"
+
+          (
+            cd "$artifact_dir"
+            sha256sum lumiforum-api migrate lumiforum-web.tar.gz \
+              activate-production-release.sh BUILD-INFO > SHA256SUMS
+          )
+
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
+        env:
+          PROD_API_PUBLIC_URL: ${{ vars.PROD_API_PUBLIC_URL }}
+          PROD_SITE_URL: ${{ vars.PROD_SITE_URL }}
+          PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH }}
+          PROD_API_PORT: ${{ vars.PROD_API_PORT }}
+          PROD_WEB_PORT: ${{ vars.PROD_WEB_PORT }}
+          DEPLOY_SHA: ${{ github.sha }}
+
+      - name: Configure deployment SSH key
+        shell: bash
+        env:
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$PROD_SSH_PRIVATE_KEY"
+          test -n "$PROD_SSH_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > ~/.ssh/production
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/production ~/.ssh/known_hosts
+
+      - name: Upload release to production
+        shell: bash
+        env:
+          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          ARTIFACT_DIR: ${{ steps.release.outputs.artifact_dir }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        run: |
+          set -Eeuo pipefail
+          : "${PROD_SSH_HOST:?Missing PROD_SSH_HOST secret}"
+          : "${PROD_SSH_USER:?Missing PROD_SSH_USER secret}"
+          ssh_port="${PROD_SSH_PORT:-22}"
+          remote_dir="/tmp/lumiforum-$RELEASE_ID"
+          ssh_options=(
+            -i ~/.ssh/production
+            -p "$ssh_port"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+          )
+          scp_options=(
+            -i ~/.ssh/production
+            -P "$ssh_port"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+          )
+
+          ssh "${ssh_options[@]}" "$PROD_SSH_USER@$PROD_SSH_HOST" \
+            "rm -rf '$remote_dir' && install -d -m 700 '$remote_dir'"
+          scp "${scp_options[@]}" "$ARTIFACT_DIR"/* \
+            "$PROD_SSH_USER@$PROD_SSH_HOST:$remote_dir/"
+
+      - name: Activate production release
+        shell: bash
+        env:
+          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH }}
+          PROD_API_PORT: ${{ vars.PROD_API_PORT }}
+          PROD_WEB_PORT: ${{ vars.PROD_WEB_PORT }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        run: |
+          set -Eeuo pipefail
+          ssh_port="${PROD_SSH_PORT:-22}"
+          ssh \
+            -i ~/.ssh/production \
+            -p "$ssh_port" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" \
+            "bash '/tmp/lumiforum-$RELEASE_ID/activate-production-release.sh' '$RELEASE_ID' '$PROD_DEPLOY_PATH' '$PROD_API_PORT' '$PROD_WEB_PORT'"

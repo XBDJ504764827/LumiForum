@@ -1,8 +1,11 @@
+import { getApiBaseUrl, joinUrl } from "@lumiforum/shared";
 import type {
   AuthResponse,
   LoginRequest,
   ProfileUpdateRequest,
   RegisterRequest,
+  SteamAuthorizationResponse,
+  SteamUnbindRequest,
   User,
 } from "@lumiforum/types";
 
@@ -30,6 +33,26 @@ export function getMe(): Promise<User> {
 
 export function updateProfile(input: ProfileUpdateRequest): Promise<User> {
   return apiRequest<User>("/users/profile", { method: "PATCH", body: JSON.stringify(input) }, true);
+}
+
+export function steamLoginUrl(): string {
+  return joinUrl(getApiBaseUrl({ isServer: false }), "/auth/steam/login");
+}
+
+export function bindSteam(): Promise<SteamAuthorizationResponse> {
+  return apiRequest<SteamAuthorizationResponse>("/auth/steam/bind", { method: "POST" }, true);
+}
+
+export function unbindSteam(input: SteamUnbindRequest): Promise<User> {
+  return apiRequest<User>(
+    "/auth/steam/unbind",
+    { method: "DELETE", body: JSON.stringify(input) },
+    true,
+  );
+}
+
+export function syncSteam(): Promise<User> {
+  return apiRequest<User>("/auth/steam/sync", { method: "POST" }, true);
 }
 
 export async function logout(): Promise<void> {
