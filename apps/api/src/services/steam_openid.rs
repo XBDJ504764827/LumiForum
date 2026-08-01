@@ -32,7 +32,13 @@ pub struct SteamProfile {
 }
 
 impl SteamOpenIdClient {
-    pub fn new(api_key: String, realm: String, return_to: String) -> anyhow::Result<Self> {
+    pub fn new(
+        api_key: String,
+        realm: String,
+        return_to: String,
+        proxy_url: Option<String>,
+        timeout_seconds: u64,
+    ) -> anyhow::Result<Self> {
         if api_key.trim().is_empty() {
             bail!("STEAM_API_KEY is required");
         }
@@ -49,11 +55,16 @@ impl SteamOpenIdClient {
             bail!("STEAM_RETURN_URL must use the STEAM_OPENID_REALM origin");
         }
 
+        let mut http = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(timeout_seconds.min(10)))
+            .timeout(std::time::Duration::from_secs(timeout_seconds))
+            .user_agent("LumiForum/0.1");
+        if let Some(proxy_url) = proxy_url {
+            http = http.proxy(reqwest::Proxy::all(&proxy_url).context("invalid STEAM_PROXY_URL")?);
+        }
+
         Ok(Self {
-            http: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(15))
-                .user_agent("LumiForum/0.1")
-                .build()?,
+            http: http.build()?,
             api_key: api_key.trim().to_owned(),
             realm,
             return_to,
@@ -260,6 +271,8 @@ mod tests {
             "key".into(),
             "https://chatapi.cngokz.com".into(),
             "https://chatapi.cngokz.com/auth/steam/callback".into(),
+            None,
+            15,
         )
         .unwrap();
         let url = url::Url::parse(&client.authorization_url("state-value").unwrap()).unwrap();
@@ -277,12 +290,16 @@ mod tests {
             "key".into(),
             "https://chatapi.cngokz.com/path".into(),
             "https://chatapi.cngokz.com/auth/steam/callback".into(),
+            None,
+            15,
         )
         .is_err());
         assert!(SteamOpenIdClient::new(
             "key".into(),
             "https://chatapi.cngokz.com".into(),
             "https://evil.example/auth/steam/callback".into(),
+            None,
+            15,
         )
         .is_err());
     }

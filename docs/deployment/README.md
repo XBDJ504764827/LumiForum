@@ -1,5 +1,9 @@
 # Manual production deployment
 
+For automatic deployments triggered only by `main`, see
+[GitHub Actions production deployment](./github-actions.md). This document
+remains the server initialization, manual deployment, and recovery reference.
+
 LumiForum is built on a compatible Linux build machine and uploaded as runtime
 artifacts. The production server does not need the repository, Git, Rust,
 Cargo, pnpm, TypeScript, or a compiler.
@@ -83,13 +87,12 @@ ldd target/release/lumiforum-api
 
 ## 2. Initialize the server
 
-Run as the dedicated deployment user. The example path is
-`/home/lumiforum/lumiforum`; replace it everywhere with your absolute path.
+Run as the dedicated deployment user. The production path is
+`/mnt/1panel/apps/lumiforum`.
 
 ```bash
-DEPLOY_PATH=/home/lumiforum/lumiforum
-install -d -m 755 "$DEPLOY_PATH" "$DEPLOY_PATH/releases" "$DEPLOY_PATH/uploads"
-install -d -m 700 "$DEPLOY_PATH/env"
+DEPLOY_PATH=/mnt/1panel/apps/lumiforum
+install -d -m 755 "$DEPLOY_PATH/api/releases" "$DEPLOY_PATH/web/releases"
 install -d -m 755 "$HOME/.config/systemd/user"
 ```
 
@@ -107,7 +110,7 @@ sudo loginctl enable-linger lumiforum
 
 ## 3. Create runtime environment files
 
-Create `$DEPLOY_PATH/env/api.env` with mode `600`:
+Create `$DEPLOY_PATH/api/.env` with mode `600`:
 
 ```env
 APP_ENV=production
@@ -122,7 +125,7 @@ JWT_AUDIENCE=lumiforum-web
 REFRESH_COOKIE_SECURE=true
 CORS_ORIGIN=https://forum.example.com
 STORAGE_PROVIDER=local
-STORAGE_LOCAL_ROOT=/home/lumiforum/lumiforum/uploads
+STORAGE_LOCAL_ROOT=/mnt/1panel/apps/lumiforum/uploads
 STORAGE_PUBLIC_URL=https://api.example.com/storage
 ```
 
@@ -130,7 +133,7 @@ Append optional token, S3, realtime, and Steam settings from
 `.env.production.example` as needed. `STORAGE_LOCAL_ROOT` must be an absolute
 persistent path outside release directories when local storage is used.
 
-Create `$DEPLOY_PATH/env/web.env` with mode `600`:
+Create `$DEPLOY_PATH/web/.env` with mode `600`:
 
 ```env
 NODE_ENV=production
@@ -146,7 +149,7 @@ The `NEXT_PUBLIC_SITE_*` runtime values keep dynamic rendering and ISR
 consistent, but cannot replace the values already embedded during build.
 
 ```bash
-chmod 600 "$DEPLOY_PATH/env/api.env" "$DEPLOY_PATH/env/web.env"
+chmod 600 "$DEPLOY_PATH/api/.env" "$DEPLOY_PATH/web/.env"
 ```
 
 ## 4. Install user systemd services
@@ -179,31 +182,36 @@ scp ".release/lumiforum-${STAMP}.tar.gz" \
     lumiforum@server.example.com:/tmp/
 ```
 
-On the production server:
+On the production server, extract and install the retained candidates:
 
 ```bash
-DEPLOY_PATH=/home/lumiforum/lumiforum
+DEPLOY_PATH=/mnt/1panel/apps/lumiforum
 STAMP=20260731-01
 cd /tmp
 sha256sum -c "lumiforum-${STAMP}.tar.gz.sha256"
-tar -xzf "lumiforum-${STAMP}.tar.gz" -C "$DEPLOY_PATH/releases"
+tar -xzf "lumiforum-${STAMP}.tar.gz" -C /tmp
+mv "/tmp/$STAMP/api" "$DEPLOY_PATH/api/releases/$STAMP"
+mv "/tmp/$STAMP/web" "$DEPLOY_PATH/web/releases/$STAMP"
 ```
 
-Run the embedded migrations before switching the API symlink. `systemd-run`
-loads the same env file without executing it as a shell script:
+Run embedded migrations before activation. `systemd-run` loads the API `.env`
+without executing it as a shell script:
 
 ```bash
 systemd-run --user --wait --pipe --collect \
-  --property="EnvironmentFile=$DEPLOY_PATH/env/api.env" \
-  --property="WorkingDirectory=$DEPLOY_PATH/releases/$STAMP/api" \
-  "$DEPLOY_PATH/releases/$STAMP/api/migrate"
+  --property="EnvironmentFile=$DEPLOY_PATH/api/.env" \
+  --property="WorkingDirectory=$DEPLOY_PATH/api/releases/$STAMP" \
+  "$DEPLOY_PATH/api/releases/$STAMP/migrate"
 ```
 
-Activate the release and start services:
+Activate the release and restart services:
 
 ```bash
-ln -sfn "releases/$STAMP/api" "$DEPLOY_PATH/current-api"
-ln -sfn "releases/$STAMP/web" "$DEPLOY_PATH/current-web"
+install -m 755 "$DEPLOY_PATH/api/releases/$STAMP/lumiforum-api" \
+  "$DEPLOY_PATH/api/lumiforum-api"
+install -m 755 "$DEPLOY_PATH/api/releases/$STAMP/migrate" \
+  "$DEPLOY_PATH/api/migrate"
+ln -sfn "releases/$STAMP" "$DEPLOY_PATH/web/current"
 systemctl --user enable --now lumiforum-api lumiforum-web
 systemctl --user restart lumiforum-api lumiforum-web
 ```
@@ -239,23 +247,27 @@ address and firewall those ports to the proxy network.
 ## 7. Manual rollback
 
 Database migrations are not automatically reversed. Confirm that the older
-application is compatible with the current schema, then switch symlinks:
+application is compatible with the current schema, then restore API files and
+the Web symlink:
 
 ```bash
-DEPLOY_PATH=/home/lumiforum/lumiforum
+DEPLOY_PATH=/mnt/1panel/apps/lumiforum
 OLD_STAMP=20260730-02
 
-test -x "$DEPLOY_PATH/releases/$OLD_STAMP/api/lumiforum-api"
-test -f "$DEPLOY_PATH/releases/$OLD_STAMP/web/server.js"
-ln -sfn "releases/$OLD_STAMP/api" "$DEPLOY_PATH/current-api"
-ln -sfn "releases/$OLD_STAMP/web" "$DEPLOY_PATH/current-web"
+test -x "$DEPLOY_PATH/api/releases/$OLD_STAMP/lumiforum-api"
+test -f "$DEPLOY_PATH/web/releases/$OLD_STAMP/apps/web/server.js"
+install -m 755 "$DEPLOY_PATH/api/releases/$OLD_STAMP/lumiforum-api" \
+  "$DEPLOY_PATH/api/lumiforum-api"
+install -m 755 "$DEPLOY_PATH/api/releases/$OLD_STAMP/migrate" \
+  "$DEPLOY_PATH/api/migrate"
+ln -sfn "releases/$OLD_STAMP" "$DEPLOY_PATH/web/current"
 systemctl --user restart lumiforum-api lumiforum-web
 curl -fsS http://127.0.0.1:8080/ready
 curl -fsSI http://127.0.0.1:3000/
 ```
 
-Keep the release currently referenced by each symlink when deleting old
-releases.
+Keep the Web release referenced by `web/current` and the required API rollback
+release when deleting old releases.
 
 ## Backups
 

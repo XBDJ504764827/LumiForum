@@ -28,8 +28,8 @@
 - Store only in host `.env` (mode 600, gitignored) or a secret manager.
 - Rotate `JWT_SECRET` only with a planned session invalidation window.
 - Prefer R2/S3 over local disk for multi-host readiness.
-- `<DEPLOY_PATH>/env/{api,web}.env` hold runtime secrets; keep the directory
-  mode `700` so other users cannot read them.
+- `<DEPLOY_PATH>/api/.env` and `<DEPLOY_PATH>/web/.env` hold runtime secrets;
+  keep both files mode `600` so other users cannot read them.
 
 ## Runtime
 
@@ -48,10 +48,14 @@ systemctl --user stop lumiforum-web lumiforum-api
 # inspect
 journalctl --user -u lumiforum-api -u lumiforum-web -n 200
 
-# rollback app (replace the release stamp first)
-DEPLOY_PATH=/home/lumiforum/lumiforum
-OLD_STAMP=20260730-02
-ln -sfn "releases/$OLD_STAMP/api" "$DEPLOY_PATH/current-api"
-ln -sfn "releases/$OLD_STAMP/web" "$DEPLOY_PATH/current-web"
+# rollback app (replace the release stamps first)
+DEPLOY_PATH=/mnt/1panel/apps/lumiforum
+OLD_API_STAMP=20260730-02
+OLD_WEB_STAMP=20260730-02
+install -m 755 "$DEPLOY_PATH/api/releases/$OLD_API_STAMP/lumiforum-api" \
+  "$DEPLOY_PATH/api/lumiforum-api"
+install -m 755 "$DEPLOY_PATH/api/releases/$OLD_API_STAMP/migrate" \
+  "$DEPLOY_PATH/api/migrate"
+ln -sfn "releases/$OLD_WEB_STAMP" "$DEPLOY_PATH/web/current"
 systemctl --user restart lumiforum-api lumiforum-web
 ```

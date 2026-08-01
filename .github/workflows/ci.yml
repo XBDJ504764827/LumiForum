@@ -107,6 +107,6 @@ jobs:
 
       - name: Shell syntax check
         run: |
-          for f in scripts/backup/*.sh; do
-            bash -n "$f"
-          done
+          while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done < <(find scripts -type f -name '*.sh' -print0)

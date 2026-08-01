@@ -39,6 +39,8 @@ pub struct Config {
     pub steam_openid_realm: Option<String>,
     pub steam_return_url: Option<String>,
     pub steam_web_origin: Option<String>,
+    pub steam_proxy_url: Option<String>,
+    pub steam_http_timeout_seconds: u64,
 }
 
 impl Config {
@@ -92,6 +94,8 @@ impl Config {
         let steam_openid_realm = optional_env("STEAM_OPENID_REALM");
         let steam_return_url = optional_env("STEAM_RETURN_URL");
         let steam_web_origin = optional_env("STEAM_WEB_ORIGIN");
+        let steam_proxy_url = optional_env("STEAM_PROXY_URL");
+        let steam_http_timeout_seconds = env_parse("STEAM_HTTP_TIMEOUT_SECONDS", 15_u64)?;
         validate_steam_config(
             &app_env,
             steam_api_key.as_ref(),
@@ -120,6 +124,9 @@ impl Config {
         }
         if presence_ttl_secs < 15 {
             bail!("PRESENCE_TTL_SECS must be at least 15");
+        }
+        if !(1..=120).contains(&steam_http_timeout_seconds) {
+            bail!("STEAM_HTTP_TIMEOUT_SECONDS must be between 1 and 120");
         }
 
         Ok(Self {
@@ -158,6 +165,8 @@ impl Config {
             steam_openid_realm,
             steam_return_url,
             steam_web_origin,
+            steam_proxy_url,
+            steam_http_timeout_seconds,
         })
     }
 }

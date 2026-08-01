@@ -2,8 +2,8 @@
 # Copy manually to ~/.config/systemd/user/lumiforum-web.service and replace
 # __DEPLOY_PATH__ with the absolute production path and __NODE_BIN__ with the
 # absolute Node 24+ executable path. The standalone entry and runtime config
-# must exist at __DEPLOY_PATH__/current-web/apps/web/server.js and
-# __DEPLOY_PATH__/current-web/.env.
+# must exist at __DEPLOY_PATH__/web/current/apps/web/server.js and
+# __DEPLOY_PATH__/web/.env.
 
 [Unit]
 Description=LumiForum Web (Next.js standalone)
@@ -13,8 +13,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=__DEPLOY_PATH__/current-web
-ExecStart=__NODE_BIN__ --env-file=__DEPLOY_PATH__/current-web/.env __DEPLOY_PATH__/current-web/apps/web/server.js
+WorkingDirectory=__DEPLOY_PATH__/web/current
+ExecStart=__NODE_BIN__ --env-file=__DEPLOY_PATH__/web/.env __DEPLOY_PATH__/web/current/apps/web/server.js
 Restart=always
 RestartSec=3
 TimeoutStopSec=30

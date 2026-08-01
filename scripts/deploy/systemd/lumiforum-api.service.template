@@ -1,7 +1,8 @@
 # LumiForum API (Axum) user systemd unit template.
 # Copy manually to ~/.config/systemd/user/lumiforum-api.service and replace
-# __DEPLOY_PATH__ with the absolute production path. The binary must exist at
-# __DEPLOY_PATH__/current-api/lumiforum-api.
+# __DEPLOY_PATH__ with the absolute production path. The binary and runtime
+# environment must exist at __DEPLOY_PATH__/api/lumiforum-api and
+# __DEPLOY_PATH__/api/.env.
 
 [Unit]
 Description=LumiForum API (Axum)
@@ -11,9 +12,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=__DEPLOY_PATH__/current-api
-EnvironmentFile=__DEPLOY_PATH__/env/api.env
-ExecStart=__DEPLOY_PATH__/current-api/lumiforum-api
+WorkingDirectory=__DEPLOY_PATH__/api
+EnvironmentFile=__DEPLOY_PATH__/api/.env
+ExecStart=__DEPLOY_PATH__/api/lumiforum-api
 Restart=always
 RestartSec=3
 TimeoutStopSec=30
