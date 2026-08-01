@@ -12,7 +12,7 @@ Cargo, pnpm, TypeScript, or a compiler.
 
 The production server needs:
 
-- Linux and user-level systemd
+- Linux and system-level systemd
 - Node.js 24+ for the Next.js standalone server
 - PostgreSQL 14-17 and Redis reachable by the API
 - a TLS reverse proxy such as 1Panel, nginx, or Caddy
@@ -93,19 +93,6 @@ Run as the dedicated deployment user. The production path is
 ```bash
 DEPLOY_PATH=/mnt/1panel/apps/lumiforum
 install -d -m 755 "$DEPLOY_PATH/api/releases" "$DEPLOY_PATH/web/releases"
-install -d -m 755 "$HOME/.config/systemd/user"
-```
-
-User services must survive logout. Check the current state:
-
-```bash
-loginctl show-user "$USER" -p Linger
-```
-
-If it reports `Linger=no`, an administrator must run:
-
-```bash
-sudo loginctl enable-linger lumiforum
 ```
 
 ## 3. Create runtime environment files
@@ -162,14 +149,14 @@ server, for example `/usr/bin/node`.
 Install them as:
 
 ```text
-~/.config/systemd/user/lumiforum-api.service
-~/.config/systemd/user/lumiforum-web.service
+/etc/systemd/system/lumiforum-api.service
+/etc/systemd/system/lumiforum-web.service
 ```
 
 Then reload systemd:
 
 ```bash
-systemctl --user daemon-reload
+systemctl daemon-reload
 ```
 
 ## 5. Upload and activate a release
@@ -198,7 +185,7 @@ Run embedded migrations before activation. `systemd-run` loads the API `.env`
 without executing it as a shell script:
 
 ```bash
-systemd-run --user --wait --pipe --collect \
+systemd-run --wait --pipe --collect \
   --property="EnvironmentFile=$DEPLOY_PATH/api/.env" \
   --property="WorkingDirectory=$DEPLOY_PATH/api/releases/$STAMP" \
   "$DEPLOY_PATH/api/releases/$STAMP/migrate"
@@ -212,8 +199,8 @@ install -m 755 "$DEPLOY_PATH/api/releases/$STAMP/lumiforum-api" \
 install -m 755 "$DEPLOY_PATH/api/releases/$STAMP/migrate" \
   "$DEPLOY_PATH/api/migrate"
 ln -sfn "releases/$STAMP" "$DEPLOY_PATH/web/current"
-systemctl --user enable --now lumiforum-api lumiforum-web
-systemctl --user restart lumiforum-api lumiforum-web
+systemctl enable --now lumiforum-api lumiforum-web
+systemctl restart lumiforum-api lumiforum-web
 ```
 
 Verify locally on the production server:
@@ -222,7 +209,7 @@ Verify locally on the production server:
 curl -fsS http://127.0.0.1:8080/health
 curl -fsS http://127.0.0.1:8080/ready
 curl -fsSI http://127.0.0.1:3000/
-systemctl --user --no-pager status lumiforum-api lumiforum-web
+systemctl --no-pager status lumiforum-api lumiforum-web
 ```
 
 Inspect failures with:
@@ -261,7 +248,7 @@ install -m 755 "$DEPLOY_PATH/api/releases/$OLD_STAMP/lumiforum-api" \
 install -m 755 "$DEPLOY_PATH/api/releases/$OLD_STAMP/migrate" \
   "$DEPLOY_PATH/api/migrate"
 ln -sfn "releases/$OLD_STAMP" "$DEPLOY_PATH/web/current"
-systemctl --user restart lumiforum-api lumiforum-web
+systemctl restart lumiforum-api lumiforum-web
 curl -fsS http://127.0.0.1:8080/ready
 curl -fsSI http://127.0.0.1:3000/
 ```

@@ -136,7 +136,10 @@ restricted, dedicated key with access only to this application deployment.
 
 ## Server prerequisites
 
-The deployment SSH user must own the application files and its user services:
+Production uses root-managed system-level systemd units. The SSH deployment
+account should be `root`, or a dedicated user with passwordless sudo permission
+for `systemctl` and `systemd-run`. It must also be able to update the application
+paths:
 
 ```bash
 DEPLOY_PATH=/mnt/1panel/apps/lumiforum
@@ -144,23 +147,16 @@ install -d -m 755 "$DEPLOY_PATH/api/releases" "$DEPLOY_PATH/web/releases"
 test -f "$DEPLOY_PATH/api/.env"
 test -f "$DEPLOY_PATH/web/.env"
 chmod 600 "$DEPLOY_PATH/api/.env" "$DEPLOY_PATH/web/.env"
-systemctl --user daemon-reload
-systemctl --user enable lumiforum-api lumiforum-web
+systemctl daemon-reload
+systemctl enable lumiforum-api lumiforum-web
 ```
 
 Do not blindly run `chown -R` on a 1Panel tree. Grant the dedicated deployment
 user ownership only over this application's `api`, `web/current`, and release
 paths after confirming how 1Panel created them.
 
-The user must have linger enabled so user systemd remains available after SSH
-logout. An administrator runs this once:
-
-```bash
-sudo loginctl enable-linger <deployment-user>
-```
-
 The production host needs Node.js 24+, `bash`, `tar`, `sha256sum`, `curl`, and
-user-level systemd. It does not need Git, Cargo, pnpm, AWS CLI, or application
+system-level systemd. It does not need Git, Cargo, pnpm, AWS CLI, or application
 source; AWS CLI is used only on the GitHub runner, while the server downloads
 from the presigned R2 URL with `curl`.
 
@@ -186,8 +182,8 @@ ExecStart=/absolute/path/to/node --env-file=/mnt/1panel/apps/lumiforum/web/.env 
 Updated templates are in `scripts/deploy/systemd/`. After changing units, run:
 
 ```bash
-systemctl --user daemon-reload
-systemctl --user restart lumiforum-api lumiforum-web
+systemctl daemon-reload
+systemctl restart lumiforum-api lumiforum-web
 ```
 
 The API `.env` is also consumed as a systemd `EnvironmentFile`; use `#` for
@@ -208,8 +204,8 @@ The workflow serializes production runs and does not cancel a deployment in
 progress. Inspect failures in the Actions run and, on the server, with:
 
 ```bash
-systemctl --user --no-pager status lumiforum-api lumiforum-web
-journalctl --user -u lumiforum-api -u lumiforum-web -n 100 --no-pager
+systemctl --no-pager status lumiforum-api lumiforum-web
+journalctl -u lumiforum-api -u lumiforum-web -n 100 --no-pager
 ```
 
 Old releases remain under `api/releases/` and `web/releases/` for manual

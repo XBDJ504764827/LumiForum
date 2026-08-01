@@ -11,8 +11,9 @@
    - `PasswordAuthentication no`
    - `PermitRootLogin no`
    - ed25519 keys only
-4. Deploy user: key-only login; no root/sudo needed — everything runs as the
-   deploy user itself (user systemd units, no root writes).
+4. Deployment SSH access is key-only. Production uses root-managed systemd;
+   either deploy as root with a dedicated restricted key, or grant a dedicated
+   deployment user narrowly scoped passwordless sudo for systemctl/systemd-run.
 
 ## Application bindings
 
@@ -33,7 +34,7 @@
 
 ## Runtime
 
-- API/Web run as the deploy user with user-systemd hardening
+- API/Web run through system-level systemd units with hardening
   (`NoNewPrivileges`, `PrivateTmp`, restricted address families).
 - Redis binds `127.0.0.1` only.
 - PostgreSQL listens on `127.0.0.1`; keep `pg_hba.conf` restricted to the
@@ -43,10 +44,10 @@
 
 ```bash
 # freeze traffic edge
-systemctl --user stop lumiforum-web lumiforum-api
+systemctl stop lumiforum-web lumiforum-api
 
 # inspect
-journalctl --user -u lumiforum-api -u lumiforum-web -n 200
+journalctl -u lumiforum-api -u lumiforum-web -n 200
 
 # rollback app (replace the release stamps first)
 DEPLOY_PATH=/mnt/1panel/apps/lumiforum
@@ -57,5 +58,5 @@ install -m 755 "$DEPLOY_PATH/api/releases/$OLD_API_STAMP/lumiforum-api" \
 install -m 755 "$DEPLOY_PATH/api/releases/$OLD_API_STAMP/migrate" \
   "$DEPLOY_PATH/api/migrate"
 ln -sfn "releases/$OLD_WEB_STAMP" "$DEPLOY_PATH/web/current"
-systemctl --user restart lumiforum-api lumiforum-web
+systemctl restart lumiforum-api lumiforum-web
 ```

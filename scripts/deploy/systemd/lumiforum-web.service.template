@@ -1,5 +1,5 @@
-# LumiForum Web (Next.js standalone) user systemd unit template.
-# Copy manually to ~/.config/systemd/user/lumiforum-web.service and replace
+# LumiForum Web (Next.js standalone) system-level systemd unit template.
+# Copy manually to /etc/systemd/system/lumiforum-web.service and replace
 # __DEPLOY_PATH__ with the absolute production path and __NODE_BIN__ with the
 # absolute Node 24+ executable path. The standalone entry and runtime config
 # must exist at __DEPLOY_PATH__/web/current/apps/web/server.js and
@@ -30,4 +30,4 @@ ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

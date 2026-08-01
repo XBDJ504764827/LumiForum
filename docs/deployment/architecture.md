@@ -7,7 +7,7 @@
 
 - Build API and Web artifacts on a compatible Linux build machine.
 - Keep source code and build toolchains off the production server.
-- Run both applications on loopback under user-level systemd.
+- Run both applications on loopback under root-managed system-level systemd.
 - Let an existing panel, nginx, or Caddy own TLS and reverse proxying.
 - Keep releases immutable and make application rollback a symlink switch.
 
@@ -20,7 +20,7 @@ Internet
    |-- forum.example.com -> 127.0.0.1:3000 (Next.js standalone)
    `-- api.example.com   -> 127.0.0.1:8080 (Axum + WebSocket)
 
-[ user systemd ]
+[ systemd ]
    |-- lumiforum-web -> web/current/apps/web/server.js (Node 24+)
    `-- lumiforum-api -> api/lumiforum-api
 
@@ -119,7 +119,7 @@ migrated schema.
 - Public firewall ports are limited to SSH and HTTP(S).
 - PostgreSQL, Redis, API, and Web bind loopback or a tightly firewalled private
   network.
-- Services run as a non-root deployment user with systemd hardening.
+- Services run through root-managed systemd units with service hardening.
 - Runtime env files are readable only by that user.
 - The API reverse proxy must support WebSocket upgrade on `/ws`.
 

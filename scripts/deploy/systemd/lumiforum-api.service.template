@@ -1,5 +1,5 @@
-# LumiForum API (Axum) user systemd unit template.
-# Copy manually to ~/.config/systemd/user/lumiforum-api.service and replace
+# LumiForum API (Axum) system-level systemd unit template.
+# Copy manually to /etc/systemd/system/lumiforum-api.service and replace
 # __DEPLOY_PATH__ with the absolute production path. The binary and runtime
 # environment must exist at __DEPLOY_PATH__/api/lumiforum-api and
 # __DEPLOY_PATH__/api/.env.
@@ -30,4 +30,4 @@ ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
