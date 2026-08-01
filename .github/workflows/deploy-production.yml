@@ -80,6 +80,8 @@ jobs:
           PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH }}
           PROD_API_PORT: ${{ vars.PROD_API_PORT }}
           PROD_WEB_PORT: ${{ vars.PROD_WEB_PORT }}
+          PROD_R2_ENDPOINT: ${{ vars.PROD_R2_ENDPOINT }}
+          PROD_R2_BUCKET: ${{ vars.PROD_R2_BUCKET }}
         run: |
           set -Eeuo pipefail
           required_vars=(
@@ -90,6 +92,8 @@ jobs:
             PROD_DEPLOY_PATH
             PROD_API_PORT
             PROD_WEB_PORT
+            PROD_R2_ENDPOINT
+            PROD_R2_BUCKET
           )
           for name in "${required_vars[@]}"; do
             if [[ -z "${!name:-}" ]]; then
@@ -99,6 +103,8 @@ jobs:
           done
           [[ "$PROD_API_PUBLIC_URL" == https://* ]]
           [[ "$PROD_SITE_URL" == https://* ]]
+          [[ "$PROD_R2_ENDPOINT" == https://* ]]
+          [[ "$PROD_R2_BUCKET" =~ ^[a-z0-9.-]+$ ]]
           [[ "$PROD_DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]]
           [[ "$PROD_API_PORT" =~ ^[0-9]{1,5}$ ]]
           [[ "$PROD_WEB_PORT" =~ ^[0-9]{1,5}$ ]]
@@ -150,8 +156,8 @@ jobs:
               activate-production-release.sh BUILD-INFO > SHA256SUMS
           )
 
-          # Upload one compressed stream instead of several SCP transfers. This
-          # also compresses the Rust binaries and reduces transfer time.
+          # Combine the release files into one compressed object for the R2
+          # relay. This also compresses the Rust binaries.
           upload_archive="$RUNNER_TEMP/lumiforum-$release_id-upload.tar.gz"
           tar -C "$artifact_dir" -czf "$upload_archive" .
           ls -lh "$upload_archive"
@@ -178,20 +184,82 @@ jobs:
           touch ~/.ssh/known_hosts
           chmod 600 ~/.ssh/production ~/.ssh/known_hosts
 
-      - name: Upload release to production
+      - name: Verify AWS CLI
+        run: aws --version
+
+      - name: Upload release to R2
+        id: r2_upload
+        shell: bash
+        env:
+          PROD_R2_ENDPOINT: ${{ vars.PROD_R2_ENDPOINT }}
+          PROD_R2_BUCKET: ${{ vars.PROD_R2_BUCKET }}
+          R2_DEPLOY_ACCESS_KEY: ${{ secrets.R2_DEPLOY_ACCESS_KEY }}
+          R2_DEPLOY_SECRET_KEY: ${{ secrets.R2_DEPLOY_SECRET_KEY }}
+          UPLOAD_ARCHIVE: ${{ steps.release.outputs.upload_archive }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        run: |
+          set -Eeuo pipefail
+          : "${PROD_R2_ENDPOINT:?Missing PROD_R2_ENDPOINT variable}"
+          : "${PROD_R2_BUCKET:?Missing PROD_R2_BUCKET variable}"
+          : "${R2_DEPLOY_ACCESS_KEY:?Missing R2_DEPLOY_ACCESS_KEY secret}"
+          : "${R2_DEPLOY_SECRET_KEY:?Missing R2_DEPLOY_SECRET_KEY secret}"
+          : "${UPLOAD_ARCHIVE:?Missing packaged upload archive}"
+          test -f "$UPLOAD_ARCHIVE"
+          command -v aws >/dev/null
+          [[ "$PROD_R2_ENDPOINT" == https://* ]]
+
+          export AWS_ACCESS_KEY_ID="$R2_DEPLOY_ACCESS_KEY"
+          export AWS_SECRET_ACCESS_KEY="$R2_DEPLOY_SECRET_KEY"
+          export AWS_DEFAULT_REGION=auto
+          export AWS_EC2_METADATA_DISABLED=true
+          export AWS_CONFIG_FILE="$RUNNER_TEMP/r2-aws-config"
+          printf '%s\n' '[default]' 'region = auto' 's3 =' '    addressing_style = path' > "$AWS_CONFIG_FILE"
+          r2_key="deploy/lumiforum/$RELEASE_ID/upload.tar.gz"
+          # Set this before uploading so cleanup can remove a partial object too.
+          echo "r2_object_key=$r2_key" >> "$GITHUB_OUTPUT"
+
+          aws s3 cp "$UPLOAD_ARCHIVE" "s3://$PROD_R2_BUCKET/$r2_key" \
+            --endpoint-url "$PROD_R2_ENDPOINT" \
+            --region auto \
+            --only-show-errors
+          aws s3api head-object \
+            --bucket "$PROD_R2_BUCKET" \
+            --key "$r2_key" \
+            --endpoint-url "$PROD_R2_ENDPOINT" \
+            --region auto >/dev/null
+
+      - name: Download release from R2 on production
         shell: bash
         env:
           PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
           PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
           PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
-          UPLOAD_ARCHIVE: ${{ steps.release.outputs.upload_archive }}
+          PROD_R2_ENDPOINT: ${{ vars.PROD_R2_ENDPOINT }}
+          PROD_R2_BUCKET: ${{ vars.PROD_R2_BUCKET }}
+          R2_DEPLOY_ACCESS_KEY: ${{ secrets.R2_DEPLOY_ACCESS_KEY }}
+          R2_DEPLOY_SECRET_KEY: ${{ secrets.R2_DEPLOY_SECRET_KEY }}
           RELEASE_ID: ${{ steps.release.outputs.release_id }}
         run: |
           set -Eeuo pipefail
           : "${PROD_SSH_HOST:?Missing PROD_SSH_HOST secret}"
           : "${PROD_SSH_USER:?Missing PROD_SSH_USER secret}"
-          : "${UPLOAD_ARCHIVE:?Missing packaged upload archive}"
-          test -f "$UPLOAD_ARCHIVE"
+          : "${PROD_R2_ENDPOINT:?Missing PROD_R2_ENDPOINT variable}"
+          : "${PROD_R2_BUCKET:?Missing PROD_R2_BUCKET variable}"
+          : "${R2_DEPLOY_ACCESS_KEY:?Missing R2_DEPLOY_ACCESS_KEY secret}"
+          : "${R2_DEPLOY_SECRET_KEY:?Missing R2_DEPLOY_SECRET_KEY secret}"
+          command -v aws >/dev/null
+          export AWS_ACCESS_KEY_ID="$R2_DEPLOY_ACCESS_KEY"
+          export AWS_SECRET_ACCESS_KEY="$R2_DEPLOY_SECRET_KEY"
+          export AWS_DEFAULT_REGION=auto
+          export AWS_EC2_METADATA_DISABLED=true
+          export AWS_CONFIG_FILE="$RUNNER_TEMP/r2-aws-config"
+          printf '%s\n' '[default]' 'region = auto' 's3 =' '    addressing_style = path' > "$AWS_CONFIG_FILE"
+          r2_key="deploy/lumiforum/$RELEASE_ID/upload.tar.gz"
+          download_url="$(aws s3 presign "s3://$PROD_R2_BUCKET/$r2_key" \
+            --endpoint-url "$PROD_R2_ENDPOINT" \
+            --region auto \
+            --expires-in 3600)"
+          test -n "$download_url"
           ssh_port="${PROD_SSH_PORT:-22}"
           [[ "$ssh_port" =~ ^[0-9]{1,5}$ ]]
           remote_dir="/tmp/lumiforum-$RELEASE_ID"
@@ -211,14 +279,11 @@ jobs:
           ssh "${ssh_options[@]}" "$PROD_SSH_USER@$PROD_SSH_HOST" \
             "rm -rf '$remote_dir' '$remote_archive' && install -d -m 700 '$remote_dir'"
 
-          # Stream one compressed archive over SSH. dd reports transferred bytes
-          # in the Actions log, unlike a non-interactive SCP invocation.
-          dd if="$UPLOAD_ARCHIVE" bs=1M status=progress | \
-            timeout 20m ssh "${ssh_options[@]}" "$PROD_SSH_USER@$PROD_SSH_HOST" \
-              "cat > '$remote_archive'"
-
-          ssh "${ssh_options[@]}" "$PROD_SSH_USER@$PROD_SSH_HOST" \
-            "tar -xzf '$remote_archive' -C '$remote_dir' && rm -f '$remote_archive'"
+          # The production host downloads from Cloudflare instead of receiving
+          # the slow GitHub-hosted-runner-to-server transfer.
+          printf '%s\n' "$download_url" | \
+            timeout 30m ssh "${ssh_options[@]}" "$PROD_SSH_USER@$PROD_SSH_HOST" \
+              "read -r url && curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 1800 --silent --show-error \"\$url\" --output '$remote_archive' && tar -xzf '$remote_archive' -C '$remote_dir' && rm -f '$remote_archive'"
 
       - name: Activate production release
         shell: bash
@@ -245,3 +310,55 @@ jobs:
             -o ServerAliveCountMax=10 \
             "$PROD_SSH_USER@$PROD_SSH_HOST" \
             "bash '/tmp/lumiforum-$RELEASE_ID/activate-production-release.sh' '$RELEASE_ID' '$PROD_DEPLOY_PATH' '$PROD_API_PORT' '$PROD_WEB_PORT'"
+
+      - name: Remove temporary R2 release object
+        if: ${{ always() && steps.r2_upload.outputs.r2_object_key != '' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          PROD_R2_ENDPOINT: ${{ vars.PROD_R2_ENDPOINT }}
+          PROD_R2_BUCKET: ${{ vars.PROD_R2_BUCKET }}
+          R2_DEPLOY_ACCESS_KEY: ${{ secrets.R2_DEPLOY_ACCESS_KEY }}
+          R2_DEPLOY_SECRET_KEY: ${{ secrets.R2_DEPLOY_SECRET_KEY }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        run: |
+          set -Eeuo pipefail
+          [[ -n "${PROD_R2_ENDPOINT:-}" && -n "${PROD_R2_BUCKET:-}" ]] || exit 0
+          [[ -n "${R2_DEPLOY_ACCESS_KEY:-}" && -n "${R2_DEPLOY_SECRET_KEY:-}" ]] || exit 0
+          export AWS_ACCESS_KEY_ID="$R2_DEPLOY_ACCESS_KEY"
+          export AWS_SECRET_ACCESS_KEY="$R2_DEPLOY_SECRET_KEY"
+          export AWS_DEFAULT_REGION=auto
+          export AWS_EC2_METADATA_DISABLED=true
+          export AWS_CONFIG_FILE="$RUNNER_TEMP/r2-aws-config"
+          printf '%s\n' '[default]' 'region = auto' 's3 =' '    addressing_style = path' > "$AWS_CONFIG_FILE"
+          r2_key="deploy/lumiforum/$RELEASE_ID/upload.tar.gz"
+          aws s3api delete-object \
+            --bucket "$PROD_R2_BUCKET" \
+            --key "$r2_key" \
+            --endpoint-url "$PROD_R2_ENDPOINT" \
+            --region auto >/dev/null
+
+      - name: Remove remote staging directory
+        if: ${{ always() }}
+        shell: bash
+        env:
+          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        run: |
+          set -Eeuo pipefail
+          [[ -n "${PROD_SSH_HOST:-}" && -n "${PROD_SSH_USER:-}" ]] || exit 0
+          ssh_port="${PROD_SSH_PORT:-22}"
+          ssh \
+            -i ~/.ssh/production \
+            -p "$ssh_port" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=10 \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" \
+            "rm -rf '/tmp/lumiforum-$RELEASE_ID' '/tmp/lumiforum-$RELEASE_ID-upload.tar.gz'" || true

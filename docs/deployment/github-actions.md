@@ -43,13 +43,14 @@ backed up.
 
 The runner strips release-only symbols, creates checksums for `lumiforum-api`,
 `migrate`, and `lumiforum-web.tar.gz`, and combines everything into one
-compressed upload archive. It streams that archive over SSH with byte progress
-in the Actions log instead of opening multiple SCP file transfers. The server
-verifies the inner checksums, extracts new release directories, runs embedded
-migrations, activates API and Web, and restarts both user services. API and Web
-loopback health checks must pass. A failed activation or health check restores
-the previous application files/link and restarts the previous application
-version.
+compressed upload archive. It uploads that archive to a private R2 object using
+dedicated deploy credentials. The production server receives only a short-lived
+presigned URL over SSH and downloads the archive directly from Cloudflare. SSH
+no longer carries the release bytes. The server verifies the inner checksums,
+extracts new release directories, runs embedded migrations, activates API and
+Web, and restarts both user services. API and Web loopback health checks must
+pass. A failed activation or health check restores the previous application
+files/link and restarts the previous application version.
 
 Database migrations are not reversed during rollback. Keep migrations backward
 compatible with the previous deployed application (expand first, remove old
@@ -64,15 +65,17 @@ after a successful main push.
 
 Add these environment **variables**:
 
-| Variable                | Example                      |
-| ----------------------- | ---------------------------- |
-| `PROD_DEPLOY_PATH`      | `/mnt/1panel/apps/lumiforum` |
-| `PROD_API_PORT`         | `8187`                       |
-| `PROD_WEB_PORT`         | `3000`                       |
-| `PROD_API_PUBLIC_URL`   | `https://chatapi.cngokz.com` |
-| `PROD_SITE_URL`         | `https://chat.cngokz.com`    |
-| `PROD_SITE_NAME`        | `LumiForum`                  |
-| `PROD_SITE_DESCRIPTION` | `LumiForum community forum`  |
+| Variable                | Example                                         |
+| ----------------------- | ----------------------------------------------- |
+| `PROD_DEPLOY_PATH`      | `/mnt/1panel/apps/lumiforum`                    |
+| `PROD_API_PORT`         | `8187`                                          |
+| `PROD_WEB_PORT`         | `3000`                                          |
+| `PROD_API_PUBLIC_URL`   | `https://chatapi.cngokz.com`                    |
+| `PROD_SITE_URL`         | `https://chat.cngokz.com`                       |
+| `PROD_SITE_NAME`        | `LumiForum`                                     |
+| `PROD_SITE_DESCRIPTION` | `LumiForum community forum`                     |
+| `PROD_R2_ENDPOINT`      | `https://<account-id>.r2.cloudflarestorage.com` |
+| `PROD_R2_BUCKET`        | `lumiforum-deploy`                              |
 
 `NEXT_PUBLIC_*` values are embedded into the Web bundle by the workflow. A
 change to one of these variables takes effect on the next deployment. During
@@ -89,10 +92,26 @@ Add these environment **secrets**:
 | `PROD_SSH_PORT`        | SSH port; an empty value defaults to `22`         |
 | `PROD_SSH_USER`        | Dedicated non-root deployment user                |
 | `PROD_SSH_PRIVATE_KEY` | Private key dedicated to GitHub production deploy |
+| `R2_DEPLOY_ACCESS_KEY` | R2 token access key for the deploy object prefix  |
+| `R2_DEPLOY_SECRET_KEY` | R2 token secret key for the deploy object prefix  |
 
-Do not put PostgreSQL, Redis, JWT, R2, Steam, proxy, or runtime credentials in
-GitHub. They stay in `api/.env` and `web/.env` on the server. The workflow never
-uploads, copies, or replaces either environment file.
+Do not put PostgreSQL, Redis, JWT, Steam, proxy, or application runtime
+credentials in GitHub. The two dedicated R2 deploy credentials are the only R2
+secrets used by this workflow. They should be restricted to the deployment
+bucket and rotated independently from the application upload credentials. The
+workflow never uploads, copies, or replaces `api/.env` or `web/.env`.
+
+The release object is stored temporarily at:
+
+```text
+deploy/lumiforum/<release-id>/upload.tar.gz
+```
+
+The workflow generates a one-hour presigned URL, the production server downloads
+through Cloudflare, and the cleanup step deletes the object after activation or
+failure. Create a separate private Bucket named `lumiforum-deploy`; do not use
+the image Bucket behind `chat.iquankz.cn` for deployment artifacts. The R2 deploy
+Token should have only Object Read & Write access to `lumiforum-deploy`.
 
 ## Create a dedicated deployment key
 
@@ -141,7 +160,12 @@ sudo loginctl enable-linger <deployment-user>
 ```
 
 The production host needs Node.js 24+, `bash`, `tar`, `sha256sum`, `curl`, and
-user-level systemd. It does not need Git, Cargo, pnpm, or application source.
+user-level systemd. It does not need Git, Cargo, pnpm, AWS CLI, or application
+source; AWS CLI is used only on the GitHub runner, while the server downloads
+from the presigned R2 URL with `curl`.
+
+GitHub-hosted Ubuntu runners include the AWS CLI. The workflow uses path-style
+S3 requests, `region=auto`, and disables AWS instance-metadata lookup for R2.
 The GitHub runner and server must have compatible Linux architecture, glibc,
 and native Node dependencies. The workflow deliberately uses `ubuntu-22.04`;
 verify compatibility before the first production run.
