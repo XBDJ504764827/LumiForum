@@ -41,12 +41,15 @@ The active API path deliberately remains `api/lumiforum-api`, matching the
 existing service; binaries are replaced atomically after the previous ones are
 backed up.
 
-The runner uploads checksummed `lumiforum-api`, `migrate`, and
-`lumiforum-web.tar.gz` files to a private temporary directory. The server
-verifies checksums, extracts new release directories, runs embedded migrations,
-activates API and Web, and restarts both user services. API and Web loopback
-health checks must pass. A failed activation or health check restores the
-previous application files/link and restarts the previous application version.
+The runner strips release-only symbols, creates checksums for `lumiforum-api`,
+`migrate`, and `lumiforum-web.tar.gz`, and combines everything into one
+compressed upload archive. It streams that archive over SSH with byte progress
+in the Actions log instead of opening multiple SCP file transfers. The server
+verifies the inner checksums, extracts new release directories, runs embedded
+migrations, activates API and Web, and restarts both user services. API and Web
+loopback health checks must pass. A failed activation or health check restores
+the previous application files/link and restarts the previous application
+version.
 
 Database migrations are not reversed during rollback. Keep migrations backward
 compatible with the previous deployed application (expand first, remove old
@@ -86,7 +89,6 @@ Add these environment **secrets**:
 | `PROD_SSH_PORT`        | SSH port; an empty value defaults to `22`         |
 | `PROD_SSH_USER`        | Dedicated non-root deployment user                |
 | `PROD_SSH_PRIVATE_KEY` | Private key dedicated to GitHub production deploy |
-| `PROD_SSH_KNOWN_HOSTS` | Pinned SSH host-key line                          |
 
 Do not put PostgreSQL, Redis, JWT, R2, Steam, proxy, or runtime credentials in
 GitHub. They stay in `api/.env` and `web/.env` on the server. The workflow never
@@ -105,15 +107,13 @@ Install `lumiforum-production.pub` in the deployment user's
 `PROD_SSH_PRIVATE_KEY`, then securely delete the local private copy after the
 secret is stored.
 
-Pin the real server key from a trusted machine/network. Replace the host and
-port:
-
-```bash
-ssh-keyscan -p 22 production.example.com
-```
-
-Verify the fingerprint out of band before storing the complete resulting line
-in `PROD_SSH_KNOWN_HOSTS`. Do not disable strict host-key checking.
+The workflow uses OpenSSH `StrictHostKeyChecking=accept-new`, so a
+`PROD_SSH_KNOWN_HOSTS` secret is not required. Each ephemeral runner accepts the
+host key presented on its first connection and rejects a changed key during the
+rest of that deployment. This is simpler but weaker than pinning a previously
+verified host key: the first connection is not protected against a targeted
+man-in-the-middle attack. The deployment private key should therefore remain a
+restricted, dedicated key with access only to this application deployment.
 
 ## Server prerequisites
 

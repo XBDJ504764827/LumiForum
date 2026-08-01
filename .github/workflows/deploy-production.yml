@@ -127,6 +127,7 @@ jobs:
 
           install -m 755 target/release/lumiforum-api "$artifact_dir/lumiforum-api"
           install -m 755 target/release/migrate "$artifact_dir/migrate"
+          strip --strip-unneeded "$artifact_dir/lumiforum-api" "$artifact_dir/migrate"
           cp -a apps/web/.next/standalone/. "$web_dir/"
           cp -a apps/web/.next/static "$web_dir/apps/web/.next/static"
           cp -a apps/web/public "$web_dir/apps/web/public"
@@ -149,8 +150,14 @@ jobs:
               activate-production-release.sh BUILD-INFO > SHA256SUMS
           )
 
+          # Upload one compressed stream instead of several SCP transfers. This
+          # also compresses the Rust binaries and reduces transfer time.
+          upload_archive="$RUNNER_TEMP/lumiforum-$release_id-upload.tar.gz"
+          tar -C "$artifact_dir" -czf "$upload_archive" .
+          ls -lh "$upload_archive"
+
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
-          echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
+          echo "upload_archive=$upload_archive" >> "$GITHUB_OUTPUT"
         env:
           PROD_API_PUBLIC_URL: ${{ vars.PROD_API_PUBLIC_URL }}
           PROD_SITE_URL: ${{ vars.PROD_SITE_URL }}
@@ -163,14 +170,12 @@ jobs:
         shell: bash
         env:
           PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
-          PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
         run: |
           set -Eeuo pipefail
-          test -n "$PROD_SSH_PRIVATE_KEY"
-          test -n "$PROD_SSH_KNOWN_HOSTS"
+          : "${PROD_SSH_PRIVATE_KEY:?Missing PROD_SSH_PRIVATE_KEY secret}"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > ~/.ssh/production
-          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          touch ~/.ssh/known_hosts
           chmod 600 ~/.ssh/production ~/.ssh/known_hosts
 
       - name: Upload release to production
@@ -179,33 +184,41 @@ jobs:
           PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
           PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
           PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
-          ARTIFACT_DIR: ${{ steps.release.outputs.artifact_dir }}
+          UPLOAD_ARCHIVE: ${{ steps.release.outputs.upload_archive }}
           RELEASE_ID: ${{ steps.release.outputs.release_id }}
         run: |
           set -Eeuo pipefail
           : "${PROD_SSH_HOST:?Missing PROD_SSH_HOST secret}"
           : "${PROD_SSH_USER:?Missing PROD_SSH_USER secret}"
+          : "${UPLOAD_ARCHIVE:?Missing packaged upload archive}"
+          test -f "$UPLOAD_ARCHIVE"
           ssh_port="${PROD_SSH_PORT:-22}"
+          [[ "$ssh_port" =~ ^[0-9]{1,5}$ ]]
           remote_dir="/tmp/lumiforum-$RELEASE_ID"
+          remote_archive="${remote_dir}-upload.tar.gz"
           ssh_options=(
             -i ~/.ssh/production
             -p "$ssh_port"
             -o BatchMode=yes
             -o IdentitiesOnly=yes
-            -o StrictHostKeyChecking=yes
-          )
-          scp_options=(
-            -i ~/.ssh/production
-            -P "$ssh_port"
-            -o BatchMode=yes
-            -o IdentitiesOnly=yes
-            -o StrictHostKeyChecking=yes
+            -o StrictHostKeyChecking=accept-new
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts"
+            -o ConnectTimeout=20
+            -o ServerAliveInterval=30
+            -o ServerAliveCountMax=10
           )
 
           ssh "${ssh_options[@]}" "$PROD_SSH_USER@$PROD_SSH_HOST" \
-            "rm -rf '$remote_dir' && install -d -m 700 '$remote_dir'"
-          scp "${scp_options[@]}" "$ARTIFACT_DIR"/* \
-            "$PROD_SSH_USER@$PROD_SSH_HOST:$remote_dir/"
+            "rm -rf '$remote_dir' '$remote_archive' && install -d -m 700 '$remote_dir'"
+
+          # Stream one compressed archive over SSH. dd reports transferred bytes
+          # in the Actions log, unlike a non-interactive SCP invocation.
+          dd if="$UPLOAD_ARCHIVE" bs=1M status=progress | \
+            timeout 20m ssh "${ssh_options[@]}" "$PROD_SSH_USER@$PROD_SSH_HOST" \
+              "cat > '$remote_archive'"
+
+          ssh "${ssh_options[@]}" "$PROD_SSH_USER@$PROD_SSH_HOST" \
+            "tar -xzf '$remote_archive' -C '$remote_dir' && rm -f '$remote_archive'"
 
       - name: Activate production release
         shell: bash
@@ -225,6 +238,10 @@ jobs:
             -p "$ssh_port" \
             -o BatchMode=yes \
             -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=10 \
             "$PROD_SSH_USER@$PROD_SSH_HOST" \
             "bash '/tmp/lumiforum-$RELEASE_ID/activate-production-release.sh' '$RELEASE_ID' '$PROD_DEPLOY_PATH' '$PROD_API_PORT' '$PROD_WEB_PORT'"
