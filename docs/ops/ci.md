@@ -17,9 +17,12 @@ cancels superseded runs.
 
 Runs only after a push to `main` (including a merged pull request), or when
 manually dispatched from `main`. It validates the source, builds the API and
-Next.js standalone artifacts, uploads a checksummed immutable release, runs
-migrations, switches release symlinks, restarts user services, and performs
-health checks. Other branch pushes and pull request events do not trigger it.
+Next.js standalone artifacts, uploads a checksummed immutable release to a
+private R2 deployment bucket, has the production host download it through a
+presigned URL, runs migrations, switches release paths, restarts user services,
+and performs health checks. Other branch pushes and pull request events do not
+trigger it. R2 deployment setup is documented in
+[GitHub Actions production deployment](../deployment/github-actions.md).
 
 Repository/environment setup and server prerequisites are documented in
 [GitHub Actions production deployment](../deployment/github-actions.md). The
