@@ -24,6 +24,7 @@ import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { MarkdownContent } from "@/components/forum/markdown-content";
 import { PollCard } from "@/components/forum/poll-card";
+import { ReportButton } from "@/components/forum/report-button";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
 import { CommentSection } from "@/components/forum/comment-section";
@@ -133,6 +134,7 @@ export function TopicView({ slug }: { slug: string }) {
                   slug={slug}
                 />
               ) : null}
+              <ReportButton targetType="user" targetId={data.author.id} />
             </div>
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
               <Meta icon={CalendarDays} value={formatDate(data.created_at)} />
@@ -148,6 +150,11 @@ export function TopicView({ slug }: { slug: string }) {
         <TopicPollSection topicId={data.id} hasPoll={data.has_poll} />
 
         <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-border pt-6">
+          <ReportButton
+            targetType="topic"
+            targetId={data.id}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+          />
           {canReact ? (
             <>
               <TopicLikeButton topic={data} slug={slug} />

@@ -444,6 +444,7 @@ fn map_topic_hit(row: TopicHitRow) -> TopicSearchHit {
             slug: row.category_slug,
             name: row.category_name,
             icon: row.category_icon,
+            restricted_posting: false,
         },
         author: SearchAuthor {
             id: row.author_id,

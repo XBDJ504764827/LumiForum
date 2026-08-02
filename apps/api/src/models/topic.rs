@@ -13,6 +13,7 @@ pub enum TopicStatus {
     Published,
     Hidden,
     Deleted,
+    PendingReview,
 }
 
 impl TopicStatus {
@@ -21,6 +22,7 @@ impl TopicStatus {
             Self::Published => "published",
             Self::Hidden => "hidden",
             Self::Deleted => "deleted",
+            Self::PendingReview => "pending_review",
         }
     }
 }
@@ -33,6 +35,7 @@ impl FromStr for TopicStatus {
             "published" => Ok(Self::Published),
             "hidden" => Ok(Self::Hidden),
             "deleted" => Ok(Self::Deleted),
+            "pending_review" => Ok(Self::PendingReview),
             _ => Err("unknown topic status"),
         }
     }
@@ -108,6 +111,8 @@ pub struct TopicDetail {
     pub id: Uuid,
     pub title: String,
     pub slug: String,
+    /// published | pending_review | hidden (viewer-relevant lifecycle state)
+    pub status: String,
     pub content: String,
     pub summary: Option<String>,
     pub category: CategorySummary,

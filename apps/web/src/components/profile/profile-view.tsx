@@ -98,6 +98,9 @@ function ProfileContent({ user, onUpdated }: { user: User; onUpdated: (user: Use
               <Link href="/notifications" className="hover:text-foreground">
                 通知中心
               </Link>
+              <Link href="/profile/reports" className="hover:text-foreground">
+                我的举报
+              </Link>
             </div>
           </div>
         </div>

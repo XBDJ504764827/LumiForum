@@ -48,6 +48,7 @@ pub fn public_router(state: AppState) -> Router<AppState> {
         .route("/moderation/appeals", post(create_appeal))
         .route("/moderation/appeals/me", get(list_my_appeals))
         .route("/moderation/appeals/{id}", get(get_my_appeal))
+        .route("/moderation/me", get(my_moderation_status))
         .route_layer(middleware::from_fn_with_state(
             CsrfLayer::new(state.config().cors_origin.clone()),
             enforce_mutation_origin,
@@ -64,6 +65,15 @@ pub fn public_router(state: AppState) -> Router<AppState> {
 
 pub fn admin_router(state: AppState) -> Router<AppState> {
     Router::new()
+        .route("/admin/moderation/reviews", get(list_pending_reviews))
+        .route(
+            "/admin/moderation/reviews/{target_type}/{id}/approve",
+            post(approve_review),
+        )
+        .route(
+            "/admin/moderation/reviews/{target_type}/{id}/reject",
+            post(reject_review),
+        )
         .route("/admin/moderation/reports", get(list_reports))
         .route("/admin/moderation/reports/batch", post(batch_reports))
         .route("/admin/moderation/reports/{id}", get(get_report_detail))
@@ -276,6 +286,82 @@ async fn get_my_appeal(
 // ---------------------------------------------------------------------------
 // Admin handlers
 // ---------------------------------------------------------------------------
+
+async fn list_pending_reviews(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<crate::models::PendingReviewQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::Paginated<crate::models::PendingReviewItem>>>> {
+    let query = parse_query(query)?;
+    let data = state
+        .moderation()
+        .list_pending_reviews(&principal, query)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn approve_review(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<Path<(String, Uuid)>, PathRejection>,
+    payload: Result<Json<crate::models::ReviewRequest>, JsonRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::ModerationStatus>>> {
+    let (target_type, target_id) = parse_path(path)?;
+    let request = parse_json(payload)?;
+    let audit = crate::services::AdminAuditContext {
+        ip: Some(ipnetwork::IpNetwork::from(addr.ip())),
+        user_agent: headers
+            .get("user-agent")
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_owned()),
+    };
+    let data = state
+        .moderation()
+        .review_content(&principal, &target_type, target_id, true, request, &audit)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn reject_review(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<Path<(String, Uuid)>, PathRejection>,
+    payload: Result<Json<crate::models::ReviewRequest>, JsonRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::ModerationStatus>>> {
+    let (target_type, target_id) = parse_path(path)?;
+    let request = parse_json(payload)?;
+    let audit = crate::services::AdminAuditContext {
+        ip: Some(ipnetwork::IpNetwork::from(addr.ip())),
+        user_agent: headers
+            .get("user-agent")
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_owned()),
+    };
+    let data = state
+        .moderation()
+        .review_content(&principal, &target_type, target_id, false, request, &audit)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn my_moderation_status(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+) -> AppResult<Json<ApiResponse<crate::models::ModerationStatus>>> {
+    let data = state
+        .moderation()
+        .user_moderation_status(principal.user_id)
+        .await?
+        .unwrap_or(crate::models::ModerationStatus {
+            score: 0,
+            reputation: "normal".into(),
+        });
+    Ok(Json(ApiResponse::new(data)))
+}
 
 async fn list_reports(
     State(state): State<AppState>,

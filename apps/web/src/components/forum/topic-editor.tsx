@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 
+import { useAuth } from "@/components/auth/auth-provider";
 import { MarkdownContent } from "@/components/forum/markdown-content";
 import {
   PollEditor,
@@ -29,6 +30,13 @@ type Props = { mode: "create"; topic?: never } | { mode: "edit"; topic: TopicDet
 
 export function TopicEditor(props: Props) {
   const router = useRouter();
+  const { user } = useAuth();
+  const isStaff = Boolean(
+    user &&
+    ["moderator", "senior_moderator", "administrator", "super_administrator"].includes(
+      user.role.code,
+    ),
+  );
   const queryClient = useQueryClient();
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
   const [view, setView] = useState<"write" | "preview">("write");
@@ -54,6 +62,7 @@ export function TopicEditor(props: Props) {
         description: "",
         multiple_choice: false,
         anonymous: false,
+        allow_cancel: true,
         max_choices: 2,
         options: [{ value: "" }, { value: "" }],
       },
@@ -98,6 +107,11 @@ export function TopicEditor(props: Props) {
       if (props.mode === "edit") {
         await queryClient.invalidateQueries({ queryKey: pollKeys.topicPoll(topic.id) });
         await queryClient.invalidateQueries({ queryKey: pollKeys.results(topic.id) });
+      }
+      if (topic.status === "pending_review") {
+        // Content was flagged by auto-moderation and awaits staff review.
+        router.push(`/topics/new?pending=1` as Route);
+        return;
       }
       router.push(`/topics/${topic.slug}` as Route);
     },
@@ -156,6 +170,7 @@ export function TopicEditor(props: Props) {
 
       <FormProvider {...form}>
         <form onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+          <FieldErrorSummary form={form} />
           {form.formState.errors.root?.message ? (
             <Alert className="mb-5">
               <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
@@ -258,8 +273,13 @@ export function TopicEditor(props: Props) {
                 >
                   <option value="">选择板块</option>
                   {(categories.data ?? []).map((category) => (
-                    <option key={category.id} value={category.id}>
+                    <option
+                      key={category.id}
+                      value={category.id}
+                      disabled={category.restricted_posting && !isStaff}
+                    >
                       {category.name}
+                      {category.restricted_posting ? "（仅管理员）" : ""}
                     </option>
                   ))}
                 </Select>
@@ -335,5 +355,42 @@ function ModeButton({
       <Icon className="size-3.5" aria-hidden="true" />
       {children}
     </button>
+  );
+}
+
+/** Aggregated field errors — surfaced above the submit button so validation
+ *  failures are always visible even when the failing field lives inside a
+ *  collapsed section (e.g. the poll editor). */
+function FieldErrorSummary({ form }: { form: ReturnType<typeof useForm<TopicEditorValues>> }) {
+  const errors = form.formState.errors;
+  const messages: string[] = [];
+  const collect = (value: unknown, prefix = "") => {
+    if (!value || typeof value !== "object") return;
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (entry && typeof entry === "object" && "message" in (entry as object)) {
+        const message = (entry as { message?: string }).message;
+        if (message) messages.push(message);
+      } else if (Array.isArray(entry)) {
+        entry.forEach((item, index) => collect(item, `${path}.${index}`));
+      } else {
+        collect(entry, path);
+      }
+    }
+  };
+  collect(errors);
+  if (messages.length === 0) return null;
+  return (
+    <Alert className="mb-5 border-destructive/40 bg-destructive/5">
+      <CircleAlert className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+      <div>
+        <p className="font-medium text-destructive">请先修正以下问题：</p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-destructive">
+          {messages.map((message, index) => (
+            <li key={index}>{message}</li>
+          ))}
+        </ul>
+      </div>
+    </Alert>
   );
 }

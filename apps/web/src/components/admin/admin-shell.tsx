@@ -53,6 +53,7 @@ const navGroups = [
   {
     label: "审核",
     items: [
+      { href: "/admin/moderation", label: "治理中心", icon: ShieldAlert },
       { href: "/admin/queue", label: "审核队列", icon: Inbox },
       { href: "/admin/reports", label: "举报", icon: Flag },
     ],

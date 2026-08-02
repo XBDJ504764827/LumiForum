@@ -8,9 +8,9 @@ use uuid::Uuid;
 
 use crate::models::{
     AppealItem, AppealStatus, AppealType, CaseItem, CaseSource, CaseStatus, CountItem, DailyMetric,
-    GovernanceMetrics, ModerationActionItem, ModerationNoteItem, ReportItemV2, ReportPriority,
-    ReportStatus, ReportTargetType, RuleAction, RuleHitItem, RuleItem, RuleType, SanctionItem,
-    SanctionStatus, SanctionType,
+    GovernanceMetrics, ModerationActionItem, ModerationNoteItem, PendingReviewRow, ReportItemV2,
+    ReportPriority, ReportStatus, ReportTargetType, RuleAction, RuleHitItem, RuleItem, RuleType,
+    SanctionItem, SanctionStatus, SanctionType,
 };
 
 #[derive(Clone)]
@@ -1151,6 +1151,129 @@ impl ModerationRepository {
         .bind(comment_id)
         .fetch_optional(&self.pool)
         .await
+    }
+
+    pub async fn get_upload(&self, upload_id: Uuid) -> Result<Option<(Uuid, String)>, sqlx::Error> {
+        // (owner_id, status)
+        sqlx::query_as::<_, (Uuid, String)>("SELECT user_id, status FROM uploads WHERE id = $1")
+            .bind(upload_id)
+            .fetch_optional(&self.pool)
+            .await
+    }
+
+    pub async fn get_user_moderation(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<(i32, String)>, sqlx::Error> {
+        sqlx::query_as::<_, (i32, String)>(
+            "SELECT moderation_score, reputation FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+    }
+
+    /// Add violation points; reputation is recomputed from the score.
+    /// Returns the new (score, reputation).
+    pub async fn add_violation_score(
+        &self,
+        user_id: Uuid,
+        points: i32,
+    ) -> Result<(i32, String), sqlx::Error> {
+        sqlx::query_as::<_, (i32, String)>(
+            r#"
+            UPDATE users
+            SET moderation_score = moderation_score + $2,
+                reputation = CASE
+                    WHEN moderation_score + $2 >= 100 THEN 'restricted'
+                    WHEN moderation_score + $2 >= 30 THEN 'watch'
+                    ELSE 'normal'
+                END
+            WHERE id = $1
+            RETURNING moderation_score, reputation
+            "#,
+        )
+        .bind(user_id)
+        .bind(points)
+        .fetch_one(&self.pool)
+        .await
+    }
+
+    pub async fn set_content_status(
+        &self,
+        target_type: &str,
+        target_id: Uuid,
+        status: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let result = match target_type {
+            "topic" => {
+                sqlx::query("UPDATE topics SET status = $2, updated_at = now() WHERE id = $1")
+                    .bind(target_id)
+                    .bind(status)
+                    .execute(&self.pool)
+                    .await?
+            }
+            "comment" => {
+                sqlx::query("UPDATE comments SET status = $2, updated_at = now() WHERE id = $1")
+                    .bind(target_id)
+                    .bind(status)
+                    .execute(&self.pool)
+                    .await?
+            }
+            _ => return Ok(false),
+        };
+        Ok(result.rows_affected() == 1)
+    }
+
+    pub async fn list_pending_reviews(
+        &self,
+        target_type: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<PendingReviewRow>, i64), sqlx::Error> {
+        let target_filter = match target_type {
+            Some("topic") => "AND 'topic' = 'topic'",
+            Some("comment") => "AND 'comment' = 'comment'",
+            _ => "",
+        };
+        let rows = sqlx::query_as::<_, PendingReviewRow>(&format!(
+            r#"
+                SELECT t.id, 'topic' AS target_type, t.author_id, t.title,
+                       left(t.content, 200) AS snippet, t.created_at,
+                       COALESCE(tc.risk_score, 0) AS risk_score,
+                       tc.id AS case_id, u.username AS author_username
+                FROM topics t
+                LEFT JOIN moderation_cases tc ON tc.target_type = 'topic'
+                    AND tc.target_id = t.id AND tc.status IN ('open', 'reviewing')
+                JOIN users u ON u.id = t.author_id
+                WHERE t.status = 'pending_review' {target_filter}
+                UNION ALL
+                SELECT c.id, 'comment' AS target_type, c.author_id,
+                       t.title, left(c.content, 200) AS snippet, c.created_at,
+                       0 AS risk_score, NULL::uuid AS case_id, u.username AS author_username
+                FROM comments c
+                JOIN topics t ON t.id = c.topic_id
+                JOIN users u ON u.id = c.author_id
+                WHERE c.status = 'pending_review' {target_filter}
+                ORDER BY created_at DESC
+                LIMIT $1 OFFSET $2
+                "#
+        ))
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let total = sqlx::query_scalar::<_, i64>(&format!(
+            r#"
+            SELECT
+                (SELECT count(*) FROM topics WHERE status = 'pending_review' {target_filter})
+              + (SELECT count(*) FROM comments WHERE status = 'pending_review' {target_filter})
+            "#
+        ))
+        .fetch_one(&self.pool)
+        .await?;
+        Ok((rows, total))
     }
 
     pub async fn get_user(&self, user_id: Uuid) -> Result<Option<ModUserRow>, sqlx::Error> {

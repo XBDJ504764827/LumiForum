@@ -280,6 +280,10 @@ impl PollService {
         request: VotePollRequest,
     ) -> Result<PollDetail, PollError> {
         require(principal, PERMISSION_POLL_VOTE)?;
+        self.moderation
+            .enforce_content_allowed(principal)
+            .await
+            .map_err(map_moderation)?;
 
         // Resolve the poll up-front for cheap validation before locking.
         let poll = self
