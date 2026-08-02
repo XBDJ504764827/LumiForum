@@ -76,6 +76,7 @@ export function TopicEditor(props: Props) {
           title: values.title,
           content: values.content,
           summary: values.summary || undefined,
+          anonymous: values.anonymous && canAnonymous ? true : undefined,
           poll: pollDraftFromValues(values.poll),
         };
         return createTopic(input);
@@ -118,7 +119,10 @@ export function TopicEditor(props: Props) {
     onError: (error) => form.setError("root", { message: errorMessage(error) }),
   });
   const content = useWatch({ control: form.control, name: "content" });
+  const categoryId = useWatch({ control: form.control, name: "categoryId" });
   const contentField = form.register("content");
+  const selectedCategory = (categories.data ?? []).find((category) => category.id === categoryId);
+  const canAnonymous = Boolean(selectedCategory?.allow_anonymous);
 
   const insertImage = (url: string, originalFilename: string) => {
     const current = form.getValues("content");
@@ -292,6 +296,22 @@ export function TopicEditor(props: Props) {
               >
                 <Textarea id="topic-summary" className="min-h-28" {...form.register("summary")} />
               </Field>
+
+              {props.mode === "create" && canAnonymous ? (
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-white px-3 py-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-4 accent-primary"
+                    {...form.register("anonymous")}
+                  />
+                  <span>
+                    <span className="block font-medium">匿名发布</span>
+                    <span className="block text-xs text-muted-foreground">
+                      你的用户名与头像不会公开展示（管理员仍可查看）
+                    </span>
+                  </span>
+                </label>
+              ) : null}
 
               <Button type="submit" className="w-full gap-2" disabled={mutation.isPending}>
                 {mutation.isPending ? (

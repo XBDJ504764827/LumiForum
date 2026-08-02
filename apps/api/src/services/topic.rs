@@ -132,6 +132,11 @@ impl TopicService {
             .await?;
         let title = normalize_title(request.title)?;
         let content = normalize_content(request.content)?;
+        // Anonymous posting requires a category that opts in (e.g. player reports).
+        let anonymous = request.anonymous;
+        if anonymous && !self.category_allows_anonymous(request.category_id).await? {
+            return Err(TopicError::Validation("该板块不支持匿名发帖"));
+        }
         let summary = match request.summary {
             Some(summary) => normalize_summary(Some(summary))?,
             None => Some(markdown_summary(&content, 240)),
@@ -180,6 +185,7 @@ impl TopicService {
                     content: &content,
                     summary: summary.as_deref(),
                     status,
+                    is_anonymous: anonymous,
                 })
                 .await
             {
@@ -338,6 +344,16 @@ impl TopicService {
         } else {
             Err(TopicError::NotFound)
         }
+    }
+
+    async fn category_allows_anonymous(&self, category_id: Uuid) -> Result<bool, TopicError> {
+        let category = self
+            .categories
+            .find_by_id(category_id)
+            .await
+            .map_err(internal)?
+            .ok_or(TopicError::CategoryUnavailable)?;
+        Ok(category.allow_anonymous)
     }
 
     async fn ensure_category_usable(

@@ -19,6 +19,7 @@ pub struct RepositoryCategory {
     pub sort_order: i32,
     pub is_visible: bool,
     pub restricted_posting: bool,
+    pub allow_anonymous: bool,
     pub topic_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -31,6 +32,8 @@ pub struct NewCategory<'a> {
     pub icon: Option<&'a str>,
     pub sort_order: i32,
     pub is_visible: bool,
+    pub restricted_posting: bool,
+    pub allow_anonymous: bool,
 }
 
 pub struct CategoryUpdate<'a> {
@@ -42,6 +45,8 @@ pub struct CategoryUpdate<'a> {
     pub icon: Option<&'a str>,
     pub sort_order: Option<i32>,
     pub is_visible: Option<bool>,
+    pub restricted_posting: Option<bool>,
+    pub allow_anonymous: Option<bool>,
 }
 
 impl CategoryRepository {
@@ -84,8 +89,8 @@ impl CategoryRepository {
     ) -> Result<RepositoryCategory, sqlx::Error> {
         let id = sqlx::query_scalar::<_, Uuid>(
             r#"
-            INSERT INTO categories (slug, name, description, icon, sort_order, is_visible)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO categories (slug, name, description, icon, sort_order, is_visible, restricted_posting, allow_anonymous)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
             "#,
         )
@@ -114,7 +119,9 @@ impl CategoryRepository {
                 description = CASE WHEN $4 THEN $5 ELSE description END,
                 icon = CASE WHEN $6 THEN $7 ELSE icon END,
                 sort_order = COALESCE($8, sort_order),
-                is_visible = COALESCE($9, is_visible)
+                is_visible = COALESCE($9, is_visible),
+                restricted_posting = COALESCE($10, restricted_posting),
+                allow_anonymous = COALESCE($11, allow_anonymous)
             WHERE id = $1
             RETURNING id
             "#,
@@ -156,6 +163,7 @@ pub fn repository_category_to_response(category: RepositoryCategory) -> Category
         sort_order: category.sort_order,
         is_visible: category.is_visible,
         restricted_posting: category.restricted_posting,
+        allow_anonymous: category.allow_anonymous,
         topic_count: category.topic_count,
         created_at: category.created_at,
         updated_at: category.updated_at,
@@ -172,6 +180,7 @@ const CATEGORY_SELECT: &str = r#"
         categories.sort_order,
         categories.is_visible,
         categories.restricted_posting,
+        categories.allow_anonymous,
         count(topics.id) FILTER (WHERE topics.status = 'published') AS topic_count,
         categories.created_at,
         categories.updated_at
@@ -192,6 +201,7 @@ const CATEGORY_BY_SLUG: &str = r#"
         categories.sort_order,
         categories.is_visible,
         categories.restricted_posting,
+        categories.allow_anonymous,
         count(topics.id) FILTER (WHERE topics.status = 'published') AS topic_count,
         categories.created_at,
         categories.updated_at
@@ -211,6 +221,7 @@ const CATEGORY_BY_ID: &str = r#"
         categories.sort_order,
         categories.is_visible,
         categories.restricted_posting,
+        categories.allow_anonymous,
         count(topics.id) FILTER (WHERE topics.status = 'published') AS topic_count,
         categories.created_at,
         categories.updated_at
