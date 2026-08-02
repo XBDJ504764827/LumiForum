@@ -13,6 +13,8 @@ use crate::repositories::{
     RepositoryTopic, TopicListOptions, TopicModeration, TopicRepository, TopicUpdate,
 };
 
+use crate::services::{ModerationService, PollError, PollService};
+
 use super::category::{generated_slug, normalize_slug};
 
 const DEFAULT_PAGE_SIZE: u32 = 20;
@@ -23,6 +25,8 @@ const MAX_PAGE: u32 = 1_000_000;
 pub struct TopicService {
     topics: TopicRepository,
     categories: CategoryRepository,
+    moderation: ModerationService,
+    polls: PollService,
 }
 
 #[derive(Debug, Error)]
@@ -42,8 +46,18 @@ pub enum TopicError {
 }
 
 impl TopicService {
-    pub fn new(topics: TopicRepository, categories: CategoryRepository) -> Self {
-        Self { topics, categories }
+    pub fn new(
+        topics: TopicRepository,
+        categories: CategoryRepository,
+        moderation: ModerationService,
+        polls: PollService,
+    ) -> Self {
+        Self {
+            topics,
+            categories,
+            moderation,
+            polls,
+        }
     }
 
     pub async fn list_public(
@@ -70,6 +84,7 @@ impl TopicService {
             .topics
             .list(TopicListOptions {
                 category_slug: category_slug.as_deref(),
+                author_id: query.author_id,
                 sort,
                 limit: i64::from(page_size),
                 offset,
@@ -105,6 +120,14 @@ impl TopicService {
         request: CreateTopicRequest,
     ) -> Result<TopicDetail, TopicError> {
         require(principal, PERMISSION_TOPIC_CREATE)?;
+        self.moderation
+            .enforce_topic_creation(principal.user_id)
+            .await
+            .map_err(map_moderation)?;
+        self.moderation
+            .enforce_content_allowed(principal)
+            .await
+            .map_err(map_moderation)?;
         self.ensure_category_usable(principal, request.category_id)
             .await?;
         let title = normalize_title(request.title)?;
@@ -114,6 +137,32 @@ impl TopicService {
             None => Some(markdown_summary(&content, 240)),
         };
         let base_slug = generated_slug(&title, "topic", 200);
+        let draft = request.poll;
+
+        // Auto-moderation screening (reject / rate-limit before persisting).
+        let screening = self
+            .moderation
+            .screen_content(principal, "topic", &title, &content)
+            .await
+            .map_err(map_moderation)?;
+        let mut status = match screening.action {
+            crate::models::RuleAction::Reject => {
+                return Err(TopicError::Validation("内容未通过自动审核，请修改后重试"));
+            }
+            crate::models::RuleAction::RateLimit => {
+                return Err(TopicError::Validation("内容发布过于频繁，请稍后再试"));
+            }
+            crate::models::RuleAction::Hide => "hidden",
+            _ => "published",
+        };
+        // Flagged content (matched a rule) or high-risk content goes to the
+        // human review queue instead of being published immediately.
+        if status == "published"
+            && (screening.action == crate::models::RuleAction::Flag && screening.risk_score > 0
+                || screening.risk_score >= 60)
+        {
+            status = "pending_review";
+        }
 
         for attempt in 0..4 {
             let slug = if attempt == 0 && base_slug != "topic" {
@@ -130,10 +179,50 @@ impl TopicService {
                     slug: &slug,
                     content: &content,
                     summary: summary.as_deref(),
+                    status,
                 })
                 .await
             {
-                Ok(topic) => return to_detail(topic),
+                Ok(topic) => {
+                    if status == "pending_review" {
+                        let _ = self
+                            .moderation
+                            .flag_for_review(principal, "topic", topic.id, screening.risk_score)
+                            .await;
+                    }
+                    // Attach the optional poll atomically; roll back the topic if
+                    // the poll fails so a poll topic never exists without a poll.
+                    if let Some(draft) = draft {
+                        if let Err(error) = self
+                            .polls
+                            .create_for_topic(principal, topic.id, draft)
+                            .await
+                        {
+                            let _ = self.topics.soft_delete(topic.id).await;
+                            return Err(map_poll_error(error));
+                        }
+                    }
+                    // Refetch so the response carries has_poll (poll attached above).
+                    let topic = self
+                        .topics
+                        .find_by_id(topic.id)
+                        .await
+                        .map_err(internal)?
+                        .ok_or_else(|| internal(anyhow::anyhow!("topic disappeared")))?;
+                    if !screening.is_allowed() {
+                        let _ = self
+                            .moderation
+                            .record_screening(
+                                "topic",
+                                topic.id,
+                                principal.user_id,
+                                &screening,
+                                &format!("{title} {content}"),
+                            )
+                            .await;
+                    }
+                    return to_detail(topic);
+                }
                 Err(error) if is_database_code(&error, "23505") => continue,
                 Err(error) if is_database_code(&error, "23503") => {
                     return Err(TopicError::CategoryUnavailable);
@@ -263,6 +352,13 @@ impl TopicService {
             .map_err(internal)?
             .ok_or(TopicError::CategoryUnavailable)?;
         if category.is_visible || principal.has_permission(PERMISSION_CATEGORY_MANAGE) {
+            // Restricted categories (e.g. announcements) require staff rights.
+            if category.restricted_posting
+                && !principal.has_permission(PERMISSION_CATEGORY_MANAGE)
+                && !principal.has_permission(PERMISSION_TOPIC_PIN)
+            {
+                return Err(TopicError::Validation("该板块仅限管理员发布内容"));
+            }
             Ok(())
         } else {
             Err(TopicError::CategoryUnavailable)
@@ -358,6 +454,26 @@ fn map_category_validation(error: super::CategoryError) -> TopicError {
     match error {
         super::CategoryError::Validation(message) => TopicError::Validation(message),
         _ => TopicError::Validation("invalid category slug"),
+    }
+}
+
+fn map_moderation(error: crate::services::ModerationError) -> TopicError {
+    match error {
+        crate::services::ModerationError::Validation(message) => TopicError::Validation(message),
+        crate::services::ModerationError::Forbidden => TopicError::Forbidden,
+        crate::services::ModerationError::RateLimited => {
+            TopicError::Validation("content posting is rate limited")
+        }
+        _ => TopicError::Validation("content was not accepted"),
+    }
+}
+
+fn map_poll_error(error: PollError) -> TopicError {
+    match error {
+        PollError::Validation(message) => TopicError::Validation(message),
+        PollError::Forbidden => TopicError::Forbidden,
+        PollError::PollExists => TopicError::Validation("该帖子已有一个投票"),
+        _ => TopicError::Internal(anyhow::anyhow!("{error}")),
     }
 }
 

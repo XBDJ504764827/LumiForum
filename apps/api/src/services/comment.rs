@@ -13,7 +13,7 @@ use crate::repositories::{
     repository_comment_to_node, CommentRepository, NewComment, NotificationRepository,
     TopicRepository,
 };
-use crate::services::NotificationService;
+use crate::services::{ModerationService, NotificationService};
 
 const DEFAULT_PAGE_SIZE: u32 = 20;
 const MAX_PAGE_SIZE: u32 = 50;
@@ -28,6 +28,7 @@ pub struct CommentService {
     notifications: NotificationService,
     notify_lookup: NotificationRepository,
     redis: ConnectionManager,
+    moderation: ModerationService,
 }
 
 #[derive(Debug, Error)]
@@ -53,6 +54,7 @@ impl CommentService {
         notifications: NotificationService,
         notify_lookup: NotificationRepository,
         redis: ConnectionManager,
+        moderation: ModerationService,
     ) -> Self {
         Self {
             comments,
@@ -60,6 +62,7 @@ impl CommentService {
             notifications,
             notify_lookup,
             redis,
+            moderation,
         }
     }
 
@@ -100,9 +103,38 @@ impl CommentService {
         request: CreateCommentRequest,
     ) -> Result<CommentNode, CommentError> {
         require(principal, PERMISSION_COMMENT_CREATE)?;
+        self.moderation
+            .enforce_comment_creation(principal.user_id, topic_id)
+            .await
+            .map_err(map_moderation)?;
         self.ensure_topic_published(topic_id).await?;
         self.enforce_rate_limit(principal.user_id).await?;
         let content = normalize_content(request.content)?;
+        let decision = self
+            .moderation
+            .screen_content(principal, "comment", "", &content)
+            .await
+            .map_err(map_moderation)?;
+        self.moderation
+            .enforce_content_allowed(principal)
+            .await
+            .map_err(map_moderation)?;
+        let (mut status, collapsed) = match decision.action {
+            crate::models::RuleAction::Reject => {
+                return Err(CommentError::Validation("内容未通过自动审核，请修改后重试"));
+            }
+            crate::models::RuleAction::RateLimit => return Err(CommentError::RateLimited),
+            crate::models::RuleAction::Hide => ("hidden", false),
+            crate::models::RuleAction::Collapse => ("published", true),
+            _ => ("published", false),
+        };
+        // Flagged comments (matched a rule) await human review.
+        if status == "published"
+            && (decision.action == crate::models::RuleAction::Flag && decision.risk_score > 0
+                || decision.risk_score >= 60)
+        {
+            status = "pending_review";
+        }
         let comment = self
             .comments
             .create(NewComment {
@@ -110,9 +142,23 @@ impl CommentService {
                 author_id: principal.user_id,
                 parent_id: None,
                 content: &content,
+                status,
+                is_collapsed: collapsed,
             })
             .await
             .map_err(map_write_error)?;
+        if !decision.is_allowed() {
+            let _ = self
+                .moderation
+                .record_screening(
+                    "comment",
+                    comment.id,
+                    principal.user_id,
+                    &decision,
+                    &content,
+                )
+                .await;
+        }
         self.emit_comment_created(principal.user_id, topic_id, comment.id)
             .await;
         Ok(repository_comment_to_node(comment, Vec::new()))
@@ -138,7 +184,25 @@ impl CommentService {
             ));
         }
         self.ensure_topic_published(parent.topic_id).await?;
+        self.moderation
+            .enforce_reply_creation(principal.user_id, parent.topic_id, parent_id)
+            .await
+            .map_err(map_moderation)?;
         let content = normalize_content(request.content)?;
+        let decision = self
+            .moderation
+            .screen_content(principal, "comment", "", &content)
+            .await
+            .map_err(map_moderation)?;
+        let (status, collapsed) = match decision.action {
+            crate::models::RuleAction::Reject => {
+                return Err(CommentError::Validation("内容未通过自动审核，请修改后重试"));
+            }
+            crate::models::RuleAction::RateLimit => return Err(CommentError::RateLimited),
+            crate::models::RuleAction::Hide => ("hidden", false),
+            crate::models::RuleAction::Collapse => ("published", true),
+            _ => ("published", false),
+        };
         let parent_author_id = parent.author_id;
         let parent_topic_id = parent.topic_id;
         let parent_comment_id = parent.id;
@@ -149,9 +213,23 @@ impl CommentService {
                 author_id: principal.user_id,
                 parent_id: Some(parent.id),
                 content: &content,
+                status,
+                is_collapsed: collapsed,
             })
             .await
             .map_err(map_write_error)?;
+        if !decision.is_allowed() {
+            let _ = self
+                .moderation
+                .record_screening(
+                    "comment",
+                    comment.id,
+                    principal.user_id,
+                    &decision,
+                    &content,
+                )
+                .await;
+        }
         self.emit_comment_replied(
             principal.user_id,
             parent_author_id,
@@ -389,6 +467,15 @@ fn map_write_error(error: sqlx::Error) -> CommentError {
         }
     }
     internal(error)
+}
+
+fn map_moderation(error: crate::services::ModerationError) -> CommentError {
+    match error {
+        crate::services::ModerationError::Validation(message) => CommentError::Validation(message),
+        crate::services::ModerationError::Forbidden => CommentError::Forbidden,
+        crate::services::ModerationError::RateLimited => CommentError::RateLimited,
+        _ => CommentError::Internal(anyhow::anyhow!("moderation rejected comment")),
+    }
 }
 
 fn internal(error: impl Into<anyhow::Error>) -> CommentError {

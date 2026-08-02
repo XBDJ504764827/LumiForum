@@ -121,6 +121,7 @@ export interface CategorySummary {
   slug: string;
   name: string;
   icon: string | null;
+  restricted_posting: boolean;
 }
 
 export interface Category extends CategorySummary {
@@ -146,6 +147,137 @@ export interface TopicStats {
   likes: number;
 }
 
+export type PollStatus = "active" | "closed";
+export type PollType = "standard";
+
+export interface PollOption {
+  id: string;
+  content: string;
+  sort_order: number;
+  vote_count: number;
+}
+
+export interface PollVoter {
+  user_id: string;
+  username: string;
+  nickname: string | null;
+  avatar: string | null;
+  option_id: string;
+}
+
+export interface Poll {
+  id: string;
+  topic_id: string;
+  topic_slug: string;
+  topic_title: string;
+  author_id: string;
+  title: string;
+  description: string | null;
+  poll_type: PollType;
+  status: PollStatus;
+  multiple_choice: boolean;
+  anonymous: boolean;
+  allow_cancel: boolean;
+  max_choices: number;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  options: PollOption[];
+  total_votes: number;
+  participant_count: number;
+  my_votes: string[];
+  can_vote: boolean;
+  can_manage: boolean;
+}
+
+export interface PollResultOption {
+  option_id: string;
+  content: string;
+  vote_count: number;
+  percentage: number;
+}
+
+export interface PollResults {
+  poll_id: string;
+  topic_id: string;
+  topic_slug: string;
+  topic_title: string;
+  title: string;
+  status: PollStatus;
+  multiple_choice: boolean;
+  anonymous: boolean;
+  expires_at: string | null;
+  total_votes: number;
+  participant_count: number;
+  options: PollResultOption[];
+  voters?: PollVoter[];
+}
+
+export interface HotPollItem {
+  poll_id: string;
+  topic_id: string;
+  topic_slug: string;
+  topic_title: string;
+  poll_title: string;
+  participant_count: number;
+  option_count: number;
+  is_closed: boolean;
+  category: CategorySummary;
+  created_at: string;
+}
+
+export interface CreatePollDraft {
+  title: string;
+  description?: string;
+  multiple_choice?: boolean;
+  anonymous?: boolean;
+  allow_cancel?: boolean;
+  max_choices?: number;
+  expires_at?: string | null;
+  options: string[];
+}
+
+export interface VotePollRequest {
+  option_ids: string[];
+}
+
+export interface UpdatePollRequest {
+  title?: string;
+  description?: string | null;
+  expires_at?: string | null;
+  allow_cancel?: boolean;
+  /** New options to append (edit mode). */
+  options_to_add?: string[];
+  /** Existing zero-vote options to remove (edit mode). */
+  option_ids_to_remove?: string[];
+}
+
+export interface AdminPollItem {
+  id: string;
+  topic_id: string;
+  topic_title: string;
+  topic_slug: string;
+  title: string;
+  status: PollStatus;
+  multiple_choice: boolean;
+  anonymous: boolean;
+  max_choices: number;
+  option_count: number;
+  participant_count: number;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  author_id: string;
+  author_username: string;
+}
+
+export interface AdminPollListParams {
+  q?: string;
+  status?: PollStatus | "";
+  page?: number;
+  page_size?: number;
+}
+
 export interface TopicSummary {
   id: string;
   title: string;
@@ -156,6 +288,7 @@ export interface TopicSummary {
   stats: TopicStats;
   is_pinned: boolean;
   is_featured: boolean;
+  has_poll: boolean;
   last_reply_at: string | null;
   created_at: string;
   updated_at: string;
@@ -163,6 +296,8 @@ export interface TopicSummary {
 
 export interface TopicDetail extends TopicSummary {
   content: string;
+  /** published | pending_review | hidden */
+  status: "published" | "pending_review" | "hidden";
   liked_by_me: boolean;
   favorited_by_me: boolean;
   following_author: boolean;
@@ -184,6 +319,8 @@ export type TopicSort = "latest" | "hot" | "featured" | "pinned";
 
 export interface TopicListParams {
   category?: string;
+  /** Restrict to topics authored by this user. */
+  author_id?: string;
   sort?: TopicSort;
   page?: number;
   page_size?: number;
@@ -194,6 +331,7 @@ export interface CreateTopicRequest {
   title: string;
   content: string;
   summary?: string;
+  poll?: CreatePollDraft;
 }
 
 export interface UpdateTopicRequest {
@@ -285,7 +423,23 @@ export type NotificationType =
   | "topic_favorited"
   | "user_followed"
   | "mentioned"
-  | "system_message";
+  | "system_message"
+  | "report_submitted"
+  | "report_processed"
+  | "content_hidden"
+  | "content_deleted"
+  | "topic_locked"
+  | "user_warned"
+  | "user_muted"
+  | "user_banned"
+  | "sanction_expiring"
+  | "sanction_revoked"
+  | "appeal_submitted"
+  | "appeal_approved"
+  | "appeal_rejected"
+  | "moderation_inbox"
+  | "poll_voted"
+  | "poll_ended";
 
 export type NotificationTargetType = "topic" | "comment" | "user" | "system";
 
@@ -337,6 +491,7 @@ export interface SearchParams {
   limit?: number;
   from?: string;
   to?: string;
+  has_poll?: boolean;
 }
 
 export interface SearchAuthor {
@@ -358,6 +513,7 @@ export interface TopicSearchHit {
   stats: TopicStats;
   created_at: string;
   rank: number;
+  has_poll: boolean;
 }
 
 export interface CommentSearchHit {
@@ -434,18 +590,126 @@ export interface HotTopicStat {
   like_count: number;
 }
 
+export type AdminDashboardRange = "today" | "7d" | "30d";
+
+export interface DailyCount {
+  date: string;
+  count: number;
+}
+
+export interface HotCategoryStat {
+  id: string;
+  name: string;
+  slug: string;
+  topic_count: number;
+  comment_count: number;
+}
+
 export interface AdminDashboard {
   users_total: number;
-  topics_total: number;
-  comments_total: number;
-  uploads_total: number;
-  reports_open: number;
   users_today: number;
-  topics_today: number;
+  active_users_today: number;
   active_users_7d: number;
-  registrations_7d: DailyCount[];
-  topics_7d: DailyCount[];
+  online_users: number;
+  topics_total: number;
+  topics_today: number;
+  comments_total: number;
+  comments_today: number;
+  polls_total: number;
+  uploads_total: number;
+  storage_bytes: number;
+  reports_open: number;
+  reports_total: number;
+  api_requests_total: number;
+  ws_connections: number;
+  range: AdminDashboardRange;
+  registrations: DailyCount[];
+  topics: DailyCount[];
+  comments: DailyCount[];
   hot_topics: HotTopicStat[];
+  hot_categories: HotCategoryStat[];
+}
+
+export interface LoginRecordItem {
+  id: string;
+  created_at: string;
+  ip: string | null;
+  user_agent: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface AdminUserDetail {
+  user: AdminUserItem;
+  steam_id: string | null;
+  steam_persona_name: string | null;
+  login_count: number;
+  topics_count: number;
+  comments_count: number;
+  reports_made: number;
+  sanctions_active: number;
+  recent_logins: LoginRecordItem[];
+}
+
+export interface PermissionOption {
+  code: string;
+  name: string;
+  description: string | null;
+  group: string;
+}
+
+export interface RolePermissionView {
+  role_code: string;
+  role_name: string;
+  permissions: string[];
+}
+
+export interface QueueReportItem {
+  id: string;
+  reporter_username: string;
+  target_type: "topic" | "comment" | "user";
+  target_id: string;
+  reason: string;
+  status: string;
+  created_at: string;
+}
+
+export interface QueueCaseItem {
+  id: string;
+  target_type: string;
+  target_id: string;
+  priority: string;
+  source: string;
+  opened_at: string;
+}
+
+export interface QueueSummary {
+  pending_reports: number;
+  reviewing_reports: number;
+  open_cases: number;
+  hidden_topics: number;
+  hidden_comments: number;
+  pending_uploads: number;
+  latest_reports: QueueReportItem[];
+  latest_cases: QueueCaseItem[];
+}
+
+export interface AdminAnalytics {
+  days: number;
+  registrations: DailyCount[];
+  topics: DailyCount[];
+  comments: DailyCount[];
+  polls: DailyCount[];
+  cumulative_users: DailyCount[];
+  hot_categories: HotCategoryStat[];
+  hot_topics: HotTopicStat[];
+}
+
+export interface SystemSettingItem {
+  key: string;
+  value: string | number | boolean;
+  description: string | null;
+  updated_at: string;
 }
 
 export interface AdminUserItem {
@@ -499,6 +763,7 @@ export interface AdminTopicItem {
   like_count: number;
   is_pinned: boolean;
   is_featured: boolean;
+  is_locked: boolean;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -508,6 +773,7 @@ export interface AdminTopicListParams {
   q?: string;
   status?: string;
   category_id?: string;
+  sort?: "latest" | "hot" | "most_reported" | "violating" | "";
   page?: number;
   page_size?: number;
 }
@@ -516,6 +782,7 @@ export interface AdminTopicUpdateRequest {
   status?: string;
   is_pinned?: boolean;
   is_featured?: boolean;
+  is_locked?: boolean;
 }
 
 export interface AdminCommentItem {
@@ -539,6 +806,7 @@ export interface AdminCommentListParams {
   q?: string;
   status?: string;
   topic_id?: string;
+  filter?: "reported" | "high_frequency" | "";
   page?: number;
   page_size?: number;
 }
@@ -599,8 +867,11 @@ export interface ReportItem {
 }
 
 export interface ReportListParams {
-  status?: ReportStatus;
-  target_type?: ReportTargetType;
+  q?: string;
+  status?: ModerationReportStatus | "";
+  target_type?: ModerationTargetType | "";
+  reason?: string;
+  priority?: ReportPriority | "";
   page?: number;
   page_size?: number;
 }
@@ -622,6 +893,7 @@ export interface AdminLogItem {
 export interface AdminLogListParams {
   q?: string;
   action?: string;
+  target_type?: string;
   page?: number;
   page_size?: number;
 }
@@ -642,4 +914,183 @@ export interface UpdateCategoryRequest {
   icon?: string | null;
   sort_order?: number;
   is_visible?: boolean;
+}
+
+export interface UpdateRolePermissionsRequest {
+  permission_codes: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Phase 16: moderation system
+// ---------------------------------------------------------------------------
+
+export type ModerationReportStatus =
+  "open" | "reviewing" | "resolved" | "rejected" | "duplicate" | "cancelled";
+export type ModerationTargetType = "topic" | "comment" | "user" | "file";
+export type ModerationReportReason =
+  | "spam"
+  | "harassment"
+  | "hate_speech"
+  | "violence"
+  | "sexual_content"
+  | "illegal_content"
+  | "privacy_violation"
+  | "misinformation"
+  | "copyright"
+  | "other";
+export type ReportPriority = "low" | "normal" | "high" | "critical";
+
+export interface ReportItemV2 {
+  id: string;
+  reporter_id: string;
+  reporter_username: string;
+  target_type: ModerationTargetType;
+  target_id: string;
+  reason: string;
+  reason_code: string | null;
+  details: string | null;
+  status: ModerationReportStatus;
+  priority: ReportPriority;
+  risk_score: number;
+  handler_id: string | null;
+  handler_username: string | null;
+  resolution_note: string | null;
+  handled_at: string | null;
+  created_at: string;
+  updated_at: string;
+  case_id: string | null;
+  duplicate_of: string | null;
+}
+
+export interface ReportListParams {
+  q?: string;
+  status?: ModerationReportStatus | "";
+  target_type?: ModerationTargetType | "";
+  reason?: string;
+  priority?: ReportPriority | "";
+  page?: number;
+  page_size?: number;
+}
+
+export interface ResolveReportRequestV2 {
+  action?: "hide" | "restore" | "delete" | "lock" | "unlock";
+  action_reason?: string;
+  resolution_note?: string;
+}
+
+export interface ModerationStatus {
+  score: number;
+  reputation: "normal" | "watch" | "restricted";
+}
+
+export interface PendingReviewItem {
+  id: string;
+  target_type: "topic" | "comment";
+  target_id: string;
+  title: string;
+  snippet: string;
+  author_id: string;
+  author_username: string;
+  risk_score: number;
+  case_id: string | null;
+  created_at: string;
+}
+
+export type SanctionType = "warning" | "content_restriction" | "mute" | "suspension" | "ban";
+export type SanctionStatus = "scheduled" | "active" | "expired" | "revoked";
+
+export interface SanctionItem {
+  id: string;
+  user_id: string;
+  username: string;
+  sanction_type: SanctionType;
+  reason: string;
+  user_visible_reason: string | null;
+  internal_note: string | null;
+  restrictions: string[];
+  starts_at: string;
+  ends_at: string | null;
+  is_permanent: boolean;
+  status: SanctionStatus;
+  issued_by: string | null;
+  issuer_username: string | null;
+  case_id: string | null;
+  report_id: string | null;
+  related_content_type: string | null;
+  related_content_id: string | null;
+  revoked_by: string | null;
+  revoked_at: string | null;
+  revoke_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SanctionListParams {
+  status?: string;
+  sanction_type?: string;
+  user_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface CaseItem {
+  id: string;
+  target_type: string;
+  target_id: string;
+  status: string;
+  priority: string;
+  risk_score: number;
+  source: string;
+  assignee_id: string | null;
+  assignee_username: string | null;
+  opened_by: string | null;
+  opened_at: string;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CaseListParams {
+  q?: string;
+  status?: string;
+  priority?: string;
+  source?: string;
+  target_type?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export type RuleType = "keyword" | "url_domain" | "rate" | "new_user";
+export type RuleActionKind = "allow" | "flag" | "hide" | "reject" | "rate_limit" | "collapse";
+
+export interface RuleItem {
+  id: string;
+  name: string;
+  rule_type: RuleType;
+  target_type: string;
+  action: RuleActionKind;
+  risk_score: number;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  hit_count: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RuleListParams {
+  status?: string;
+  rule_type?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface RuleRequest {
+  name: string;
+  rule_type: RuleType;
+  target_type: string;
+  action: RuleActionKind;
+  risk_score?: number;
+  enabled?: boolean;
+  config: Record<string, unknown>;
 }

@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage, Badge, Button, Input } from "@lumi
 import { useQuery } from "@tanstack/react-query";
 import {
   Clock3,
+  BarChart3,
   Flame,
   MessageSquare,
   Search as SearchIcon,
@@ -48,6 +49,7 @@ export function SearchView() {
   const sortParam = (searchParams.get("sort") as SearchSort | null) ?? "relevance";
   const pageParam = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
   const categoryParam = searchParams.get("category_id") ?? "";
+  const hasPollParam = searchParams.get("has_poll");
 
   const [draft, setDraft] = useState(qParam);
   const [draftSource, setDraftSource] = useState(qParam);
@@ -71,8 +73,9 @@ export function SearchView() {
       page: pageParam,
       page_size: PAGE_SIZE,
       category_id: categoryParam || undefined,
+      has_poll: hasPollParam === "true" ? true : hasPollParam === "false" ? false : undefined,
     }),
-    [qParam, typeParam, sortParam, pageParam, categoryParam],
+    [qParam, typeParam, sortParam, pageParam, categoryParam, hasPollParam],
   );
 
   const results = useQuery({
@@ -100,6 +103,7 @@ export function SearchView() {
     sort?: SearchSort;
     page?: number;
     category_id?: string;
+    has_poll?: boolean;
   }) => {
     const query = new URLSearchParams();
     const q = (next.q ?? qParam).trim();
@@ -110,6 +114,11 @@ export function SearchView() {
     if (page > 1) query.set("page", String(page));
     const categoryId = next.category_id ?? categoryParam;
     if (categoryId) query.set("category_id", categoryId);
+    if (next.has_poll === undefined) {
+      if (hasPollParam) query.set("has_poll", hasPollParam);
+    } else {
+      query.set("has_poll", String(next.has_poll));
+    }
     const href = query.size ? `${pathname}?${query}` : pathname;
     router.push(href as Route);
   };
@@ -206,6 +215,23 @@ export function SearchView() {
                   {category.name}
                 </FilterButton>
               ))}
+            </FilterGroup>
+          ) : null}
+
+          {typeParam === "topic" ? (
+            <FilterGroup title="投票">
+              <FilterButton
+                active={!hasPollParam}
+                onClick={() => pushSearch({ has_poll: undefined, page: 1 })}
+              >
+                全部
+              </FilterButton>
+              <FilterButton
+                active={hasPollParam === "true"}
+                onClick={() => pushSearch({ has_poll: true, page: 1 })}
+              >
+                仅看投票帖
+              </FilterButton>
             </FilterGroup>
           ) : null}
         </aside>
@@ -309,6 +335,12 @@ function TopicHit({ item }: { item: TopicSearchHit & { kind: "topic" } }) {
     <article>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Badge className="bg-muted text-foreground">帖子</Badge>
+        {item.has_poll ? (
+          <Badge className="gap-1 bg-primary/10 text-primary">
+            <BarChart3 className="size-3" aria-hidden="true" />
+            投票
+          </Badge>
+        ) : null}
         <Link
           href={`/categories/${item.category.slug}`}
           className="text-xs font-medium text-primary hover:underline"

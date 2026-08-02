@@ -44,13 +44,16 @@ async fn admin_permission_gate_and_user_list_require_admin_access() -> anyhow::R
     .await?;
     assert!(admin_count >= 2);
 
+    // Regular 'user' role must never hold admin.access. Moderators are granted
+    // admin.access by the moderation phase so they can reach /admin/moderation/*,
+    // but every /admin route still enforces its own granular permission.
     let guest_count = sqlx::query_scalar::<_, i64>(
         r#"
         SELECT count(*)
         FROM role_permissions rp
         JOIN roles r ON r.id = rp.role_id
         JOIN permissions p ON p.id = rp.permission_id
-        WHERE p.code = 'admin.access' AND r.code IN ('user', 'moderator')
+        WHERE p.code = 'admin.access' AND r.code = 'user'
         "#,
     )
     .fetch_one(&pool)

@@ -18,7 +18,7 @@ use crate::middleware::{require_permission, AuthorizationLayer};
 use crate::models::{
     AdminCommentListQuery, AdminDashboard, AdminFileListQuery, AdminLogListQuery,
     AdminTopicListQuery, AdminTopicUpdateRequest, AdminUserListQuery, AdminUserUpdateRequest,
-    AuthenticatedPrincipal, CategoryResponse, CreateCategoryRequest, CreateReportRequest,
+    AuthenticatedPrincipal, CategoryResponse, CreateCategoryRequest, CreateReportRequestV2,
     Paginated, ReportListQuery, ResolveReportRequest, UpdateCategoryRequest,
     PERMISSION_ADMIN_ACCESS,
 };
@@ -31,11 +31,19 @@ pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/admin/dashboard", get(dashboard))
         .route("/admin/roles", get(list_roles))
+        .route("/admin/permissions", get(list_permissions))
+        .route(
+            "/admin/roles/{code}/permissions",
+            get(get_role_permissions).put(update_role_permissions),
+        )
         .route("/admin/users", get(list_users))
         .route(
             "/admin/users/{id}",
             get(get_user).patch(update_user).delete(delete_user),
         )
+        .route("/admin/users/{id}/detail", get(get_user_detail))
+        .route("/admin/users/{id}/login-records", get(list_login_records))
+        .route("/admin/users/{id}/force-logout", post(force_logout))
         .route("/admin/topics", get(list_topics))
         .route(
             "/admin/topics/{id}",
@@ -60,6 +68,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/admin/files/{id}", axum::routing::delete(delete_file))
         .route("/admin/reports", get(list_reports))
         .route("/admin/reports/{id}", patch(resolve_report))
+        .route("/admin/polls", get(list_polls))
+        .route("/admin/queue", get(queue_summary))
+        .route("/admin/analytics", get(analytics))
+        .route("/admin/settings", get(list_settings).put(update_settings))
         .route("/admin/logs", get(list_logs))
         .route_layer(middleware::from_fn_with_state(
             AuthorizationLayer::new(state.clone(), PERMISSION_ADMIN_ACCESS),
@@ -79,8 +91,115 @@ pub fn public_report_router(state: AppState) -> Router<AppState> {
 async fn dashboard(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<DashboardQuery>, QueryRejection>,
 ) -> AppResult<Json<ApiResponse<AdminDashboard>>> {
-    let data = state.admin().dashboard(&principal).await?;
+    let query = parse_query(query)?;
+    let range = query.range.unwrap_or_default();
+    let system = crate::models::SystemStats {
+        api_requests_total: state.metrics().counter_value("http_requests_total"),
+        ws_connections: state.realtime().hub().connection_count(),
+        online_users: state.presence().count_online().await,
+    };
+    let data = state.admin().dashboard(&principal, range, system).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+#[derive(Default, serde::Deserialize)]
+struct DashboardQuery {
+    range: Option<crate::models::AdminDashboardRange>,
+}
+
+async fn get_user_detail(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::AdminUserDetail>>> {
+    let user_id = parse_path(path)?;
+    let data = state.admin().get_user_detail(&principal, user_id).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn list_login_records(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+    query: Result<axum::extract::Query<crate::models::AdminLoginRecordQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::Paginated<crate::models::LoginRecordItem>>>> {
+    let user_id = parse_path(path)?;
+    let query = parse_query(query)?;
+    let data = state
+        .admin()
+        .list_login_records(&principal, user_id, query)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn force_logout(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<MessageResponse>>> {
+    let user_id = parse_path(path)?;
+    let audit = crate::services::AdminAuditContext {
+        ip: Some(ipnetwork::IpNetwork::from(addr.ip())),
+        user_agent: headers
+            .get("user-agent")
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_owned()),
+    };
+    state
+        .admin()
+        .force_logout(&principal, user_id, &audit)
+        .await?;
+    Ok(Json(ApiResponse::new(MessageResponse {
+        message: "已强制该用户退出登录",
+    })))
+}
+
+async fn list_permissions(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+) -> AppResult<Json<ApiResponse<Vec<crate::models::PermissionOption>>>> {
+    let data = state.admin().list_permissions(&principal).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn get_role_permissions(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    path: Result<axum::extract::Path<String>, PathRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::RolePermissionView>>> {
+    let role_code = parse_path(path)?;
+    let data = state
+        .admin()
+        .get_role_permissions(&principal, &role_code)
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn update_role_permissions(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<String>, PathRejection>,
+    payload: Result<Json<crate::models::UpdateRolePermissionsRequest>, JsonRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::RolePermissionView>>> {
+    let role_code = parse_path(path)?;
+    let request = parse_json(payload)?;
+    let audit = crate::services::AdminAuditContext {
+        ip: Some(ipnetwork::IpNetwork::from(addr.ip())),
+        user_agent: headers
+            .get("user-agent")
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_owned()),
+    };
+    let data = state
+        .admin()
+        .update_role_permissions(&principal, &role_code, request, &audit)
+        .await?;
     Ok(Json(ApiResponse::new(data)))
 }
 
@@ -372,10 +491,10 @@ async fn cleanup_files(
 async fn create_report(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthenticatedPrincipal>,
-    payload: Result<Json<CreateReportRequest>, JsonRejection>,
-) -> AppResult<(StatusCode, Json<ApiResponse<crate::models::ReportItem>>)> {
+    payload: Result<Json<CreateReportRequestV2>, JsonRejection>,
+) -> AppResult<(StatusCode, Json<ApiResponse<crate::models::ReportItemV2>>)> {
     let data = state
-        .admin()
+        .moderation()
         .create_report(&principal, parse_json(payload)?)
         .await?;
     Ok((StatusCode::CREATED, Json(ApiResponse::new(data))))
@@ -409,6 +528,64 @@ async fn resolve_report(
             parse_json(payload)?,
             &audit_context(addr, &headers),
         )
+        .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn list_polls(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<crate::models::AdminPollListQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::Paginated<crate::models::AdminPollItem>>>> {
+    let query = parse_query(query)?;
+    let data = state.polls().list_admin(&principal, query).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn queue_summary(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+) -> AppResult<Json<ApiResponse<crate::models::QueueSummary>>> {
+    let data = state.admin().queue_summary(&principal).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn analytics(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<crate::models::AdminAnalyticsQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::AdminAnalytics>>> {
+    let query = parse_query(query)?;
+    let data = state.admin().analytics(&principal, query).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn list_settings(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+) -> AppResult<Json<ApiResponse<Vec<crate::models::SystemSettingItem>>>> {
+    let data = state.admin().list_settings(&principal).await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn update_settings(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    payload: Result<Json<crate::models::UpdateSettingsRequest>, JsonRejection>,
+) -> AppResult<Json<ApiResponse<Vec<crate::models::SystemSettingItem>>>> {
+    let request = parse_json(payload)?;
+    let audit = crate::services::AdminAuditContext {
+        ip: Some(ipnetwork::IpNetwork::from(addr.ip())),
+        user_agent: headers
+            .get("user-agent")
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_owned()),
+    };
+    let data = state
+        .admin()
+        .update_settings(&principal, request, &audit)
         .await?;
     Ok(Json(ApiResponse::new(data)))
 }

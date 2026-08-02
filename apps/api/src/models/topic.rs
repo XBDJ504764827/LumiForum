@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{CategorySummary, PatchField, RoleSummary};
+use super::{CategorySummary, CreatePollDraft, PatchField, RoleSummary};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -13,6 +13,7 @@ pub enum TopicStatus {
     Published,
     Hidden,
     Deleted,
+    PendingReview,
 }
 
 impl TopicStatus {
@@ -21,6 +22,7 @@ impl TopicStatus {
             Self::Published => "published",
             Self::Hidden => "hidden",
             Self::Deleted => "deleted",
+            Self::PendingReview => "pending_review",
         }
     }
 }
@@ -33,6 +35,7 @@ impl FromStr for TopicStatus {
             "published" => Ok(Self::Published),
             "hidden" => Ok(Self::Hidden),
             "deleted" => Ok(Self::Deleted),
+            "pending_review" => Ok(Self::PendingReview),
             _ => Err("unknown topic status"),
         }
     }
@@ -100,6 +103,7 @@ pub struct TopicSummary {
     pub last_reply_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub has_poll: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -107,6 +111,8 @@ pub struct TopicDetail {
     pub id: Uuid,
     pub title: String,
     pub slug: String,
+    /// published | pending_review | hidden (viewer-relevant lifecycle state)
+    pub status: String,
     pub content: String,
     pub summary: Option<String>,
     pub category: CategorySummary,
@@ -117,6 +123,7 @@ pub struct TopicDetail {
     pub last_reply_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub has_poll: bool,
     pub liked_by_me: bool,
     pub favorited_by_me: bool,
     pub following_author: bool,
@@ -125,6 +132,8 @@ pub struct TopicDetail {
 #[derive(Default, Deserialize)]
 pub struct TopicListQuery {
     pub category: Option<String>,
+    /// Restrict to topics authored by this user.
+    pub author_id: Option<Uuid>,
     pub sort: Option<TopicListSort>,
     pub page: Option<u32>,
     pub page_size: Option<u32>,
@@ -136,6 +145,9 @@ pub struct CreateTopicRequest {
     pub title: String,
     pub content: String,
     pub summary: Option<String>,
+    /// Optional poll draft — attached atomically after topic creation.
+    #[serde(default)]
+    pub poll: Option<CreatePollDraft>,
 }
 
 #[derive(Default, Deserialize)]

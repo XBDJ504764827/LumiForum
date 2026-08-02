@@ -4,16 +4,19 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::models::{
-    AdminCommentItem, AdminCommentListQuery, AdminDashboard, AdminFileItem, AdminFileListQuery,
-    AdminLogItem, AdminLogListQuery, AdminTopicItem, AdminTopicListQuery, AdminTopicUpdateRequest,
-    AdminUserItem, AdminUserListQuery, AdminUserUpdateRequest, AuthenticatedPrincipal,
-    CategoryResponse, CreateCategoryRequest, CreateReportRequest, Paginated, PaginationMeta,
+    AdminAnalytics, AdminAnalyticsQuery, AdminCommentItem, AdminCommentListQuery, AdminDashboard,
+    AdminDashboardRange, AdminFileItem, AdminFileListQuery, AdminLogItem, AdminLogListQuery,
+    AdminLoginRecordQuery, AdminTopicItem, AdminTopicListQuery, AdminTopicUpdateRequest,
+    AdminUserDetail, AdminUserItem, AdminUserListQuery, AdminUserUpdateRequest,
+    AuthenticatedPrincipal, CategoryResponse, CreateCategoryRequest, CreateReportRequest,
+    LoginRecordItem, Paginated, PaginationMeta, PermissionOption, PublicSettings, QueueSummary,
     ReportItem, ReportListQuery, ReportStatus, ResolveReportRequest, RoleOption,
-    UpdateCategoryRequest, UploadCategory, UserStatus, PERMISSION_ADMIN_ACCESS,
+    RolePermissionView, SystemSettingItem, UpdateCategoryRequest, UpdateRolePermissionsRequest,
+    UpdateSettingsRequest, UploadCategory, UserStatus, PERMISSION_ADMIN_ACCESS,
     PERMISSION_CATEGORY_MANAGE, PERMISSION_COMMENT_MANAGE, PERMISSION_FILE_MANAGE,
-    PERMISSION_REPORT_CREATE, PERMISSION_REPORT_MANAGE, PERMISSION_SYSTEM_MANAGE,
-    PERMISSION_TOPIC_MANAGE, PERMISSION_USER_MANAGE, PERMISSION_USER_ROLE_ASSIGN,
-    ROLE_SUPER_ADMINISTRATOR,
+    PERMISSION_REPORT_CREATE, PERMISSION_REPORT_MANAGE, PERMISSION_SETTINGS_MANAGE,
+    PERMISSION_SYSTEM_MANAGE, PERMISSION_TOPIC_MANAGE, PERMISSION_USER_MANAGE,
+    PERMISSION_USER_ROLE_ASSIGN, ROLE_SUPER_ADMINISTRATOR,
 };
 use crate::repositories::AdminRepository;
 use crate::services::{AuthorizationService, CategoryService, CommentService, UploadService};
@@ -65,9 +68,15 @@ impl AdminService {
     pub async fn dashboard(
         &self,
         principal: &AuthenticatedPrincipal,
+        range: AdminDashboardRange,
+        system: crate::models::SystemStats,
     ) -> Result<AdminDashboard, AdminError> {
         require(principal, PERMISSION_SYSTEM_MANAGE)?;
-        self.repository.dashboard().await.map_err(internal)
+        let mut dashboard = self.repository.dashboard(range).await.map_err(internal)?;
+        dashboard.online_users = system.online_users;
+        dashboard.api_requests_total = system.api_requests_total;
+        dashboard.ws_connections = system.ws_connections;
+        Ok(dashboard)
     }
 
     pub async fn list_users(
@@ -108,6 +117,213 @@ impl AdminService {
             .await
             .map_err(internal)?
             .ok_or(AdminError::NotFound)
+    }
+
+    pub async fn get_user_detail(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        user_id: Uuid,
+    ) -> Result<AdminUserDetail, AdminError> {
+        require(principal, PERMISSION_USER_MANAGE)?;
+        self.repository
+            .user_detail(user_id)
+            .await
+            .map_err(internal)?
+            .ok_or(AdminError::NotFound)
+    }
+
+    pub async fn list_login_records(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        user_id: Uuid,
+        query: AdminLoginRecordQuery,
+    ) -> Result<Paginated<LoginRecordItem>, AdminError> {
+        require(principal, PERMISSION_USER_MANAGE)?;
+        let (page, page_size, limit, offset) = page_bounds(query.page, query.page_size);
+        let (items, total) = self
+            .repository
+            .login_records(user_id, limit, offset)
+            .await
+            .map_err(internal)?;
+        Ok(paginate(items, page, page_size, total))
+    }
+
+    /// Force logout: bump auth_version (kills access tokens) and revoke all
+    /// refresh tokens. Cannot be applied to higher-priority roles.
+    pub async fn force_logout(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        user_id: Uuid,
+        audit: &AdminAuditContext,
+    ) -> Result<(), AdminError> {
+        require(principal, PERMISSION_USER_MANAGE)?;
+        if principal.user_id == user_id {
+            return Err(AdminError::Validation("不能对自己执行强制下线"));
+        }
+        let mut tx = self.repository.pool().begin().await.map_err(internal)?;
+        let actor = self
+            .repository
+            .lock_user(&mut tx, principal.user_id)
+            .await
+            .map_err(internal)?
+            .ok_or(AdminError::Forbidden)?;
+        let target = self
+            .repository
+            .lock_user(&mut tx, user_id)
+            .await
+            .map_err(internal)?
+            .ok_or(AdminError::NotFound)?;
+        if target.role_priority >= actor.role_priority {
+            return Err(AdminError::Forbidden);
+        }
+        tx.commit().await.map_err(internal)?;
+
+        self.repository
+            .force_logout(user_id)
+            .await
+            .map_err(internal)?;
+        self.authorization.invalidate(user_id).await;
+        self.log(
+            principal.user_id,
+            "force_logout",
+            "user",
+            Some(user_id),
+            &format!("force logout user {}", target.username),
+            json!({ "target_username": target.username }),
+            audit,
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn list_permissions(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<PermissionOption>, AdminError> {
+        require_any(
+            principal,
+            &[PERMISSION_USER_MANAGE, PERMISSION_USER_ROLE_ASSIGN],
+        )?;
+        self.repository.list_permissions().await.map_err(internal)
+    }
+
+    pub async fn get_role_permissions(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        role_code: &str,
+    ) -> Result<RolePermissionView, AdminError> {
+        require_any(
+            principal,
+            &[PERMISSION_USER_MANAGE, PERMISSION_USER_ROLE_ASSIGN],
+        )?;
+        let role_code = role_code.trim().to_owned();
+        if role_code.is_empty() {
+            return Err(AdminError::Validation("role is required"));
+        }
+        let (code, permissions) = self
+            .repository
+            .role_permissions(&role_code)
+            .await
+            .map_err(internal)?
+            .ok_or(AdminError::NotFound)?;
+        Ok(RolePermissionView {
+            role_code: code.clone(),
+            role_name: code,
+            permissions,
+        })
+    }
+
+    /// Replace a role's permission set. super_administrator is protected to
+    /// prevent lock-out; lower-priority roles can only manage roles below them.
+    pub async fn update_role_permissions(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        role_code: &str,
+        request: UpdateRolePermissionsRequest,
+        audit: &AdminAuditContext,
+    ) -> Result<RolePermissionView, AdminError> {
+        require(principal, PERMISSION_USER_ROLE_ASSIGN)?;
+        let role_code = role_code.trim().to_owned();
+        if role_code.is_empty() {
+            return Err(AdminError::Validation("role is required"));
+        }
+        if role_code == ROLE_SUPER_ADMINISTRATOR {
+            return Err(AdminError::Forbidden);
+        }
+        // Only roles below the actor's priority are manageable.
+        let actor_role_priority = self
+            .repository
+            .role_priority(
+                &mut self.repository.pool().begin().await.map_err(internal)?,
+                &principal.role,
+            )
+            .await
+            .map_err(internal)?
+            .map(|(_, priority)| priority)
+            .unwrap_or(i16::MAX);
+        let target_priority = self
+            .repository
+            .role_priority(
+                &mut self.repository.pool().begin().await.map_err(internal)?,
+                &role_code,
+            )
+            .await
+            .map_err(internal)?
+            .map(|(_, priority)| priority)
+            .ok_or(AdminError::NotFound)?;
+        if target_priority >= actor_role_priority && principal.role != role_code {
+            return Err(AdminError::Forbidden);
+        }
+
+        let mut codes = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for code in request.permission_codes {
+            let code = code.trim().to_owned();
+            if !code.is_empty() && seen.insert(code.clone()) {
+                codes.push(code);
+            }
+        }
+
+        let updated = self
+            .repository
+            .update_role_permissions(&role_code, &codes)
+            .await
+            .map_err(internal)?;
+        if !updated {
+            return Err(AdminError::NotFound);
+        }
+
+        // Invalidate cached permission snapshots for every user of the role.
+        let user_ids = self
+            .repository
+            .user_ids_by_role(&role_code)
+            .await
+            .map_err(internal)?;
+        for user_id in user_ids {
+            self.authorization.invalidate(user_id).await;
+        }
+
+        let (code, permissions) = self
+            .repository
+            .role_permissions(&role_code)
+            .await
+            .map_err(internal)?
+            .ok_or(AdminError::NotFound)?;
+        self.log(
+            principal.user_id,
+            "role.permissions.update",
+            "role",
+            None,
+            &format!("updated permissions of role {role_code}"),
+            json!({ "role_code": role_code, "permission_codes": codes }),
+            audit,
+        )
+        .await?;
+        Ok(RolePermissionView {
+            role_code: code.clone(),
+            role_name: code,
+            permissions,
+        })
     }
 
     pub async fn list_roles(
@@ -287,12 +503,22 @@ impl AdminService {
                 return Err(AdminError::Validation("invalid topic status filter"));
             }
         }
+        let sort = query
+            .sort
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        if let Some(sort) = sort.as_deref() {
+            if !matches!(sort, "latest" | "hot" | "most_reported" | "violating") {
+                return Err(AdminError::Validation("invalid topic sort"));
+            }
+        }
         let (items, total) = self
             .repository
             .list_topics(
                 q.as_deref(),
                 status.as_deref(),
                 query.category_id,
+                sort.as_deref(),
                 limit,
                 offset,
             )
@@ -309,7 +535,10 @@ impl AdminService {
         audit: &AdminAuditContext,
     ) -> Result<AdminTopicItem, AdminError> {
         require(principal, PERMISSION_TOPIC_MANAGE)?;
-        if request.status.is_none() && request.is_pinned.is_none() && request.is_featured.is_none()
+        if request.status.is_none()
+            && request.is_pinned.is_none()
+            && request.is_featured.is_none()
+            && request.is_locked.is_none()
         {
             return Err(AdminError::Validation("topic update contains no fields"));
         }
@@ -332,10 +561,18 @@ impl AdminService {
                 .ok_or(AdminError::NotFound)?
         };
 
-        if request.is_pinned.is_some() || request.is_featured.is_some() {
+        if request.is_pinned.is_some()
+            || request.is_featured.is_some()
+            || request.is_locked.is_some()
+        {
             topic = self
                 .repository
-                .set_topic_flags(topic_id, request.is_pinned, request.is_featured)
+                .set_topic_flags(
+                    topic_id,
+                    request.is_pinned,
+                    request.is_featured,
+                    request.is_locked,
+                )
                 .await
                 .map_err(internal)?
                 .ok_or(AdminError::NotFound)?;
@@ -351,6 +588,7 @@ impl AdminService {
                 "status": request.status,
                 "is_pinned": request.is_pinned,
                 "is_featured": request.is_featured,
+                "is_locked": request.is_locked,
             }),
             audit,
         )
@@ -371,6 +609,7 @@ impl AdminService {
                 status: Some("deleted".into()),
                 is_pinned: None,
                 is_featured: None,
+                is_locked: None,
             },
             audit,
         )
@@ -390,12 +629,22 @@ impl AdminService {
             .status
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty());
+        let filter = query
+            .filter
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        if let Some(filter) = filter.as_deref() {
+            if !matches!(filter, "reported" | "high_frequency") {
+                return Err(AdminError::Validation("invalid comment filter"));
+            }
+        }
         let (items, total) = self
             .repository
             .list_comments(
                 q.as_deref(),
                 status.as_deref(),
                 query.topic_id,
+                filter.as_deref(),
                 limit,
                 offset,
             )
@@ -709,6 +958,105 @@ impl AdminService {
         Ok(report)
     }
 
+    pub async fn queue_summary(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<QueueSummary, AdminError> {
+        require(principal, PERMISSION_ADMIN_ACCESS)?;
+        self.repository.queue_summary().await.map_err(internal)
+    }
+
+    pub async fn analytics(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        query: AdminAnalyticsQuery,
+    ) -> Result<AdminAnalytics, AdminError> {
+        require(principal, PERMISSION_SYSTEM_MANAGE)?;
+        let days = query.days.unwrap_or(30);
+        if !(1..=90).contains(&days) {
+            return Err(AdminError::Validation("days must be between 1 and 90"));
+        }
+        self.repository.analytics(days).await.map_err(internal)
+    }
+
+    pub async fn list_settings(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<SystemSettingItem>, AdminError> {
+        require(principal, PERMISSION_SETTINGS_MANAGE)?;
+        self.repository.list_settings().await.map_err(internal)
+    }
+
+    /// Update whitelisted system settings. Value types are validated per key.
+    pub async fn update_settings(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: UpdateSettingsRequest,
+        audit: &AdminAuditContext,
+    ) -> Result<Vec<SystemSettingItem>, AdminError> {
+        require(principal, PERMISSION_SETTINGS_MANAGE)?;
+        const WHITELIST: [&str; 7] = [
+            "site_name",
+            "site_description",
+            "registration_enabled",
+            "topic_create_enabled",
+            "comment_enabled",
+            "upload_enabled",
+            "upload_max_bytes",
+        ];
+        let mut updates = Vec::new();
+        for setting in request.settings {
+            let key = setting.key.trim().to_owned();
+            if !WHITELIST.contains(&key.as_str()) {
+                return Err(AdminError::Validation("unknown setting key"));
+            }
+            let valid = match key.as_str() {
+                "site_name" => setting
+                    .value
+                    .as_str()
+                    .is_some_and(|value| !value.trim().is_empty() && value.chars().count() <= 100),
+                "site_description" => setting
+                    .value
+                    .as_str()
+                    .is_some_and(|value| value.chars().count() <= 500),
+                "upload_max_bytes" => setting
+                    .value
+                    .as_i64()
+                    .is_some_and(|value| (1024..=100 * 1024 * 1024).contains(&value)),
+                _ => setting.value.is_boolean(),
+            };
+            if !valid {
+                return Err(AdminError::Validation("invalid setting value type"));
+            }
+            updates.push((key, setting.value));
+        }
+        if updates.is_empty() {
+            return Err(AdminError::Validation("settings update is empty"));
+        }
+        self.repository
+            .upsert_settings(principal.user_id, &updates)
+            .await
+            .map_err(internal)?;
+        self.log(
+            principal.user_id,
+            "settings.update",
+            "system",
+            None,
+            "updated system settings",
+            json!({
+                "keys": updates.iter().map(|(key, _)| key.clone()).collect::<Vec<_>>(),
+            }),
+            audit,
+        )
+        .await?;
+        self.repository.list_settings().await.map_err(internal)
+    }
+
+    /// Public settings snapshot (used by the forum frontend; Redis-cached).
+    pub async fn public_settings(&self) -> Result<PublicSettings, AdminError> {
+        self.repository.public_settings().await.map_err(internal)
+    }
+
     pub async fn list_logs(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -723,7 +1071,13 @@ impl AdminService {
             .filter(|value| !value.is_empty());
         let (items, total) = self
             .repository
-            .list_logs(q.as_deref(), action.as_deref(), limit, offset)
+            .list_logs(
+                q.as_deref(),
+                action.as_deref(),
+                query.target_type.as_deref(),
+                limit,
+                offset,
+            )
             .await
             .map_err(internal)?;
         Ok(paginate(items, page, page_size, total))

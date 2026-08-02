@@ -3,7 +3,9 @@ mod auth;
 mod authorization;
 mod category;
 mod comment;
+mod moderation;
 mod notification;
+mod poll;
 mod reaction;
 mod search;
 mod steam_auth;
@@ -19,7 +21,9 @@ pub use category::{
     RepositoryCategory,
 };
 pub use comment::{repository_comment_to_node, CommentRepository, NewComment, RepositoryComment};
+pub use moderation::{ModCommentRow, ModTopicRow, ModUserRow, ModerationRepository};
 pub use notification::{NewNotification, NotificationListFilter, NotificationRepository};
+pub use poll::{option_item, NewPoll, NewPollOption, PollRepository, PollUpdateError, VoteError};
 pub use reaction::{FollowCounters, ReactionRepository};
 pub use search::{CommentSearchFilter, SearchRepository, TopicSearchFilter, UserSearchFilter};
 pub use steam_auth::{is_unique_violation, SteamAuthRepository};

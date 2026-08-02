@@ -42,6 +42,7 @@ pub struct RoleSummary {
 pub const ROLE_GUEST: &str = "guest";
 pub const ROLE_USER: &str = "user";
 pub const ROLE_MODERATOR: &str = "moderator";
+pub const ROLE_SENIOR_MODERATOR: &str = "senior_moderator";
 pub const ROLE_ADMINISTRATOR: &str = "administrator";
 pub const ROLE_SUPER_ADMINISTRATOR: &str = "super_administrator";
 
@@ -55,6 +56,8 @@ pub const PERMISSION_TOPIC_DELETE_SELF: &str = "topic.delete:self";
 pub const PERMISSION_TOPIC_DELETE_ANY: &str = "topic.delete:any";
 pub const PERMISSION_TOPIC_PIN: &str = "topic.pin";
 pub const PERMISSION_TOPIC_FEATURE: &str = "topic.feature";
+pub const PERMISSION_POLL_VOTE: &str = "poll.vote";
+pub const PERMISSION_POLL_MANAGE: &str = "poll.manage";
 pub const PERMISSION_COMMENT_CREATE: &str = "comment.create";
 pub const PERMISSION_COMMENT_REPLY: &str = "comment.reply";
 pub const PERMISSION_COMMENT_UPDATE_SELF: &str = "comment.update:self";
@@ -80,6 +83,27 @@ pub const PERMISSION_FILE_MANAGE: &str = "file.manage";
 pub const PERMISSION_REPORT_MANAGE: &str = "report.manage";
 pub const PERMISSION_REPORT_CREATE: &str = "report.create";
 pub const PERMISSION_SYSTEM_MANAGE: &str = "system.manage";
+pub const PERMISSION_SETTINGS_MANAGE: &str = "settings.manage";
+
+// Phase 13: community moderation permissions
+pub const PERMISSION_MODERATION_REPORT_READ: &str = "moderation.report.read";
+pub const PERMISSION_MODERATION_REPORT_REVIEW: &str = "moderation.report.review";
+pub const PERMISSION_MODERATION_REPORT_ASSIGN: &str = "moderation.report.assign";
+pub const PERMISSION_MODERATION_CONTENT_HIDE: &str = "moderation.content.hide";
+pub const PERMISSION_MODERATION_CONTENT_RESTORE: &str = "moderation.content.restore";
+pub const PERMISSION_MODERATION_CONTENT_DELETE: &str = "moderation.content.delete";
+pub const PERMISSION_MODERATION_TOPIC_LOCK: &str = "moderation.topic.lock";
+pub const PERMISSION_MODERATION_TOPIC_MOVE: &str = "moderation.topic.move";
+pub const PERMISSION_MODERATION_USER_WARN: &str = "moderation.user.warn";
+pub const PERMISSION_MODERATION_USER_MUTE: &str = "moderation.user.mute";
+pub const PERMISSION_MODERATION_USER_SUSPEND: &str = "moderation.user.suspend";
+pub const PERMISSION_MODERATION_USER_BAN: &str = "moderation.user.ban";
+pub const PERMISSION_MODERATION_SANCTION_REVOKE: &str = "moderation.sanction.revoke";
+pub const PERMISSION_MODERATION_APPEAL_READ: &str = "moderation.appeal.read";
+pub const PERMISSION_MODERATION_APPEAL_REVIEW: &str = "moderation.appeal.review";
+pub const PERMISSION_MODERATION_RULE_MANAGE: &str = "moderation.rule.manage";
+pub const PERMISSION_MODERATION_AUDIT_READ: &str = "moderation.audit.read";
+pub const PERMISSION_MODERATION_METRICS_READ: &str = "moderation.metrics.read";
 
 #[derive(Clone)]
 pub struct AuthenticatedPrincipal {

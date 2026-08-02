@@ -54,11 +54,13 @@ struct FavoriteRow {
     category_name: String,
     category_icon: Option<String>,
     category_is_visible: bool,
+    category_restricted_posting: bool,
     author_username: String,
     author_nickname: Option<String>,
     author_avatar: Option<String>,
     author_role_code: String,
     author_role_name: String,
+    has_poll: bool,
 }
 
 impl ReactionRepository {
@@ -433,11 +435,13 @@ impl ReactionRepository {
                 c.name AS category_name,
                 c.icon AS category_icon,
                 c.is_visible AS category_is_visible,
+                c.restricted_posting AS category_restricted_posting,
                 u.username AS author_username,
                 u.nickname AS author_nickname,
                 u.avatar_url AS author_avatar,
                 r.code AS author_role_code,
-                r.name AS author_role_name
+                r.name AS author_role_name,
+                EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = t.id) AS has_poll
             FROM favorites f
             JOIN topics t ON t.id = f.topic_id
             JOIN categories c ON c.id = t.category_id
@@ -482,11 +486,13 @@ impl ReactionRepository {
                     category_name: row.category_name,
                     category_icon: row.category_icon,
                     category_is_visible: row.category_is_visible,
+                    category_restricted_posting: row.category_restricted_posting,
                     author_username: row.author_username,
                     author_nickname: row.author_nickname,
                     author_avatar: row.author_avatar,
                     author_role_code: row.author_role_code,
                     author_role_name: row.author_role_name,
+                    has_poll: row.has_poll,
                 }),
             })
             .collect();

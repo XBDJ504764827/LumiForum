@@ -18,6 +18,7 @@ pub struct RepositoryCategory {
     pub icon: Option<String>,
     pub sort_order: i32,
     pub is_visible: bool,
+    pub restricted_posting: bool,
     pub topic_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -154,6 +155,7 @@ pub fn repository_category_to_response(category: RepositoryCategory) -> Category
         icon: category.icon,
         sort_order: category.sort_order,
         is_visible: category.is_visible,
+        restricted_posting: category.restricted_posting,
         topic_count: category.topic_count,
         created_at: category.created_at,
         updated_at: category.updated_at,
@@ -169,6 +171,7 @@ const CATEGORY_SELECT: &str = r#"
         categories.icon,
         categories.sort_order,
         categories.is_visible,
+        categories.restricted_posting,
         count(topics.id) FILTER (WHERE topics.status = 'published') AS topic_count,
         categories.created_at,
         categories.updated_at
@@ -188,6 +191,7 @@ const CATEGORY_BY_SLUG: &str = r#"
         categories.icon,
         categories.sort_order,
         categories.is_visible,
+        categories.restricted_posting,
         count(topics.id) FILTER (WHERE topics.status = 'published') AS topic_count,
         categories.created_at,
         categories.updated_at
@@ -206,6 +210,7 @@ const CATEGORY_BY_ID: &str = r#"
         categories.icon,
         categories.sort_order,
         categories.is_visible,
+        categories.restricted_posting,
         count(topics.id) FILTER (WHERE topics.status = 'published') AS topic_count,
         categories.created_at,
         categories.updated_at

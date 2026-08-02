@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { ReportButton } from "@/components/forum/report-button";
 import { MarkdownContent } from "@/components/forum/markdown-content";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
@@ -214,6 +215,7 @@ function CommentItem({
                 回复
               </Button>
             ) : null}
+            <ReportButton targetType="comment" targetId={comment.id} />
             {canEdit ? (
               <>
                 <Button

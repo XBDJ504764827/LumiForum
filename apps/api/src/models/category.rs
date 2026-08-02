@@ -17,12 +17,14 @@ pub struct CategoryRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CategorySummary {
     pub id: Uuid,
     pub slug: String,
     pub name: String,
     pub icon: Option<String>,
+    /// Only staff (moderator+) may post in this category.
+    pub restricted_posting: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -34,6 +36,7 @@ pub struct CategoryResponse {
     pub icon: Option<String>,
     pub sort_order: i32,
     pub is_visible: bool,
+    pub restricted_posting: bool,
     pub topic_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

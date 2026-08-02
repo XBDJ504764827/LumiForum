@@ -1,6 +1,6 @@
 use axum::{
     extract::{Request, State},
-    http::header::ORIGIN,
+    http::{header::ORIGIN, Method},
     middleware::Next,
     response::Response,
 };
@@ -24,6 +24,23 @@ pub async fn enforce_origin(
     next: Next,
 ) -> AppResult<Response> {
     if !origin_matches(&request, &layer.allowed_origin) {
+        return Err(AppError::CsrfValidationFailed);
+    }
+    Ok(next.run(request).await)
+}
+
+/// Require an exact Origin only for state-changing methods. This protects
+/// bearer-token admin APIs while keeping GET requests usable by server-side clients.
+pub async fn enforce_mutation_origin(
+    State(layer): State<CsrfLayer>,
+    request: Request,
+    next: Next,
+) -> AppResult<Response> {
+    if !matches!(
+        request.method(),
+        &Method::GET | &Method::HEAD | &Method::OPTIONS
+    ) && !origin_matches(&request, &layer.allowed_origin)
+    {
         return Err(AppError::CsrfValidationFailed);
     }
     Ok(next.run(request).await)

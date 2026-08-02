@@ -47,6 +47,7 @@ export function getCategory(slug: string): Promise<Category> {
 export function listTopics(params: TopicListParams = {}): Promise<Paginated<TopicSummary>> {
   const query = new URLSearchParams();
   if (params.category) query.set("category", params.category);
+  if (params.author_id) query.set("author_id", params.author_id);
   if (params.sort) query.set("sort", params.sort);
   if (params.page) query.set("page", String(params.page));
   if (params.page_size) query.set("page_size", String(params.page_size));
@@ -245,7 +246,7 @@ export async function listFollowing(
   );
 }
 
-async function optionalAuthHeaders(): Promise<HeadersInit> {
+export async function optionalAuthHeaders(): Promise<HeadersInit> {
   try {
     const token = await sessionAccessToken();
     return { authorization: `Bearer ${token}` };

@@ -219,8 +219,24 @@ function typeLabel(type: Notification["type"]): string {
     user_followed: "关注",
     mentioned: "提及",
     system_message: "系统",
+    report_submitted: "举报",
+    report_processed: "举报处理",
+    content_hidden: "内容隐藏",
+    content_deleted: "内容删除",
+    topic_locked: "帖子锁定",
+    user_warned: "警告",
+    user_muted: "禁言",
+    user_banned: "封禁",
+    sanction_expiring: "处罚即将到期",
+    sanction_revoked: "处罚撤销",
+    appeal_submitted: "申诉",
+    appeal_approved: "申诉通过",
+    appeal_rejected: "申诉驳回",
+    moderation_inbox: "审核",
+    poll_voted: "投票",
+    poll_ended: "投票结束",
   };
-  return map[type];
+  return map[type] ?? "通知";
 }
 
 function formatDate(value: string): string {

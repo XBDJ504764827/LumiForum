@@ -102,7 +102,11 @@ export function AdminUsersView() {
         {users.data.items.map((user) => (
           <tr key={user.id}>
             <td className="px-3 py-3">
-              <div className="font-medium">{user.nickname || user.username}</div>
+              <div className="font-medium">
+                <a href={`/admin/users/${user.id}`} className="hover:text-primary">
+                  {user.nickname || user.username}
+                </a>
+              </div>
               <div className="text-muted-foreground">
                 @{user.username} · {user.email}
               </div>
