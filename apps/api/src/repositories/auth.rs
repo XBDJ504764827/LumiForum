@@ -10,6 +10,18 @@ pub struct AuthRepository {
     pool: PgPool,
 }
 
+impl AuthRepository {
+    /// Read a system setting value (falls back to the default when absent).
+    pub async fn setting_bool(&self, key: &str, default: bool) -> Result<bool, sqlx::Error> {
+        let value: Option<serde_json::Value> =
+            sqlx::query_scalar("SELECT value FROM system_settings WHERE key = $1")
+                .bind(key)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(value.and_then(|value| value.as_bool()).unwrap_or(default))
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum RefreshRotation {
     Rotated,
