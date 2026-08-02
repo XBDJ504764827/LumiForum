@@ -12,6 +12,8 @@ pub enum CommentStatus {
     #[default]
     Published,
     Deleted,
+    Hidden,
+    PendingReview,
 }
 
 impl CommentStatus {
@@ -19,6 +21,8 @@ impl CommentStatus {
         match self {
             Self::Published => "published",
             Self::Deleted => "deleted",
+            Self::Hidden => "hidden",
+            Self::PendingReview => "pending_review",
         }
     }
 }
@@ -27,6 +31,18 @@ impl FromStr for CommentStatus {
     type Err = &'static str;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "published" => Ok(Self::Published),
+            "deleted" => Ok(Self::Deleted),
+            "hidden" => Ok(Self::Hidden),
+            "pending_review" => Ok(Self::PendingReview),
+            _ => Err("unknown comment status"),
+        }
+    }
+}
+
+impl CommentStatus {
+    pub fn from_legacy(value: &str) -> Result<Self, &'static str> {
         match value {
             "published" => Ok(Self::Published),
             "deleted" => Ok(Self::Deleted),

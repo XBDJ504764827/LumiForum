@@ -13,8 +13,9 @@ use crate::models::{
     AppealItem, AppealListQuery, AppealStatus, AppealType, AuthenticatedPrincipal, CaseDetail,
     CaseItem, CaseQuery, CaseSource, CaseStatus, ContentActionResult, CreateAppealRequest,
     CreateReportRequestV2, CreateSanctionRequest, GovernanceMetrics, ModerationActionKind,
-    ModerationReportQuery, NoteRequest, Paginated, PaginationMeta, ReportItemV2, ReportPriority,
-    ReportStatus, ReportTargetType, ResolveReportRequestV2, ReviewAppealRequest,
+    ModerationReportQuery, ModerationStatus, NoteRequest, Paginated, PaginationMeta,
+    PendingReviewItem, PendingReviewQuery, ReportItemV2, ReportPriority, ReportStatus,
+    ReportTargetType, ResolveReportRequestV2, ReviewAppealRequest, ReviewRequest,
     RevokeSanctionRequest, RuleAction, RuleItem, RuleListQuery, RuleRequest, RuleType,
     SanctionItem, SanctionListQuery, SanctionStatus, SanctionType,
     PERMISSION_MODERATION_APPEAL_READ, PERMISSION_MODERATION_APPEAL_REVIEW,
@@ -27,7 +28,8 @@ use crate::models::{
     PERMISSION_MODERATION_USER_BAN, PERMISSION_MODERATION_USER_MUTE,
     PERMISSION_MODERATION_USER_SUSPEND, PERMISSION_MODERATION_USER_WARN, PERMISSION_REPORT_CREATE,
     PERMISSION_TOPIC_PIN, RESTRICTION_NO_COMMENTS, RESTRICTION_NO_REPORTS, RESTRICTION_NO_TOPICS,
-    RESTRICTION_NO_UPLOADS, ROLE_SUPER_ADMINISTRATOR,
+    RESTRICTION_NO_UPLOADS, ROLE_ADMINISTRATOR, ROLE_MODERATOR, ROLE_SENIOR_MODERATOR,
+    ROLE_SUPER_ADMINISTRATOR,
 };
 use crate::realtime::RealtimeBus;
 use crate::repositories::{AdminRepository, CategoryRepository, ModerationRepository};
@@ -329,6 +331,24 @@ impl ModerationService {
                 if user.status != "active" {
                     return Err(ModerationError::Validation(
                         "the target user is no longer reportable",
+                    ));
+                }
+            }
+            crate::models::ReportTargetType::File => {
+                let (owner_id, status) = self
+                    .repository
+                    .get_upload(target_id)
+                    .await
+                    .map_err(internal)?
+                    .ok_or(ModerationError::NotFound)?;
+                if owner_id == principal.user_id {
+                    return Err(ModerationError::Validation(
+                        "you cannot report your own upload",
+                    ));
+                }
+                if status != "ready" {
+                    return Err(ModerationError::Validation(
+                        "the target file is no longer reportable",
                     ));
                 }
             }
@@ -908,6 +928,11 @@ impl ModerationService {
                         "user targets cannot be handled with a content action",
                     ));
                 }
+                crate::models::ReportTargetType::File => {
+                    return Err(ModerationError::Validation(
+                        "file targets cannot be handled with a content action",
+                    ));
+                }
             };
             if action_result.case_id.is_some() {
                 // link case to report
@@ -960,6 +985,25 @@ impl ModerationService {
 
         // Auto-close the case when no open reports remain.
         self.maybe_close_case(report.case_id).await?;
+
+        // Confirmed violation: the target author earns violation points.
+        if let Some(action) = request.action {
+            if matches!(
+                action,
+                crate::models::ModerationActionKind::Hide
+                    | crate::models::ModerationActionKind::Delete
+            ) {
+                if let Ok(Some(author_id)) = self
+                    .repository
+                    .get_target_author(report.target_type.as_str(), report.target_id)
+                    .await
+                {
+                    let _ = self
+                        .add_violation_score(author_id, 10, "report_confirmed")
+                        .await;
+                }
+            }
+        }
 
         self.notify_reporter(
             report.reporter_id,
@@ -1984,6 +2028,17 @@ impl ModerationService {
             "moderation_actions_total",
             &[("action", "sanction"), ("target_type", "user")],
         );
+
+        // Violation score by sanction type.
+        let points = match request.sanction_type {
+            SanctionType::Warning => 20,
+            SanctionType::Mute => 50,
+            SanctionType::Ban | SanctionType::Suspension => 100,
+            SanctionType::ContentRestriction => 30,
+        };
+        let _ = self
+            .add_violation_score(user_id, points, "sanction_issued")
+            .await;
         self.notify_sanctioned_user(user_id, &request.sanction_type, sanction_id, ends_at)
             .await;
         self.repository
@@ -2275,6 +2330,11 @@ impl ModerationService {
         title: &str,
         content: &str,
     ) -> Result<ScreeningDecision, ModerationError> {
+        // Moderators and above are exempt from automatic content screening so
+        // staff can always publish (rate limits still apply via services).
+        if is_staff_role(&principal.role) {
+            return Ok(ScreeningDecision::default());
+        }
         let rules = self.cached_rules().await?;
         let user = self
             .repository
@@ -3133,7 +3193,8 @@ impl ModerationService {
         }
         let risk_score = request.risk_score.unwrap_or(5).clamp(1, 100);
         let priority = request.priority.unwrap_or(0).max(0);
-        let config = request.config.unwrap_or_else(|| json!({}));
+        let mut config = request.config.unwrap_or_else(|| json!({}));
+        validate_rule_config(request.rule_type, &mut config)?;
         let id = self
             .repository
             .create_rule(
@@ -3275,6 +3336,319 @@ impl ModerationService {
             return Err(ModerationError::Validation("你的账号当前被限制发布内容"));
         }
         Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 16: violation score / reputation / pending review
+    // ------------------------------------------------------------------
+
+    /// Score + reputation of a user (None when unknown).
+    pub async fn user_moderation_status(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<ModerationStatus>, ModerationError> {
+        Ok(self
+            .repository
+            .get_user_moderation(user_id)
+            .await
+            .map_err(internal)?
+            .map(|(score, reputation)| ModerationStatus { score, reputation }))
+    }
+
+    /// Restricted accounts lose posting / voting / upload privileges.
+    pub async fn enforce_content_allowed(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<(), ModerationError> {
+        self.enforce_upload_allowed(principal.user_id).await
+    }
+
+    pub async fn enforce_upload_allowed(&self, user_id: Uuid) -> Result<(), ModerationError> {
+        let Some((_score, reputation)) = self
+            .repository
+            .get_user_moderation(user_id)
+            .await
+            .map_err(internal)?
+        else {
+            return Ok(());
+        };
+        if reputation == "restricted" {
+            return Err(ModerationError::Validation(
+                "你的账号因多次违规被限制，无法执行该操作",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Add violation points and notify when reputation degrades.
+    pub async fn add_violation_score(
+        &self,
+        user_id: Uuid,
+        points: i32,
+        reason: &str,
+    ) -> Result<(i32, String), ModerationError> {
+        let (score, reputation) = self
+            .repository
+            .add_violation_score(user_id, points)
+            .await
+            .map_err(internal)?;
+        if reputation == "restricted" && points > 0 {
+            let _ = self
+                .notifications
+                .send(crate::repositories::NewNotification {
+                    user_id,
+                    actor_id: None,
+                    notification_type: crate::models::NotificationType::SystemMessage,
+                    title: "账号功能受限",
+                    content: "由于多次违规，你的账号已被限制发帖、评论、投票与上传功能",
+                    target_type: Some(crate::models::NotificationTargetType::User),
+                    target_id: Some(user_id),
+                    metadata: json!({
+                        "score": score,
+                        "reputation": reputation,
+                        "href": "/profile",
+                    }),
+                    dedup_key: Some("reputation_restricted"),
+                })
+                .await;
+        }
+        tracing::info!(%user_id, %points, %reason, "violation score updated");
+        Ok((score, reputation))
+    }
+
+    /// Route auto-flagged content into the review queue.
+    pub async fn flag_for_review(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        target_type: &str,
+        target_id: Uuid,
+        risk_score: i32,
+    ) -> Result<(), ModerationError> {
+        let priority = if risk_score >= 80 { "high" } else { "normal" };
+        let _ = self
+            .repository
+            .create_case(
+                target_type,
+                target_id,
+                priority,
+                risk_score,
+                "auto_flag",
+                Some(principal.user_id),
+            )
+            .await
+            .map_err(internal)?;
+        self.metrics.inc(
+            "moderation_auto_rules_triggered_total",
+            &[("source", "auto_flag")],
+        );
+        Ok(())
+    }
+
+    /// Pending-review queue (topics + comments awaiting human review).
+    pub async fn list_pending_reviews(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        query: PendingReviewQuery,
+    ) -> Result<Paginated<PendingReviewItem>, ModerationError> {
+        require(principal, PERMISSION_MODERATION_CONTENT_HIDE)?;
+        let page = query.page.unwrap_or(1);
+        let page_size = query.page_size.unwrap_or(20);
+        if page == 0 || page > 1_000_000 {
+            return Err(ModerationError::Validation("page is out of range"));
+        }
+        if page_size == 0 || page_size > 100 {
+            return Err(ModerationError::Validation(
+                "page size must be between 1 and 100",
+            ));
+        }
+        let target_type = query
+            .target_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let offset = i64::from(page - 1) * i64::from(page_size);
+        let (rows, total) = self
+            .repository
+            .list_pending_reviews(target_type, i64::from(page_size), offset)
+            .await
+            .map_err(internal)?;
+        let items = rows
+            .into_iter()
+            .map(|row| {
+                let title = if row.target_type == "topic" {
+                    row.title
+                } else {
+                    format!("评论于《{}》", row.title)
+                };
+                PendingReviewItem {
+                    id: row.id,
+                    target_type: row.target_type,
+                    target_id: row.id,
+                    title,
+                    snippet: row.snippet,
+                    author_id: row.author_id,
+                    author_username: row.author_username,
+                    risk_score: row.risk_score,
+                    case_id: row.case_id,
+                    created_at: row.created_at,
+                }
+            })
+            .collect();
+        let total =
+            u64::try_from(total).map_err(|_| internal(anyhow::anyhow!("negative review count")))?;
+        Ok(Paginated {
+            items,
+            pagination: PaginationMeta::new(page, page_size, total),
+        })
+    }
+
+    /// Approve or reject pending-review content.
+    /// approve -> published; reject -> hidden (+violation points).
+    pub async fn review_content(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        target_type: &str,
+        target_id: Uuid,
+        approve: bool,
+        request: ReviewRequest,
+        audit: &AdminAuditContext,
+    ) -> Result<ModerationStatus, ModerationError> {
+        require(principal, PERMISSION_MODERATION_CONTENT_HIDE)?;
+        if !matches!(target_type, "topic" | "comment") {
+            return Err(ModerationError::Validation("unsupported target type"));
+        }
+        let target_status = if approve { "published" } else { "hidden" };
+        let changed = self
+            .repository
+            .set_content_status(target_type, target_id, target_status)
+            .await
+            .map_err(internal)?;
+        if !changed {
+            return Err(ModerationError::NotFound);
+        }
+        let note = request
+            .note
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+
+        // Close any open auto-flag case.
+        if let Ok(Some(case)) = self.repository.find_open_case(target_type, target_id).await {
+            let _ = self.repository.close_case(case).await;
+        }
+
+        // Resolve target author + notify.
+        if let Ok(Some(author_id)) = self
+            .repository
+            .get_target_author(target_type, target_id)
+            .await
+        {
+            if author_id != principal.user_id {
+                let _ = self
+                    .notifications
+                    .send(crate::repositories::NewNotification {
+                        user_id: author_id,
+                        actor_id: Some(principal.user_id),
+                        notification_type: crate::models::NotificationType::ContentHidden,
+                        title: if approve {
+                            "内容已通过审核"
+                        } else {
+                            "内容未通过审核"
+                        },
+                        content: if approve {
+                            "你发布的内容已通过人工审核并发布"
+                        } else {
+                            "你发布的内容未通过人工审核，已被隐藏"
+                        },
+                        target_type: Some(crate::models::NotificationTargetType::Topic),
+                        target_id: Some(target_id),
+                        metadata: json!({
+                            "target_type": target_type,
+                            "target_id": target_id,
+                            "href": format!("/topics/{target_id}"),
+                        }),
+                        dedup_key: Some(if approve {
+                            "review_approved"
+                        } else {
+                            "review_rejected"
+                        }),
+                    })
+                    .await;
+                // Rejection carries violation points.
+                if !approve {
+                    let (score, reputation) = self
+                        .add_violation_score(author_id, 10, "pending_review_rejected")
+                        .await?;
+                    self.log_moderation_action(
+                        principal,
+                        if approve {
+                            "review.approve"
+                        } else {
+                            "review.reject"
+                        },
+                        target_type,
+                        Some(target_id),
+                        &format!(
+                            "{} pending content {}",
+                            if approve { "approved" } else { "rejected" },
+                            target_id
+                        ),
+                        note.clone().unwrap_or_default(),
+                        audit,
+                    )
+                    .await?;
+                    return Ok(ModerationStatus { score, reputation });
+                }
+            }
+        }
+
+        self.log_moderation_action(
+            principal,
+            if approve {
+                "review.approve"
+            } else {
+                "review.reject"
+            },
+            target_type,
+            Some(target_id),
+            &format!(
+                "{} pending content {}",
+                if approve { "approved" } else { "rejected" },
+                target_id
+            ),
+            note.clone().unwrap_or_default(),
+            audit,
+        )
+        .await?;
+        Ok(ModerationStatus {
+            score: 0,
+            reputation: "normal".into(),
+        })
+    }
+
+    async fn log_moderation_action(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        action: &str,
+        target_type: &str,
+        target_id: Option<Uuid>,
+        summary: &str,
+        note: String,
+        audit: &AdminAuditContext,
+    ) -> Result<(), ModerationError> {
+        self.admin_logs
+            .insert_log(
+                None,
+                principal.user_id,
+                action,
+                target_type,
+                target_id,
+                summary,
+                json!({ "note": note }),
+                audit.ip,
+                audit.user_agent.as_deref(),
+            )
+            .await
+            .map_err(internal)
     }
 
     pub async fn enforce_comment_creation(
@@ -3711,6 +4085,96 @@ fn internal(error: impl Into<anyhow::Error>) -> ModerationError {
 }
 
 // --- auto-moderation text helpers ---
+
+fn is_staff_role(role: &str) -> bool {
+    matches!(
+        role,
+        ROLE_MODERATOR | ROLE_SENIOR_MODERATOR | ROLE_ADMINISTRATOR | ROLE_SUPER_ADMINISTRATOR
+    )
+}
+
+/// Rules with empty/broken configs would behave unexpectedly (e.g. an empty
+/// keyword list matching everything). Validate before persisting.
+fn validate_rule_config(
+    rule_type: RuleType,
+    config: &mut serde_json::Value,
+) -> Result<(), ModerationError> {
+    match rule_type {
+        RuleType::Keyword => {
+            let keywords = config
+                .get("keywords")
+                .and_then(|value| value.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str())
+                        .map(|value| value.trim().to_owned())
+                        .filter(|value| !value.is_empty())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            if keywords.is_empty() {
+                return Err(ModerationError::Validation(
+                    "keyword rule requires at least one non-empty keyword",
+                ));
+            }
+            config["keywords"] = serde_json::json!(keywords);
+        }
+        RuleType::UrlDomain => {
+            let domains = config
+                .get("domains")
+                .and_then(|value| value.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str())
+                        .map(|value| value.trim().to_owned())
+                        .filter(|value| !value.is_empty())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            if domains.is_empty() {
+                return Err(ModerationError::Validation(
+                    "url_domain rule requires at least one domain",
+                ));
+            }
+            config["domains"] = serde_json::json!(domains);
+        }
+        RuleType::Rate => {
+            let limit = config
+                .get("limit")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(0);
+            if limit < 1 {
+                return Err(ModerationError::Validation("rate rule requires limit >= 1"));
+            }
+        }
+        RuleType::Duplicate => {
+            let window = config
+                .get("window_secs")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(3600);
+            if window < 60 {
+                return Err(ModerationError::Validation(
+                    "duplicate rule requires window_secs >= 60",
+                ));
+            }
+        }
+        RuleType::HighFrequency => {
+            let limit = config
+                .get("limit")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(0);
+            if limit < 1 {
+                return Err(ModerationError::Validation(
+                    "high_frequency rule requires limit >= 1",
+                ));
+            }
+        }
+        RuleType::NewUser => {}
+    }
+    Ok(())
+}
 
 fn rule_applies_to(rule: &RuleItem, target_type: &str) -> bool {
     rule.target_type == "all" || rule.target_type == target_type

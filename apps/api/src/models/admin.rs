@@ -256,6 +256,7 @@ pub enum ReportTargetType {
     Topic,
     Comment,
     User,
+    File,
 }
 
 impl ReportTargetType {
@@ -264,6 +265,7 @@ impl ReportTargetType {
             Self::Topic => "topic",
             Self::Comment => "comment",
             Self::User => "user",
+            Self::File => "file",
         }
     }
 }
@@ -276,6 +278,7 @@ impl std::str::FromStr for ReportTargetType {
             "topic" => Ok(Self::Topic),
             "comment" => Ok(Self::Comment),
             "user" => Ok(Self::User),
+            "file" => Ok(Self::File),
             _ => Err("unknown report target type"),
         }
     }

@@ -89,6 +89,10 @@ impl UploadService {
                 .enforce_upload_creation(user_id)
                 .await
                 .map_err(map_moderation)?;
+            moderation
+                .enforce_upload_allowed(user_id)
+                .await
+                .map_err(map_moderation)?;
         }
         if input.data.is_empty() {
             return Err(UploadError::Validation("file is empty"));

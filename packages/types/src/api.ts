@@ -121,6 +121,7 @@ export interface CategorySummary {
   slug: string;
   name: string;
   icon: string | null;
+  restricted_posting: boolean;
 }
 
 export interface Category extends CategorySummary {
@@ -295,6 +296,8 @@ export interface TopicSummary {
 
 export interface TopicDetail extends TopicSummary {
   content: string;
+  /** published | pending_review | hidden */
+  status: "published" | "pending_review" | "hidden";
   liked_by_me: boolean;
   favorited_by_me: boolean;
   following_author: boolean;
@@ -864,8 +867,11 @@ export interface ReportItem {
 }
 
 export interface ReportListParams {
-  status?: ReportStatus;
-  target_type?: ReportTargetType;
+  q?: string;
+  status?: ModerationReportStatus | "";
+  target_type?: ModerationTargetType | "";
+  reason?: string;
+  priority?: ReportPriority | "";
   page?: number;
   page_size?: number;
 }
@@ -912,4 +918,179 @@ export interface UpdateCategoryRequest {
 
 export interface UpdateRolePermissionsRequest {
   permission_codes: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Phase 16: moderation system
+// ---------------------------------------------------------------------------
+
+export type ModerationReportStatus =
+  "open" | "reviewing" | "resolved" | "rejected" | "duplicate" | "cancelled";
+export type ModerationTargetType = "topic" | "comment" | "user" | "file";
+export type ModerationReportReason =
+  | "spam"
+  | "harassment"
+  | "hate_speech"
+  | "violence"
+  | "sexual_content"
+  | "illegal_content"
+  | "privacy_violation"
+  | "misinformation"
+  | "copyright"
+  | "other";
+export type ReportPriority = "low" | "normal" | "high" | "critical";
+
+export interface ReportItemV2 {
+  id: string;
+  reporter_id: string;
+  reporter_username: string;
+  target_type: ModerationTargetType;
+  target_id: string;
+  reason: string;
+  reason_code: string | null;
+  details: string | null;
+  status: ModerationReportStatus;
+  priority: ReportPriority;
+  risk_score: number;
+  handler_id: string | null;
+  handler_username: string | null;
+  resolution_note: string | null;
+  handled_at: string | null;
+  created_at: string;
+  updated_at: string;
+  case_id: string | null;
+  duplicate_of: string | null;
+}
+
+export interface ReportListParams {
+  q?: string;
+  status?: ModerationReportStatus | "";
+  target_type?: ModerationTargetType | "";
+  reason?: string;
+  priority?: ReportPriority | "";
+  page?: number;
+  page_size?: number;
+}
+
+export interface ResolveReportRequestV2 {
+  action?: "hide" | "restore" | "delete" | "lock" | "unlock";
+  action_reason?: string;
+  resolution_note?: string;
+}
+
+export interface ModerationStatus {
+  score: number;
+  reputation: "normal" | "watch" | "restricted";
+}
+
+export interface PendingReviewItem {
+  id: string;
+  target_type: "topic" | "comment";
+  target_id: string;
+  title: string;
+  snippet: string;
+  author_id: string;
+  author_username: string;
+  risk_score: number;
+  case_id: string | null;
+  created_at: string;
+}
+
+export type SanctionType = "warning" | "content_restriction" | "mute" | "suspension" | "ban";
+export type SanctionStatus = "scheduled" | "active" | "expired" | "revoked";
+
+export interface SanctionItem {
+  id: string;
+  user_id: string;
+  username: string;
+  sanction_type: SanctionType;
+  reason: string;
+  user_visible_reason: string | null;
+  internal_note: string | null;
+  restrictions: string[];
+  starts_at: string;
+  ends_at: string | null;
+  is_permanent: boolean;
+  status: SanctionStatus;
+  issued_by: string | null;
+  issuer_username: string | null;
+  case_id: string | null;
+  report_id: string | null;
+  related_content_type: string | null;
+  related_content_id: string | null;
+  revoked_by: string | null;
+  revoked_at: string | null;
+  revoke_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SanctionListParams {
+  status?: string;
+  sanction_type?: string;
+  user_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface CaseItem {
+  id: string;
+  target_type: string;
+  target_id: string;
+  status: string;
+  priority: string;
+  risk_score: number;
+  source: string;
+  assignee_id: string | null;
+  assignee_username: string | null;
+  opened_by: string | null;
+  opened_at: string;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CaseListParams {
+  q?: string;
+  status?: string;
+  priority?: string;
+  source?: string;
+  target_type?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export type RuleType = "keyword" | "url_domain" | "rate" | "new_user";
+export type RuleActionKind = "allow" | "flag" | "hide" | "reject" | "rate_limit" | "collapse";
+
+export interface RuleItem {
+  id: string;
+  name: string;
+  rule_type: RuleType;
+  target_type: string;
+  action: RuleActionKind;
+  risk_score: number;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  hit_count: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RuleListParams {
+  status?: string;
+  rule_type?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface RuleRequest {
+  name: string;
+  rule_type: RuleType;
+  target_type: string;
+  action: RuleActionKind;
+  risk_score?: number;
+  enabled?: boolean;
+  config: Record<string, unknown>;
 }

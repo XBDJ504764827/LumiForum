@@ -928,3 +928,54 @@ pub struct GovernanceMetrics {
     pub moderator_actions_7d: Vec<CountItem>,
     pub daily_14d: Vec<DailyMetric>,
 }
+
+// ---------------------------------------------------------------------------
+// Phase 16: violation score / reputation / pending review
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ModerationStatus {
+    pub score: i32,
+    pub reputation: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PendingReviewItem {
+    pub id: Uuid,
+    pub target_type: String,
+    pub target_id: Uuid,
+    pub title: String,
+    pub snippet: String,
+    pub author_id: Uuid,
+    pub author_username: String,
+    pub risk_score: i32,
+    pub case_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct PendingReviewQuery {
+    pub target_type: Option<String>,
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ReviewRequest {
+    pub note: Option<String>,
+    /// Action taken on the content when rejecting (default: hide).
+    pub action: Option<String>,
+}
+
+#[derive(sqlx::FromRow)]
+pub struct PendingReviewRow {
+    pub id: Uuid,
+    pub target_type: String,
+    pub author_id: Uuid,
+    pub title: String,
+    pub snippet: String,
+    pub created_at: DateTime<Utc>,
+    pub risk_score: i32,
+    pub case_id: Option<Uuid>,
+    pub author_username: String,
+}

@@ -124,6 +124,10 @@ impl TopicService {
             .enforce_topic_creation(principal.user_id)
             .await
             .map_err(map_moderation)?;
+        self.moderation
+            .enforce_content_allowed(principal)
+            .await
+            .map_err(map_moderation)?;
         self.ensure_category_usable(principal, request.category_id)
             .await?;
         let title = normalize_title(request.title)?;
@@ -141,7 +145,7 @@ impl TopicService {
             .screen_content(principal, "topic", &title, &content)
             .await
             .map_err(map_moderation)?;
-        let status = match screening.action {
+        let mut status = match screening.action {
             crate::models::RuleAction::Reject => {
                 return Err(TopicError::Validation("内容未通过自动审核，请修改后重试"));
             }
@@ -151,6 +155,14 @@ impl TopicService {
             crate::models::RuleAction::Hide => "hidden",
             _ => "published",
         };
+        // Flagged content (matched a rule) or high-risk content goes to the
+        // human review queue instead of being published immediately.
+        if status == "published"
+            && (screening.action == crate::models::RuleAction::Flag && screening.risk_score > 0
+                || screening.risk_score >= 60)
+        {
+            status = "pending_review";
+        }
 
         for attempt in 0..4 {
             let slug = if attempt == 0 && base_slug != "topic" {
@@ -172,6 +184,12 @@ impl TopicService {
                 .await
             {
                 Ok(topic) => {
+                    if status == "pending_review" {
+                        let _ = self
+                            .moderation
+                            .flag_for_review(principal, "topic", topic.id, screening.risk_score)
+                            .await;
+                    }
                     // Attach the optional poll atomically; roll back the topic if
                     // the poll fails so a poll topic never exists without a poll.
                     if let Some(draft) = draft {
@@ -334,6 +352,13 @@ impl TopicService {
             .map_err(internal)?
             .ok_or(TopicError::CategoryUnavailable)?;
         if category.is_visible || principal.has_permission(PERMISSION_CATEGORY_MANAGE) {
+            // Restricted categories (e.g. announcements) require staff rights.
+            if category.restricted_posting
+                && !principal.has_permission(PERMISSION_CATEGORY_MANAGE)
+                && !principal.has_permission(PERMISSION_TOPIC_PIN)
+            {
+                return Err(TopicError::Validation("该板块仅限管理员发布内容"));
+            }
             Ok(())
         } else {
             Err(TopicError::CategoryUnavailable)

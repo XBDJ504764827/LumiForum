@@ -801,6 +801,7 @@ impl PollRepository {
                     slug: row.category_slug,
                     name: row.category_name,
                     icon: row.category_icon,
+                    restricted_posting: false,
                 },
                 created_at: row.created_at,
             })

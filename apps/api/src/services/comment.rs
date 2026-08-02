@@ -115,7 +115,11 @@ impl CommentService {
             .screen_content(principal, "comment", "", &content)
             .await
             .map_err(map_moderation)?;
-        let (status, collapsed) = match decision.action {
+        self.moderation
+            .enforce_content_allowed(principal)
+            .await
+            .map_err(map_moderation)?;
+        let (mut status, collapsed) = match decision.action {
             crate::models::RuleAction::Reject => {
                 return Err(CommentError::Validation("内容未通过自动审核，请修改后重试"));
             }
@@ -124,6 +128,13 @@ impl CommentService {
             crate::models::RuleAction::Collapse => ("published", true),
             _ => ("published", false),
         };
+        // Flagged comments (matched a rule) await human review.
+        if status == "published"
+            && (decision.action == crate::models::RuleAction::Flag && decision.risk_score > 0
+                || decision.risk_score >= 60)
+        {
+            status = "pending_review";
+        }
         let comment = self
             .comments
             .create(NewComment {
