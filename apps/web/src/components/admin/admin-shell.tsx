@@ -2,6 +2,7 @@
 
 import type { Route } from "next";
 import {
+  BarChart3,
   FileText,
   Files,
   Flag,
@@ -27,6 +28,7 @@ const nav = [
   { href: "/admin/comments", label: "评论", icon: MessageSquare },
   { href: "/admin/categories", label: "分类", icon: FolderTree },
   { href: "/admin/files", label: "文件", icon: Files },
+  { href: "/admin/polls", label: "投票", icon: BarChart3 },
   { href: "/admin/reports", label: "举报", icon: Flag },
   { href: "/admin/logs", label: "日志", icon: ScrollText },
 ] as const;

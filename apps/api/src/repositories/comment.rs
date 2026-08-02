@@ -35,6 +35,10 @@ pub struct NewComment<'a> {
     pub author_id: Uuid,
     pub parent_id: Option<Uuid>,
     pub content: &'a str,
+    /// Initial status: "published" or "hidden" (auto-moderation).
+    pub status: &'a str,
+    /// Initial collapsed state (auto-moderation).
+    pub is_collapsed: bool,
 }
 
 impl CommentRepository {
@@ -131,8 +135,8 @@ impl CommentRepository {
         let mut tx = self.pool.begin().await?;
         let id = sqlx::query_scalar::<_, Uuid>(
             r#"
-            INSERT INTO comments (topic_id, author_id, parent_id, content)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO comments (topic_id, author_id, parent_id, content, status, is_collapsed)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
             "#,
         )
@@ -140,6 +144,8 @@ impl CommentRepository {
         .bind(comment.author_id)
         .bind(comment.parent_id)
         .bind(comment.content)
+        .bind(comment.status)
+        .bind(comment.is_collapsed)
         .fetch_one(&mut *tx)
         .await?;
 

@@ -39,10 +39,12 @@ pub struct RepositoryTopic {
     pub author_avatar: Option<String>,
     pub author_role_code: String,
     pub author_role_name: String,
+    pub has_poll: bool,
 }
 
 pub struct TopicListOptions<'a> {
     pub category_slug: Option<&'a str>,
+    pub author_id: Option<Uuid>,
     pub sort: TopicListSort,
     pub limit: i64,
     pub offset: i64,
@@ -55,6 +57,8 @@ pub struct NewTopic<'a> {
     pub slug: &'a str,
     pub content: &'a str,
     pub summary: Option<&'a str>,
+    /// Initial status: "published" or "hidden" (auto-moderation).
+    pub status: &'a str,
 }
 
 pub struct TopicUpdate<'a> {
@@ -80,7 +84,7 @@ impl TopicRepository {
         options: TopicListOptions<'_>,
     ) -> Result<(Vec<RepositoryTopic>, i64), sqlx::Error> {
         let mut items = QueryBuilder::<Postgres>::new(TOPIC_LIST_SELECT);
-        push_public_filters(&mut items, options.category_slug, options.sort);
+        push_public_filters(&mut items, options.category_slug, options.author_id, options.sort);
         push_order(&mut items, options.sort);
         items
             .push(" LIMIT ")
@@ -96,7 +100,7 @@ impl TopicRepository {
         let mut count = QueryBuilder::<Postgres>::new(
             "SELECT count(*) FROM topics t JOIN categories c ON c.id = t.category_id",
         );
-        push_public_filters(&mut count, options.category_slug, options.sort);
+        push_public_filters(&mut count, options.category_slug, options.author_id, options.sort);
         let total = count
             .build_query_scalar::<i64>()
             .fetch_one(&self.pool)
@@ -125,8 +129,8 @@ impl TopicRepository {
     pub async fn create(&self, topic: NewTopic<'_>) -> Result<RepositoryTopic, sqlx::Error> {
         let id = sqlx::query_scalar::<_, Uuid>(
             r#"
-            INSERT INTO topics (category_id, author_id, title, slug, content, summary)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO topics (category_id, author_id, title, slug, content, summary, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
             "#,
         )
@@ -136,6 +140,7 @@ impl TopicRepository {
         .bind(topic.slug)
         .bind(topic.content)
         .bind(topic.summary)
+        .bind(topic.status)
         .fetch_one(&self.pool)
         .await?;
 
@@ -234,6 +239,7 @@ pub fn repository_topic_to_summary(topic: RepositoryTopic) -> TopicSummary {
         last_reply_at: topic.last_reply_at,
         created_at: topic.created_at,
         updated_at: topic.updated_at,
+        has_poll: topic.has_poll,
     }
 }
 
@@ -256,6 +262,7 @@ pub fn repository_topic_to_detail(topic: RepositoryTopic) -> Result<TopicDetail,
         last_reply_at: topic.last_reply_at,
         created_at: topic.created_at,
         updated_at: topic.updated_at,
+        has_poll: topic.has_poll,
         liked_by_me: false,
         favorited_by_me: false,
         following_author: false,
@@ -295,6 +302,7 @@ fn topic_stats(topic: &RepositoryTopic) -> TopicStats {
 fn push_public_filters(
     query: &mut QueryBuilder<'_, Postgres>,
     category_slug: Option<&str>,
+    author_id: Option<Uuid>,
     sort: TopicListSort,
 ) {
     query.push(" WHERE t.status = 'published' AND c.is_visible = true");
@@ -302,6 +310,9 @@ fn push_public_filters(
         query
             .push(" AND c.slug = ")
             .push_bind(category_slug.to_owned());
+    }
+    if let Some(author_id) = author_id {
+        query.push(" AND t.author_id = ").push_bind(author_id);
     }
     match sort {
         TopicListSort::Featured => {
@@ -352,7 +363,8 @@ const TOPIC_LIST_SELECT: &str = r#"
         u.nickname AS author_nickname,
         u.avatar_url AS author_avatar,
         r.code AS author_role_code,
-        r.name AS author_role_name
+        r.name AS author_role_name,
+        EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = t.id) AS has_poll
     FROM topics t
     JOIN categories c ON c.id = t.category_id
     JOIN users u ON u.id = t.author_id
@@ -386,7 +398,8 @@ const TOPIC_BY_ID: &str = r#"
         u.nickname AS author_nickname,
         u.avatar_url AS author_avatar,
         r.code AS author_role_code,
-        r.name AS author_role_name
+        r.name AS author_role_name,
+        EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = t.id) AS has_poll
     FROM topics t
     JOIN categories c ON c.id = t.category_id
     JOIN users u ON u.id = t.author_id
@@ -434,7 +447,8 @@ const TOPIC_BY_SLUG_AND_INCREMENT: &str = r#"
         u.nickname AS author_nickname,
         u.avatar_url AS author_avatar,
         r.code AS author_role_code,
-        r.name AS author_role_name
+        r.name AS author_role_name,
+        EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = viewed.id) AS has_poll
     FROM viewed
     JOIN categories c ON c.id = viewed.category_id
     JOIN users u ON u.id = viewed.author_id

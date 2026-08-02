@@ -187,6 +187,19 @@ impl ReportTargetType {
     }
 }
 
+impl std::str::FromStr for ReportTargetType {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "topic" => Ok(Self::Topic),
+            "comment" => Ok(Self::Comment),
+            "user" => Ok(Self::User),
+            _ => Err("unknown report target type"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReportStatus {
@@ -194,6 +207,10 @@ pub enum ReportStatus {
     Reviewing,
     Resolved,
     Rejected,
+    /// Merged into another report for the same target.
+    Duplicate,
+    /// Withdrawn by the reporter before handling.
+    Cancelled,
 }
 
 impl ReportStatus {
@@ -203,6 +220,8 @@ impl ReportStatus {
             Self::Reviewing => "reviewing",
             Self::Resolved => "resolved",
             Self::Rejected => "rejected",
+            Self::Duplicate => "duplicate",
+            Self::Cancelled => "cancelled",
         }
     }
 }
@@ -216,6 +235,8 @@ impl std::str::FromStr for ReportStatus {
             "reviewing" => Ok(Self::Reviewing),
             "resolved" => Ok(Self::Resolved),
             "rejected" => Ok(Self::Rejected),
+            "duplicate" => Ok(Self::Duplicate),
+            "cancelled" => Ok(Self::Cancelled),
             _ => Err("unknown report status"),
         }
     }

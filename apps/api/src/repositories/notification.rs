@@ -41,6 +41,9 @@ pub struct NewNotification<'a> {
     pub target_type: Option<NotificationTargetType>,
     pub target_id: Option<Uuid>,
     pub metadata: JsonValue,
+    /// Logical id used to deduplicate notifications (unique index on
+    /// (user_id, type, metadata->>'dedup_key')). Batch operations must set it.
+    pub dedup_key: Option<&'a str>,
 }
 
 pub struct NotificationListFilter<'a> {
@@ -57,6 +60,12 @@ impl NotificationRepository {
     }
 
     pub async fn create(&self, input: NewNotification<'_>) -> Result<Uuid, sqlx::Error> {
+        let mut metadata = input.metadata;
+        if let Some(key) = input.dedup_key {
+            if let serde_json::Value::Object(ref mut map) = metadata {
+                map.insert("dedup_key".into(), serde_json::Value::String(key.into()));
+            }
+        }
         sqlx::query_scalar::<_, Uuid>(
             r#"
             INSERT INTO notifications (
@@ -80,7 +89,7 @@ impl NotificationRepository {
         .bind(input.content)
         .bind(input.target_type.map(NotificationTargetType::as_str))
         .bind(input.target_id)
-        .bind(input.metadata)
+        .bind(metadata)
         .fetch_one(&self.pool)
         .await
     }

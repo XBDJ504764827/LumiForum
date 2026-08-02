@@ -59,6 +59,7 @@ struct FavoriteRow {
     author_avatar: Option<String>,
     author_role_code: String,
     author_role_name: String,
+    has_poll: bool,
 }
 
 impl ReactionRepository {
@@ -437,7 +438,8 @@ impl ReactionRepository {
                 u.nickname AS author_nickname,
                 u.avatar_url AS author_avatar,
                 r.code AS author_role_code,
-                r.name AS author_role_name
+                r.name AS author_role_name,
+                EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = t.id) AS has_poll
             FROM favorites f
             JOIN topics t ON t.id = f.topic_id
             JOIN categories c ON c.id = t.category_id
@@ -487,6 +489,7 @@ impl ReactionRepository {
                     author_avatar: row.author_avatar,
                     author_role_code: row.author_role_code,
                     author_role_name: row.author_role_name,
+                    has_poll: row.has_poll,
                 }),
             })
             .collect();

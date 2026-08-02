@@ -8,13 +8,15 @@ use crate::config::Config;
 use crate::realtime::{PresenceService, RealtimeBus, RealtimeHub};
 use crate::repositories::{
     AdminRepository, AuthRepository, AuthorizationRepository, CategoryRepository,
-    CommentRepository, NotificationRepository, ReactionRepository, SearchRepository,
-    SteamAuthRepository, TopicRepository, UploadRepository, UserRepository,
+    CommentRepository, ModerationRepository, NotificationRepository, PollRepository,
+    ReactionRepository, SearchRepository, SteamAuthRepository, TopicRepository, UploadRepository,
+    UserRepository,
 };
 use crate::services::{
     AdminService, AuthService, AuthServiceConfig, AuthorizationService, CategoryService,
-    CommentService, NotificationService, ReactionService, SearchService, SteamAuthService,
-    SteamOpenIdClient, TopicService, UploadService, UserService,
+    CommentService, MetricsRegistry, ModerationService, NotificationService, PollService,
+    ReactionService, SearchService, SteamAuthService, SteamOpenIdClient, TopicService,
+    UploadService, UserService,
 };
 use crate::storage::{LocalStorage, S3Storage, S3StorageConfig, StorageProvider};
 
@@ -33,12 +35,15 @@ struct AppStateInner {
     pub authorization: AuthorizationService,
     pub categories: CategoryService,
     pub topics: TopicService,
+    pub polls: PollService,
     pub comments: CommentService,
     pub reactions: ReactionService,
     pub notifications: NotificationService,
     pub search: SearchService,
     pub uploads: UploadService,
     pub admin: AdminService,
+    pub moderation: ModerationService,
+    pub metrics: MetricsRegistry,
     pub realtime: RealtimeBus,
     pub presence: PresenceService,
 }
@@ -93,16 +98,42 @@ impl AppState {
         let category_repository = CategoryRepository::new(db.clone());
         let topic_repository = TopicRepository::new(db.clone());
         let categories = CategoryService::new(category_repository.clone());
-        let topics = TopicService::new(topic_repository.clone(), category_repository);
         let notification_repository = NotificationRepository::new(db.clone());
         let hub = RealtimeHub::new(config.ws_max_connections_per_user);
         let realtime = RealtimeBus::new(redis.clone(), config.redis_url.clone(), hub);
         realtime.clone().spawn_subscriber();
+        realtime.clone().spawn_poll_subscriber();
         let presence = PresenceService::new(redis.clone(), config.presence_ttl_secs);
         let notifications = NotificationService::new(
             notification_repository.clone(),
             redis.clone(),
             realtime.clone(),
+        );
+        let admin_repository = AdminRepository::new(db.clone());
+        let metrics = MetricsRegistry::new();
+        let moderation = ModerationService::new(
+            ModerationRepository::new(db.clone()),
+            category_repository.clone(),
+            notifications.clone(),
+            admin_repository.clone(),
+            authorization.clone(),
+            realtime.clone(),
+            redis.clone(),
+            metrics.clone(),
+        );
+        let polls = PollService::new(
+            PollRepository::new(db.clone()),
+            topic_repository.clone(),
+            moderation.clone(),
+            notifications.clone(),
+            realtime.clone(),
+            redis.clone(),
+        );
+        let topics = TopicService::new(
+            topic_repository.clone(),
+            category_repository,
+            moderation.clone(),
+            polls.clone(),
         );
         let comments = CommentService::new(
             CommentRepository::new(db.clone()),
@@ -110,6 +141,7 @@ impl AppState {
             notifications.clone(),
             notification_repository.clone(),
             redis.clone(),
+            moderation.clone(),
         );
         let reactions = ReactionService::new(
             ReactionRepository::new(db.clone()),
@@ -137,7 +169,11 @@ impl AppState {
             })?),
             _ => unreachable!("storage provider is validated by Config"),
         };
-        let uploads = UploadService::new(UploadRepository::new(db.clone()), storage);
+        let uploads = UploadService::with_moderation(
+            UploadRepository::new(db.clone()),
+            storage,
+            moderation.clone(),
+        );
         let admin = AdminService::new(
             AdminRepository::new(db.clone()),
             categories.clone(),
@@ -145,6 +181,44 @@ impl AppState {
             uploads.clone(),
             authorization.clone(),
         );
+
+        let maintenance = moderation.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            interval.tick().await; // first tick completes immediately; skip
+            loop {
+                interval.tick().await;
+                match maintenance.run_maintenance().await {
+                    Ok(summary) => {
+                        if summary.expired_sanctions > 0 || summary.expiry_reminders > 0 {
+                            tracing::info!(?summary, "moderation maintenance run");
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "moderation maintenance failed");
+                    }
+                }
+            }
+        });
+
+        let poll_maintenance = polls.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            interval.tick().await; // first tick completes immediately; skip
+            loop {
+                interval.tick().await;
+                match poll_maintenance.run_expiry_maintenance().await {
+                    Ok(closed) => {
+                        if closed > 0 {
+                            tracing::info!(closed, "poll expiry maintenance run");
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "poll expiry maintenance failed");
+                    }
+                }
+            }
+        });
 
         Ok(Self {
             inner: Arc::new(AppStateInner {
@@ -157,12 +231,15 @@ impl AppState {
                 authorization,
                 categories,
                 topics,
+                polls,
                 comments,
                 reactions,
                 notifications,
                 search,
                 uploads,
                 admin,
+                moderation,
+                metrics,
                 realtime,
                 presence,
             }),
@@ -205,6 +282,10 @@ impl AppState {
         &self.inner.topics
     }
 
+    pub fn polls(&self) -> &PollService {
+        &self.inner.polls
+    }
+
     pub fn comments(&self) -> &CommentService {
         &self.inner.comments
     }
@@ -227,6 +308,14 @@ impl AppState {
 
     pub fn admin(&self) -> &AdminService {
         &self.inner.admin
+    }
+
+    pub fn moderation(&self) -> &ModerationService {
+        &self.inner.moderation
+    }
+
+    pub fn metrics(&self) -> &MetricsRegistry {
+        &self.inner.metrics
     }
 
     pub fn realtime(&self) -> &RealtimeBus {

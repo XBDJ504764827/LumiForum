@@ -23,9 +23,11 @@ import { useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { MarkdownContent } from "@/components/forum/markdown-content";
+import { PollCard } from "@/components/forum/poll-card";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
 import { CommentSection } from "@/components/forum/comment-section";
+import { useRealtime } from "@/components/realtime/realtime-provider";
 import {
   deleteTopic,
   favoriteTopic,
@@ -37,6 +39,8 @@ import {
   unfollowUser,
   unlikeTopic,
 } from "@/lib/api/forum";
+import { getTopicPoll, pollKeys } from "@/lib/api/polls";
+import { useEffect } from "react";
 
 const elevatedRoles = new Set(["moderator", "administrator", "super_administrator"]);
 
@@ -116,6 +120,12 @@ export function TopicView({ slug }: { slug: string }) {
                 <p className="font-medium">{data.author.nickname || data.author.username}</p>
                 <p className="text-xs text-muted-foreground">{data.author.role.name}</p>
               </div>
+              <Link
+                href={`/users/${data.author.id}/topics` as Route}
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+              >
+                TA 的帖子
+              </Link>
               {canFollow ? (
                 <FollowAuthorButton
                   authorId={data.author.id}
@@ -134,6 +144,8 @@ export function TopicView({ slug }: { slug: string }) {
         </header>
 
         <MarkdownContent content={data.content} className="py-4" />
+
+        <TopicPollSection topicId={data.id} hasPoll={data.has_poll} />
 
         <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-border pt-6">
           {canReact ? (
@@ -200,6 +212,37 @@ export function TopicView({ slug }: { slug: string }) {
       <CommentSection topicId={data.id} />
     </main>
   );
+}
+
+function TopicPollSection({ topicId, hasPoll }: { topicId: string; hasPoll: boolean }) {
+  const { client } = useRealtime();
+  const queryClient = useQueryClient();
+  const poll = useQuery({
+    queryKey: pollKeys.topicPoll(topicId),
+    queryFn: () => getTopicPoll(topicId),
+    enabled: hasPoll,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  // Realtime: if the poll was deleted while viewing, drop the card.
+  useEffect(() => {
+    if (!client || !hasPoll) return;
+    const off = client.onMessage((message) => {
+      if (message.type === "poll.updated") {
+        const data = message.data as { poll_id?: string; event?: string };
+        if (data.event === "deleted") {
+          void queryClient.invalidateQueries({ queryKey: pollKeys.topicPoll(topicId) });
+        }
+      }
+    });
+    return off;
+  }, [client, hasPoll, topicId, queryClient]);
+
+  if (!hasPoll) return null;
+  if (poll.isPending) return <QueryLoading label="正在加载投票" />;
+  if (poll.isError || !poll.data) return null;
+  return <PollCard poll={poll.data} />;
 }
 
 function TopicLikeButton({ topic, slug }: { topic: TopicDetail; slug: string }) {

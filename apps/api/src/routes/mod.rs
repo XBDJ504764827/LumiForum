@@ -3,7 +3,9 @@ pub mod auth;
 mod categories;
 mod comments;
 mod health;
+mod moderation;
 mod notifications;
+mod polls;
 mod presence;
 mod reactions;
 mod response;
@@ -41,10 +43,14 @@ pub fn create_router(state: AppState) -> Router {
         .merge(comments::router(state.clone()))
         .merge(reactions::router(state.clone()))
         .merge(notifications::router(state.clone()))
+        .merge(polls::public_router(state.clone()))
         .merge(search::router())
         .merge(uploads::router(state.clone()))
         .merge(admin::router(state.clone()))
         .merge(admin::public_report_router(state.clone()))
+        .merge(moderation::public_router(state.clone()))
+        .merge(moderation::admin_router(state.clone()))
+        .merge(moderation::metrics_router(state.clone()))
         .merge(presence::router())
         .route("/ws", get(ws::ws_handler));
     let router = if state.config().storage_provider == "local" {

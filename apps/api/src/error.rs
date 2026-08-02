@@ -7,8 +7,8 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::services::{
-    AdminError, AuthError, AuthorizationError, CategoryError, CommentError, NotificationError,
-    ReactionError, SearchError, TopicError, UploadError, UserError,
+    AdminError, AuthError, AuthorizationError, CategoryError, CommentError, ModerationError,
+    NotificationError, PollError, ReactionError, SearchError, TopicError, UploadError, UserError,
 };
 
 #[derive(Debug, Error)]
@@ -17,6 +17,8 @@ pub enum AppError {
     Validation(&'static str),
     #[error("identity conflict")]
     IdentityConflict,
+    #[error("operation conflicts with current state")]
+    Conflict,
     #[error("slug conflict")]
     SlugConflict,
     #[error("category contains topics")]
@@ -80,6 +82,11 @@ impl IntoResponse for AppError {
                 StatusCode::CONFLICT,
                 "identity_conflict",
                 "username or email is already in use",
+            ),
+            Self::Conflict => (
+                StatusCode::CONFLICT,
+                "conflict",
+                "operation conflicts with current state",
             ),
             Self::SlugConflict => (
                 StatusCode::CONFLICT,
@@ -301,6 +308,35 @@ impl From<AdminError> for AppError {
             AdminError::NotFound => Self::NotFound,
             AdminError::Forbidden => Self::Forbidden,
             AdminError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<PollError> for AppError {
+    fn from(error: PollError) -> Self {
+        match error {
+            PollError::Validation(message) => Self::Validation(message),
+            PollError::NotFound | PollError::TopicUnavailable => Self::NotFound,
+            PollError::PollExists => Self::Conflict,
+            PollError::PollClosed | PollError::PollExpired => {
+                Self::Validation("投票已结束")
+            }
+            PollError::Forbidden => Self::Forbidden,
+            PollError::AlreadyVoted | PollError::AlreadyParticipated => Self::Conflict,
+            PollError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<ModerationError> for AppError {
+    fn from(error: ModerationError) -> Self {
+        match error {
+            ModerationError::Validation(message) => Self::Validation(message),
+            ModerationError::NotFound => Self::NotFound,
+            ModerationError::Forbidden => Self::Forbidden,
+            ModerationError::RateLimited => Self::RateLimited,
+            ModerationError::Conflict(_) => Self::Validation("operation conflicts with current state"),
+            ModerationError::Internal(error) => Self::Internal(error),
         }
     }
 }

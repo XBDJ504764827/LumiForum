@@ -3,8 +3,11 @@ mod auth;
 mod authorization;
 mod category;
 mod comment;
+mod metrics;
+mod moderation;
 mod notification;
 mod password;
+mod poll;
 mod reaction;
 mod search;
 mod steam_auth;
@@ -20,8 +23,11 @@ pub use auth::{AuthError, AuthService, AuthServiceConfig, IssuedSession, Refresh
 pub use authorization::{AuthorizationError, AuthorizationService};
 pub use category::{CategoryError, CategoryService};
 pub use comment::{CommentError, CommentService};
+pub use metrics::MetricsRegistry;
+pub use moderation::{BatchResult, BatchResultItem, ModerationError, ModerationService, ScreeningDecision};
 pub use notification::{NotificationError, NotificationService};
 pub use password::PasswordService;
+pub use poll::{PollError, PollService};
 pub use reaction::{ReactionError, ReactionService};
 pub use search::{SearchError, SearchService};
 pub use steam_auth::{

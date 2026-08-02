@@ -38,6 +38,8 @@ pub struct SearchQuery {
     pub limit: Option<u32>,
     pub from: Option<DateTime<Utc>>,
     pub to: Option<DateTime<Utc>>,
+    /// Restrict to topics that have (or lack) a poll.
+    pub has_poll: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -61,6 +63,7 @@ pub struct TopicSearchHit {
     pub stats: SearchTopicStats,
     pub created_at: DateTime<Utc>,
     pub rank: f32,
+    pub has_poll: bool,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]

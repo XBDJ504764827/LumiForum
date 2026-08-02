@@ -9,14 +9,20 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { FormProvider, useForm, useWatch } from "react-hook-form";
 
 import { MarkdownContent } from "@/components/forum/markdown-content";
+import {
+  PollEditor,
+  pollDraftFromValues,
+  pollUpdateFromValues,
+} from "@/components/forum/poll-editor";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
 import { FileUpload } from "@/components/uploads/file-upload";
 import { errorMessage } from "@/lib/api/errors";
 import { createTopic, forumKeys, listCategories, updateTopic } from "@/lib/api/forum";
+import { createPoll, getTopicPoll, pollKeys, updatePoll } from "@/lib/api/polls";
 import { topicEditorSchema, type TopicEditorValues } from "@/lib/forum/schemas";
 
 type Props = { mode: "create"; topic?: never } | { mode: "edit"; topic: TopicDetail };
@@ -27,6 +33,14 @@ export function TopicEditor(props: Props) {
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
   const [view, setView] = useState<"write" | "preview">("write");
   const categories = useQuery({ queryKey: forumKeys.categories, queryFn: listCategories });
+  // Edit mode: load the existing poll so the author can edit it too.
+  const existingPoll = useQuery({
+    queryKey: pollKeys.topicPoll(props.topic?.id ?? ""),
+    queryFn: () => getTopicPoll(props.topic!.id),
+    enabled: props.mode === "edit" && Boolean(props.topic?.has_poll),
+    staleTime: 30_000,
+    retry: false,
+  });
   const form = useForm<TopicEditorValues>({
     resolver: zodResolver(topicEditorSchema),
     defaultValues: {
@@ -34,6 +48,15 @@ export function TopicEditor(props: Props) {
       title: props.topic?.title ?? "",
       content: props.topic?.content ?? "",
       summary: props.topic?.summary ?? "",
+      poll: {
+        enabled: false,
+        title: "",
+        description: "",
+        multiple_choice: false,
+        anonymous: false,
+        max_choices: 2,
+        options: [{ value: "" }, { value: "" }],
+      },
     },
   });
   const mutation = useMutation({
@@ -44,6 +67,7 @@ export function TopicEditor(props: Props) {
           title: values.title,
           content: values.content,
           summary: values.summary || undefined,
+          poll: pollDraftFromValues(values.poll),
         };
         return createTopic(input);
       }
@@ -53,12 +77,28 @@ export function TopicEditor(props: Props) {
         content: values.content,
         summary: values.summary || null,
       };
-      return updateTopic(props.topic.id, input);
+      const topic = await updateTopic(props.topic.id, input);
+      // Poll changes: patch the existing poll, or attach a new one when the
+      // topic previously had none and the author enabled the poll editor.
+      if (props.mode === "edit") {
+        const existing = existingPoll.data;
+        if (existing) {
+          await updatePoll(existing.id, pollUpdateFromValues(values.poll, existing));
+        } else if (values.poll.enabled) {
+          const draft = pollDraftFromValues(values.poll);
+          if (draft) await createPoll(topic.id, draft);
+        }
+      }
+      return topic;
     },
     onSuccess: async (topic) => {
       queryClient.setQueryData(forumKeys.topic(topic.slug), topic);
       await queryClient.invalidateQueries({ queryKey: ["forum", "topics"] });
       await queryClient.invalidateQueries({ queryKey: forumKeys.categories });
+      if (props.mode === "edit") {
+        await queryClient.invalidateQueries({ queryKey: pollKeys.topicPoll(topic.id) });
+        await queryClient.invalidateQueries({ queryKey: pollKeys.results(topic.id) });
+      }
       router.push(`/topics/${topic.slug}` as Route);
     },
     onError: (error) => form.setError("root", { message: errorMessage(error) }),
@@ -114,7 +154,8 @@ export function TopicEditor(props: Props) {
         ) : null}
       </div>
 
-      <form onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+      <FormProvider {...form}>
+        <form onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
         {form.formState.errors.root?.message ? (
           <Alert className="mb-5">
             <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
@@ -188,6 +229,16 @@ export function TopicEditor(props: Props) {
                 {form.formState.errors.content?.message}
               </p>
             </div>
+
+            {props.mode === "create" ? (
+              <PollEditor />
+            ) : existingPoll.isPending ? (
+              <p className="rounded-xl border border-border bg-surface/60 p-5 text-sm text-muted-foreground">
+                正在加载投票数据…
+              </p>
+            ) : (
+              <PollEditor existing={existingPoll.data} />
+            )}
           </div>
 
           <aside className="space-y-5 border-t border-border pt-6 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
@@ -229,6 +280,7 @@ export function TopicEditor(props: Props) {
           </aside>
         </div>
       </form>
+      </FormProvider>
     </main>
   );
 }

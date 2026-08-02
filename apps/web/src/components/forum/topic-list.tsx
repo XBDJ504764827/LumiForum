@@ -1,6 +1,6 @@
 import type { TopicSummary } from "@lumiforum/types";
 import { Badge } from "@lumiforum/ui";
-import { Eye, Heart, MessageSquare, Pin, Sparkles } from "lucide-react";
+import { BarChart3, Eye, Heart, MessageSquare, Pin, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 export function TopicList({ topics }: { topics: TopicSummary[] }) {
@@ -29,6 +29,12 @@ export function TopicList({ topics }: { topics: TopicSummary[] }) {
                   <Badge className="gap-1 bg-accent/15 text-foreground">
                     <Sparkles className="size-3" aria-hidden="true" />
                     精华
+                  </Badge>
+                ) : null}
+                {topic.has_poll ? (
+                  <Badge className="gap-1 bg-primary/10 text-primary">
+                    <BarChart3 className="size-3" aria-hidden="true" />
+                    投票
                   </Badge>
                 ) : null}
                 <Link

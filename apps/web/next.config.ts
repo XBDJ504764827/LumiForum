@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: ["192.168.0.138", "localhost"],
   transpilePackages: ["@lumiforum/ui", "@lumiforum/shared", "@lumiforum/types"],
   typedRoutes: true,
   poweredByHeader: false,

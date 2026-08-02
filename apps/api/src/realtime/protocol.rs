@@ -31,7 +31,7 @@ impl RealtimeEnvelope {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ServerMessage {
     #[serde(rename = "type")]
     pub type_: String,

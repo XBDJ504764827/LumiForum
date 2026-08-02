@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
@@ -76,6 +77,9 @@ async fn handle_socket(
     let idle_timeout = Duration::from_secs(state.config().ws_idle_timeout_secs);
     let mut heartbeat_tick = interval(heartbeat);
     let mut last_client_activity = Instant::now();
+    // Polls this connection is watching (limit guards against abuse).
+    let mut poll_subscriptions: HashSet<Uuid> = HashSet::new();
+    let mut poll_rx = state.realtime().subscribe_poll_events();
 
     if sender
         .send(json_message(&ServerMessage::connected(user_id)))
@@ -113,6 +117,31 @@ async fn handle_socket(
                                             .send(json_message(&ServerMessage::error(message)))
                                             .await;
                                     }
+                                }
+                            }
+                            Ok(client) if client.type_ == "subscribe.poll" => {
+                                match parse_single_uuid(&client, "poll_id") {
+                                    Ok(poll_id) => {
+                                        if poll_subscriptions.len() >= 64 {
+                                            let _ = sender
+                                                .send(json_message(&ServerMessage::error(
+                                                    "too many poll subscriptions",
+                                                )))
+                                                .await;
+                                        } else {
+                                            poll_subscriptions.insert(poll_id);
+                                        }
+                                    }
+                                    Err(message) => {
+                                        let _ = sender
+                                            .send(json_message(&ServerMessage::error(message)))
+                                            .await;
+                                    }
+                                }
+                            }
+                            Ok(client) if client.type_ == "unsubscribe.poll" => {
+                                if let Ok(poll_id) = parse_single_uuid(&client, "poll_id") {
+                                    poll_subscriptions.remove(&poll_id);
                                 }
                             }
                             Ok(_) => {
@@ -159,6 +188,19 @@ async fn handle_socket(
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
+            poll_event = poll_rx.recv() => {
+                match poll_event {
+                    Ok((poll_id, message)) => {
+                        if poll_subscriptions.contains(&poll_id) {
+                            if sender.send(json_message(&message)).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
             _ = heartbeat_tick.tick() => {
                 if last_client_activity.elapsed() > idle_timeout {
                     break;
@@ -177,8 +219,7 @@ async fn handle_socket(
 async fn presence_updates(
     state: &AppState,
     client: &ClientMessage,
-) -> Result<Vec<ServerMessage>, &'static str> {
-    let user_ids = client
+) -> Result<Vec<ServerMessage>, &'static str> {    let user_ids = client
         .data
         .get("user_ids")
         .and_then(|value| value.as_array())
@@ -201,6 +242,15 @@ async fn presence_updates(
         .into_iter()
         .map(|status| ServerMessage::presence_updated(status.user_id, status.online))
         .collect())
+}
+
+fn parse_single_uuid(client: &ClientMessage, field: &str) -> Result<Uuid, &'static str> {
+    let raw = client
+        .data
+        .get(field)
+        .and_then(|value| value.as_str())
+        .ok_or("poll_id required")?;
+    Uuid::parse_str(raw).map_err(|_| "invalid poll_id")
 }
 
 fn json_message(message: &ServerMessage) -> Message {
