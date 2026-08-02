@@ -12,7 +12,7 @@ import type {
 } from "@lumiforum/types";
 import { Button, Input, Select } from "@lumiforum/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import {
   AdminPageHeader,
@@ -434,6 +434,7 @@ function RulesTab() {
     },
     onError: (err) => setError(errorMessage(err)),
   });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newRule, setNewRule] = useState<RuleRequest>({
     name: "",
     rule_type: "keyword",
@@ -443,12 +444,25 @@ function RulesTab() {
     enabled: true,
     config: { keywords: [] },
   });
+  // Raw keyword input — kept as-is so both half/full-width commas type
+  // normally; the array is derived only when creating the rule.
+  const [keywordsInput, setKeywordsInput] = useState("");
+  const parseKeywords = (value: string): string[] =>
+    value
+      .split(/[,，]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
 
   const create = useMutation({
-    mutationFn: () => createModerationRule(newRule),
+    mutationFn: () =>
+      createModerationRule({
+        ...newRule,
+        config: { ...newRule.config, keywords: parseKeywords(keywordsInput) },
+      }),
     onSuccess: async () => {
       setError(null);
       setNewRule({ ...newRule, name: "", config: { keywords: [] } });
+      setKeywordsInput("");
       await queryClient.invalidateQueries({ queryKey: moderationKeys.rules(params) });
     },
     onError: (err) => setError(errorMessage(err)),
@@ -457,10 +471,7 @@ function RulesTab() {
   if (rules.isPending) return <QueryLoading label="正在加载规则" />;
   if (rules.isError) return <QueryError message="规则加载失败" />;
 
-  const keywordsText =
-    Array.isArray(newRule.config.keywords) && newRule.config.keywords.length > 0
-      ? String(newRule.config.keywords.join("，"))
-      : "";
+  const keywordsCount = parseKeywords(keywordsInput).length;
 
   return (
     <div>
@@ -474,20 +485,9 @@ function RulesTab() {
             onChange={(event) => setNewRule((r) => ({ ...r, name: event.target.value }))}
           />
           <Input
-            placeholder="敏感词，用逗号分隔"
-            value={keywordsText}
-            onChange={(event) =>
-              setNewRule((r) => ({
-                ...r,
-                config: {
-                  ...r.config,
-                  keywords: event.target.value
-                    .split(/[,，]/)
-                    .map((v) => v.trim())
-                    .filter(Boolean),
-                },
-              }))
-            }
+            placeholder="敏感词，用逗号分隔（中英文逗号均可）"
+            value={keywordsInput}
+            onChange={(event) => setKeywordsInput(event.target.value)}
           />
           <Select
             value={newRule.target_type}
@@ -512,7 +512,7 @@ function RulesTab() {
           type="button"
           size="sm"
           className="mt-3"
-          disabled={create.isPending || !newRule.name.trim() || keywordsText.length === 0}
+          disabled={create.isPending || !newRule.name.trim() || keywordsCount === 0}
           onClick={() => create.mutate()}
         >
           {create.isPending ? "创建中…" : "创建规则"}
@@ -521,34 +521,56 @@ function RulesTab() {
 
       <AdminTable headers={["规则", "类型", "目标", "动作", "风险", "命中", "状态", "操作"]}>
         {rules.data.items.map((rule: RuleItem) => (
-          <tr key={rule.id}>
-            <td className="px-3 py-3">
-              <div className="font-medium">{rule.name}</div>
-              {rule.rule_type === "keyword" ? (
-                <div className="text-xs text-muted-foreground">
-                  {String(
-                    Array.isArray(rule.config.keywords) ? rule.config.keywords.join("，") : "",
-                  ).slice(0, 60)}
+          <Fragment key={rule.id}>
+            <tr>
+              <td className="px-3 py-3">
+                <div className="font-medium">{rule.name}</div>
+                {rule.rule_type === "keyword" ? (
+                  <div className="text-xs text-muted-foreground">
+                    {String(
+                      Array.isArray(rule.config.keywords) ? rule.config.keywords.join("，") : "",
+                    ).slice(0, 60)}
+                  </div>
+                ) : null}
+              </td>
+              <td className="px-3 py-3">{rule.rule_type}</td>
+              <td className="px-3 py-3">{rule.target_type}</td>
+              <td className="px-3 py-3">{rule.action}</td>
+              <td className="px-3 py-3">{rule.risk_score}</td>
+              <td className="px-3 py-3">{rule.hit_count}</td>
+              <td className="px-3 py-3">{rule.enabled ? "启用" : "停用"}</td>
+              <td className="px-3 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={toggle.isPending}
+                    onClick={() => toggle.mutate({ id: rule.id, enabled: !rule.enabled })}
+                  >
+                    {rule.enabled ? "停用" : "启用"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingId(rule.id)}>
+                    编辑
+                  </Button>
                 </div>
-              ) : null}
-            </td>
-            <td className="px-3 py-3">{rule.rule_type}</td>
-            <td className="px-3 py-3">{rule.target_type}</td>
-            <td className="px-3 py-3">{rule.action}</td>
-            <td className="px-3 py-3">{rule.risk_score}</td>
-            <td className="px-3 py-3">{rule.hit_count}</td>
-            <td className="px-3 py-3">{rule.enabled ? "启用" : "停用"}</td>
-            <td className="px-3 py-3">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={toggle.isPending}
-                onClick={() => toggle.mutate({ id: rule.id, enabled: !rule.enabled })}
-              >
-                {rule.enabled ? "停用" : "启用"}
-              </Button>
-            </td>
-          </tr>
+              </td>
+            </tr>
+            {editingId === rule.id ? (
+              <tr>
+                <td colSpan={8} className="bg-muted/30 px-3 py-4">
+                  <RuleEditRow
+                    rule={rule}
+                    onDone={() => setEditingId(null)}
+                    onSaved={async () => {
+                      await queryClient.invalidateQueries({
+                        queryKey: moderationKeys.rules(params),
+                      });
+                    }}
+                  />
+                </td>
+              </tr>
+            ) : null}
+          </Fragment>
         ))}
       </AdminTable>
       <AdminPagination
@@ -556,6 +578,117 @@ function RulesTab() {
         totalPages={rules.data.pagination.total_pages}
         onPageChange={(page) => setParams((current) => ({ ...current, page }))}
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inline rule editor
+// ---------------------------------------------------------------------------
+
+function RuleEditRow({
+  rule,
+  onDone,
+  onSaved,
+}: {
+  rule: RuleItem;
+  onDone: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [name, setName] = useState(rule.name);
+  const [targetType, setTargetType] = useState(rule.target_type);
+  const [action, setAction] = useState<RuleRequest["action"]>(rule.action);
+  const [riskScore, setRiskScore] = useState(rule.risk_score);
+  const [enabled, setEnabled] = useState(rule.enabled);
+  const [keywords, setKeywords] = useState(
+    Array.isArray(rule.config.keywords) ? String(rule.config.keywords.join("，")) : "",
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const parseKeywords = (value: string): string[] =>
+    value
+      .split(/[,，]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  const save = useMutation({
+    mutationFn: () =>
+      updateModerationRule(rule.id, {
+        name,
+        rule_type: rule.rule_type,
+        target_type: targetType,
+        action,
+        risk_score: riskScore,
+        enabled,
+        config: rule.rule_type === "keyword" ? { keywords: parseKeywords(keywords) } : rule.config,
+      }),
+    onSuccess: async () => {
+      setError(null);
+      await onSaved();
+      onDone();
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
+
+  return (
+    <div className="rounded-md border border-border bg-white p-4">
+      <h4 className="mb-3 text-sm font-semibold">编辑规则「{rule.name}」</h4>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input
+          placeholder="规则名称"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+        {rule.rule_type === "keyword" ? (
+          <Input
+            placeholder="敏感词，用逗号分隔（中英文逗号均可）"
+            value={keywords}
+            onChange={(event) => setKeywords(event.target.value)}
+          />
+        ) : (
+          <div className="flex items-center text-sm text-muted-foreground">
+            类型：{rule.rule_type}（仅关键词规则可编辑词表）
+          </div>
+        )}
+        <Select value={targetType} onChange={(event) => setTargetType(event.target.value)}>
+          <option value="all">全部内容</option>
+          <option value="topic">帖子</option>
+          <option value="comment">评论</option>
+        </Select>
+        <Select
+          value={action}
+          onChange={(event) => setAction(event.target.value as RuleRequest["action"])}
+        >
+          <option value="flag">标记（进待审）</option>
+          <option value="hide">隐藏</option>
+          <option value="reject">拒绝发布</option>
+        </Select>
+        <Input
+          type="number"
+          min={1}
+          max={100}
+          value={riskScore}
+          onChange={(event) => setRiskScore(Number(event.target.value) || 1)}
+        />
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+          />
+          启用规则
+        </label>
+      </div>
+      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+      <div className="mt-3 flex gap-2">
+        <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
+          {save.isPending ? "保存中…" : "保存修改"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onDone}>
+          取消
+        </Button>
+      </div>
     </div>
   );
 }
