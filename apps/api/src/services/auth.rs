@@ -50,6 +50,8 @@ pub enum AuthError {
     InvalidCredentials,
     #[error("account is unavailable")]
     AccountUnavailable,
+    #[error("registration is currently disabled")]
+    RegistrationDisabled,
     #[error("refresh token is invalid or expired")]
     InvalidRefreshToken,
     #[error("refresh token reuse detected")]
@@ -84,6 +86,15 @@ impl AuthService {
         client_ip: Option<IpNetwork>,
         user_agent: Option<&str>,
     ) -> Result<IssuedSession, AuthError> {
+        // Registration can be switched off from the admin system settings.
+        let registration_enabled = self
+            .repository
+            .setting_bool("registration_enabled", true)
+            .await
+            .map_err(|error| AuthError::Internal(error.into()))?;
+        if !registration_enabled {
+            return Err(AuthError::RegistrationDisabled);
+        }
         let input = RegistrationInput::try_from(request)?;
         let password_hash = self.passwords.hash(input.password).await?;
         let user = self

@@ -83,6 +83,7 @@ pub const PERMISSION_FILE_MANAGE: &str = "file.manage";
 pub const PERMISSION_REPORT_MANAGE: &str = "report.manage";
 pub const PERMISSION_REPORT_CREATE: &str = "report.create";
 pub const PERMISSION_SYSTEM_MANAGE: &str = "system.manage";
+pub const PERMISSION_SETTINGS_MANAGE: &str = "settings.manage";
 
 // Phase 13: community moderation permissions
 pub const PERMISSION_MODERATION_REPORT_READ: &str = "moderation.report.read";

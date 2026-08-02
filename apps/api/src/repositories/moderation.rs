@@ -309,7 +309,7 @@ impl ModerationRepository {
             LEFT JOIN users hu ON hu.id = r.handler_id
             WHERE r.reporter_id = $1 AND r.target_type = $2 AND r.target_id = $3
               AND r.status IN ('open', 'reviewing')
-              AND r.created_at >= now() - make_interval(hours => $4)
+              AND r.created_at >= now() - make_interval(hours => $4::int)
             ORDER BY r.created_at DESC
             LIMIT 1
             "#,

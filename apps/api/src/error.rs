@@ -204,6 +204,7 @@ impl From<AuthError> for AppError {
             AuthError::IdentityConflict => Self::IdentityConflict,
             AuthError::InvalidCredentials => Self::InvalidCredentials,
             AuthError::AccountUnavailable => Self::AccountUnavailable,
+            AuthError::RegistrationDisabled => Self::Validation("注册当前已关闭，请联系管理员"),
             AuthError::InvalidRefreshToken => Self::InvalidRefreshToken,
             AuthError::RefreshTokenReused => Self::RefreshTokenReused,
             AuthError::Internal(error) => Self::Internal(error),

@@ -3408,7 +3408,7 @@ impl ModerationService {
             .filter(|value| !value.is_empty());
         let (items, total) = self
             .admin_logs
-            .list_logs(q.as_deref(), action.as_deref(), limit, offset)
+            .list_logs(q.as_deref(), action.as_deref(), None, limit, offset)
             .await
             .map_err(internal)?;
         let items = items

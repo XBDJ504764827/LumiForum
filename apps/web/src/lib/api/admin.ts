@@ -1,4 +1,5 @@
 import type {
+  AdminAnalytics,
   AdminCommentItem,
   AdminCommentListParams,
   AdminDashboard,
@@ -6,8 +7,10 @@ import type {
   AdminFileListParams,
   AdminLogItem,
   AdminLogListParams,
+  AdminUserDetail,
   AdminPollItem,
   AdminPollListParams,
+  AdminDashboardRange,
   AdminTopicItem,
   AdminTopicListParams,
   AdminTopicUpdateRequest,
@@ -17,12 +20,18 @@ import type {
   Category,
   CreateCategoryRequest,
   CreateReportRequest,
+  LoginRecordItem,
   Paginated,
+  PermissionOption,
+  QueueSummary,
   ReportItem,
   ReportListParams,
   ResolveReportRequest,
   RoleOption,
+  RolePermissionView,
+  SystemSettingItem,
   UpdateCategoryRequest,
+  UpdateRolePermissionsRequest,
 } from "@lumiforum/types";
 
 import { apiRequest } from "@/lib/api/client";
@@ -30,6 +39,7 @@ import { apiRequest } from "@/lib/api/client";
 export const adminKeys = {
   all: ["admin"] as const,
   dashboard: ["admin", "dashboard"] as const,
+  dashboardRange: (range: AdminDashboardRange) => ["admin", "dashboard", range] as const,
   roles: ["admin", "roles"] as const,
   users: (params: AdminUserListParams) => ["admin", "users", params] as const,
   user: (id: string) => ["admin", "user", id] as const,
@@ -40,6 +50,14 @@ export const adminKeys = {
   reports: (params: ReportListParams) => ["admin", "reports", params] as const,
   polls: (params: AdminPollListParams) => ["admin", "polls", params] as const,
   logs: (params: AdminLogListParams) => ["admin", "logs", params] as const,
+  queue: ["admin", "queue"] as const,
+  analytics: (days: number) => ["admin", "analytics", days] as const,
+  settings: ["admin", "settings"] as const,
+  permissions: ["admin", "permissions"] as const,
+  rolePermissions: (code: string) => ["admin", "role-permissions", code] as const,
+  userDetail: (id: string) => ["admin", "user-detail", id] as const,
+  loginRecords: (id: string, params: { page?: number; page_size?: number }) =>
+    ["admin", "login-records", id, params] as const,
 };
 
 function queryString(params: Record<string, string | number | undefined>): string {
@@ -99,6 +117,7 @@ export function listAdminTopics(
       q: params.q,
       status: params.status,
       category_id: params.category_id,
+      sort: params.sort || undefined,
       page: params.page,
       page_size: params.page_size,
     })}`,
@@ -130,6 +149,7 @@ export function listAdminComments(
       q: params.q,
       status: params.status,
       topic_id: params.topic_id,
+      filter: params.filter || undefined,
       page: params.page,
       page_size: params.page_size,
     })}`,
@@ -220,12 +240,77 @@ export function listAdminLogs(params: AdminLogListParams = {}): Promise<Paginate
     `/admin/logs${queryString({
       q: params.q,
       action: params.action,
+      target_type: params.target_type,
       page: params.page,
       page_size: params.page_size,
     })}`,
     {},
     true,
   );
+}
+
+export function getAdminUserDetail(id: string): Promise<AdminUserDetail> {
+  return apiRequest(`/admin/users/${encodeURIComponent(id)}/detail`, {}, true);
+}
+
+export function listAdminLoginRecords(
+  id: string,
+  params: { page?: number; page_size?: number } = {},
+): Promise<Paginated<LoginRecordItem>> {
+  return apiRequest(
+    `/admin/users/${encodeURIComponent(id)}/login-records${queryString(params)}`,
+    {},
+    true,
+  );
+}
+
+export function forceAdminLogout(id: string): Promise<{ message: string }> {
+  return apiRequest(
+    `/admin/users/${encodeURIComponent(id)}/force-logout`,
+    { method: "POST" },
+    true,
+  );
+}
+
+export function getAdminDashboardRange(range: AdminDashboardRange): Promise<AdminDashboard> {
+  return apiRequest(`/admin/dashboard?range=${range}`, {}, true);
+}
+
+export function listAdminPermissions(): Promise<PermissionOption[]> {
+  return apiRequest("/admin/permissions", {}, true);
+}
+
+export function getAdminRolePermissions(code: string): Promise<RolePermissionView> {
+  return apiRequest(`/admin/roles/${encodeURIComponent(code)}/permissions`, {}, true);
+}
+
+export function updateAdminRolePermissions(
+  code: string,
+  input: UpdateRolePermissionsRequest,
+): Promise<RolePermissionView> {
+  return apiRequest(
+    `/admin/roles/${encodeURIComponent(code)}/permissions`,
+    { method: "PUT", body: JSON.stringify(input) },
+    true,
+  );
+}
+
+export function getAdminQueue(): Promise<QueueSummary> {
+  return apiRequest("/admin/queue", {}, true);
+}
+
+export function getAdminAnalytics(days: number): Promise<AdminAnalytics> {
+  return apiRequest(`/admin/analytics?days=${days}`, {}, true);
+}
+
+export function getAdminSettings(): Promise<SystemSettingItem[]> {
+  return apiRequest("/admin/settings", {}, true);
+}
+
+export function updateAdminSettings(
+  settings: Array<{ key: string; value: string | number | boolean }>,
+): Promise<SystemSettingItem[]> {
+  return apiRequest("/admin/settings", { method: "PUT", body: JSON.stringify({ settings }) }, true);
 }
 
 export function listAdminPolls(

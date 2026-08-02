@@ -587,18 +587,126 @@ export interface HotTopicStat {
   like_count: number;
 }
 
+export type AdminDashboardRange = "today" | "7d" | "30d";
+
+export interface DailyCount {
+  date: string;
+  count: number;
+}
+
+export interface HotCategoryStat {
+  id: string;
+  name: string;
+  slug: string;
+  topic_count: number;
+  comment_count: number;
+}
+
 export interface AdminDashboard {
   users_total: number;
-  topics_total: number;
-  comments_total: number;
-  uploads_total: number;
-  reports_open: number;
   users_today: number;
-  topics_today: number;
+  active_users_today: number;
   active_users_7d: number;
-  registrations_7d: DailyCount[];
-  topics_7d: DailyCount[];
+  online_users: number;
+  topics_total: number;
+  topics_today: number;
+  comments_total: number;
+  comments_today: number;
+  polls_total: number;
+  uploads_total: number;
+  storage_bytes: number;
+  reports_open: number;
+  reports_total: number;
+  api_requests_total: number;
+  ws_connections: number;
+  range: AdminDashboardRange;
+  registrations: DailyCount[];
+  topics: DailyCount[];
+  comments: DailyCount[];
   hot_topics: HotTopicStat[];
+  hot_categories: HotCategoryStat[];
+}
+
+export interface LoginRecordItem {
+  id: string;
+  created_at: string;
+  ip: string | null;
+  user_agent: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface AdminUserDetail {
+  user: AdminUserItem;
+  steam_id: string | null;
+  steam_persona_name: string | null;
+  login_count: number;
+  topics_count: number;
+  comments_count: number;
+  reports_made: number;
+  sanctions_active: number;
+  recent_logins: LoginRecordItem[];
+}
+
+export interface PermissionOption {
+  code: string;
+  name: string;
+  description: string | null;
+  group: string;
+}
+
+export interface RolePermissionView {
+  role_code: string;
+  role_name: string;
+  permissions: string[];
+}
+
+export interface QueueReportItem {
+  id: string;
+  reporter_username: string;
+  target_type: "topic" | "comment" | "user";
+  target_id: string;
+  reason: string;
+  status: string;
+  created_at: string;
+}
+
+export interface QueueCaseItem {
+  id: string;
+  target_type: string;
+  target_id: string;
+  priority: string;
+  source: string;
+  opened_at: string;
+}
+
+export interface QueueSummary {
+  pending_reports: number;
+  reviewing_reports: number;
+  open_cases: number;
+  hidden_topics: number;
+  hidden_comments: number;
+  pending_uploads: number;
+  latest_reports: QueueReportItem[];
+  latest_cases: QueueCaseItem[];
+}
+
+export interface AdminAnalytics {
+  days: number;
+  registrations: DailyCount[];
+  topics: DailyCount[];
+  comments: DailyCount[];
+  polls: DailyCount[];
+  cumulative_users: DailyCount[];
+  hot_categories: HotCategoryStat[];
+  hot_topics: HotTopicStat[];
+}
+
+export interface SystemSettingItem {
+  key: string;
+  value: string | number | boolean;
+  description: string | null;
+  updated_at: string;
 }
 
 export interface AdminUserItem {
@@ -652,6 +760,7 @@ export interface AdminTopicItem {
   like_count: number;
   is_pinned: boolean;
   is_featured: boolean;
+  is_locked: boolean;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -661,6 +770,7 @@ export interface AdminTopicListParams {
   q?: string;
   status?: string;
   category_id?: string;
+  sort?: "latest" | "hot" | "most_reported" | "violating" | "";
   page?: number;
   page_size?: number;
 }
@@ -669,6 +779,7 @@ export interface AdminTopicUpdateRequest {
   status?: string;
   is_pinned?: boolean;
   is_featured?: boolean;
+  is_locked?: boolean;
 }
 
 export interface AdminCommentItem {
@@ -692,6 +803,7 @@ export interface AdminCommentListParams {
   q?: string;
   status?: string;
   topic_id?: string;
+  filter?: "reported" | "high_frequency" | "";
   page?: number;
   page_size?: number;
 }
@@ -775,6 +887,7 @@ export interface AdminLogItem {
 export interface AdminLogListParams {
   q?: string;
   action?: string;
+  target_type?: string;
   page?: number;
   page_size?: number;
 }
@@ -795,4 +908,8 @@ export interface UpdateCategoryRequest {
   icon?: string | null;
   sort_order?: number;
   is_visible?: boolean;
+}
+
+export interface UpdateRolePermissionsRequest {
+  permission_codes: string[];
 }

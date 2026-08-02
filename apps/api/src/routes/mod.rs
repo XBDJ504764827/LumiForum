@@ -10,6 +10,7 @@ mod presence;
 mod reactions;
 mod response;
 mod search;
+mod settings;
 mod steam_auth;
 mod topics;
 mod uploads;
@@ -17,7 +18,10 @@ pub mod users;
 mod ws;
 
 use axum::{
+    extract::{Request, State},
     http::{header, HeaderValue, Method},
+    middleware::{self, Next},
+    response::Response,
     routing::get,
     Router,
 };
@@ -45,6 +49,7 @@ pub fn create_router(state: AppState) -> Router {
         .merge(notifications::router(state.clone()))
         .merge(polls::public_router(state.clone()))
         .merge(search::router())
+        .merge(settings::router())
         .merge(uploads::router(state.clone()))
         .merge(admin::router(state.clone()))
         .merge(admin::public_report_router(state.clone()))
@@ -69,10 +74,24 @@ pub fn create_router(state: AppState) -> Router {
     };
 
     router
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            count_http_request,
+        ))
         .layer(TraceLayer::new_for_http())
         .layer(RequestBodyLimitLayer::new(20 * 1024 * 1024 + 64 * 1024))
         .layer(cors)
         .with_state(state)
+}
+
+/// Lightweight per-request counter backing the admin dashboard.
+async fn count_http_request(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    state.metrics().inc("http_requests_total", &[]);
+    next.run(request).await
 }
 
 fn build_cors(origin: &str) -> CorsLayer {

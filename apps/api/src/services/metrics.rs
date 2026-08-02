@@ -49,6 +49,7 @@ impl MetricsRegistry {
         };
         // Pre-register well-known counters so they appear even at zero.
         for name in [
+            "http_requests_total",
             "moderation_reports_total",
             "moderation_actions_total",
             "moderation_auto_rules_triggered_total",
@@ -108,6 +109,15 @@ impl MetricsRegistry {
     }
 
     /// Render the registry in Prometheus text exposition format.
+    /// Read a counter value (0 when absent) — used by the admin dashboard.
+    pub fn counter_value(&self, name: &'static str) -> u64 {
+        let counters = self.inner.counters.lock().unwrap();
+        counters
+            .get(name)
+            .map(|entry| entry.value.load(Ordering::Relaxed))
+            .unwrap_or(0)
+    }
+
     pub fn render(&self) -> String {
         let mut out = String::new();
         let mut grouped: HashMap<String, Vec<(String, u64)>> = HashMap::new();

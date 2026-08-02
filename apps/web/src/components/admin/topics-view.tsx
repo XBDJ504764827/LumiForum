@@ -31,7 +31,16 @@ export function AdminTopicsView() {
       action,
     }: {
       id: string;
-      action: "hide" | "publish" | "delete" | "pin" | "unpin" | "feature" | "unfeature";
+      action:
+        | "hide"
+        | "publish"
+        | "delete"
+        | "pin"
+        | "unpin"
+        | "feature"
+        | "unfeature"
+        | "lock"
+        | "unlock";
     }) => {
       if (action === "delete") return deleteAdminTopic(id);
       if (action === "hide") return updateAdminTopic(id, { status: "hidden" });
@@ -39,7 +48,9 @@ export function AdminTopicsView() {
       if (action === "pin") return updateAdminTopic(id, { is_pinned: true });
       if (action === "unpin") return updateAdminTopic(id, { is_pinned: false });
       if (action === "feature") return updateAdminTopic(id, { is_featured: true });
-      return updateAdminTopic(id, { is_featured: false });
+      if (action === "unfeature") return updateAdminTopic(id, { is_featured: false });
+      if (action === "lock") return updateAdminTopic(id, { is_locked: true });
+      return updateAdminTopic(id, { is_locked: false });
     },
     onSuccess: async () => {
       setError(null);
@@ -76,6 +87,21 @@ export function AdminTopicsView() {
           <option value="hidden">已隐藏</option>
           <option value="deleted">已删除</option>
         </Select>
+        <Select
+          value={params.sort ?? ""}
+          onChange={(event) =>
+            setParams((current) => ({
+              ...current,
+              page: 1,
+              sort: (event.target.value || undefined) as AdminTopicListParams["sort"],
+            }))
+          }
+        >
+          <option value="">最新</option>
+          <option value="hot">热门</option>
+          <option value="most_reported">举报最多</option>
+          <option value="violating">违规内容</option>
+        </Select>
         <Button
           type="button"
           onClick={() =>
@@ -100,6 +126,7 @@ export function AdminTopicsView() {
               {topic.status}
               {topic.is_pinned ? " · 置顶" : ""}
               {topic.is_featured ? " · 精华" : ""}
+              {topic.is_locked ? " · 锁定" : ""}
             </td>
             <td className="px-3 py-3 text-muted-foreground">
               浏览 {topic.view_count} / 回复 {topic.reply_count}
@@ -107,6 +134,25 @@ export function AdminTopicsView() {
             <td className="px-3 py-3">{formatDateTime(topic.created_at)}</td>
             <td className="px-3 py-3">
               <div className="flex flex-wrap gap-2">
+                {topic.is_locked ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => mutation.mutate({ id: topic.id, action: "unlock" })}
+                  >
+                    解锁
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => mutation.mutate({ id: topic.id, action: "lock" })}
+                  >
+                    锁定
+                  </Button>
+                )}
                 {topic.status === "published" ? (
                   <Button
                     type="button"

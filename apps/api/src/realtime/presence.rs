@@ -72,6 +72,24 @@ impl PresenceService {
         out
     }
 
+    /// Number of distinct online users (SCAN over presence keys).
+    pub async fn count_online(&self) -> usize {
+        let mut redis = self.redis.clone();
+        let iter = match redis.scan_match::<_, String>("presence:online:*").await {
+            Ok(iter) => iter,
+            Err(error) => {
+                tracing::warn!(%error, "presence count unavailable");
+                return 0;
+            }
+        };
+        let mut count = 0_usize;
+        let mut iter = iter;
+        while iter.next_item().await.is_some() {
+            count += 1;
+        }
+        count
+    }
+
     pub fn ttl_secs(&self) -> u64 {
         self.ttl_secs
     }

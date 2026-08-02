@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 export function AdminPageHeader({
   title,
@@ -92,4 +93,30 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Simple breadcrumb trail for admin sub-pages. */
+export function AdminBreadcrumb({ items }: { items: Array<{ label: string; href?: string }> }) {
+  return (
+    <nav
+      className="mb-4 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground"
+      aria-label="面包屑"
+    >
+      <Link href="/admin" className="hover:text-foreground">
+        后台
+      </Link>
+      {items.map((item) => (
+        <span key={item.label} className="flex items-center gap-1.5">
+          <span aria-hidden="true">/</span>
+          {item.href ? (
+            <Link href={item.href} className="hover:text-foreground">
+              {item.label}
+            </Link>
+          ) : (
+            <span className="text-foreground">{item.label}</span>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
 }

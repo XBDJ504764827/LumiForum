@@ -1,7 +1,7 @@
 "use client";
 
 import type { AdminLogListParams } from "@lumiforum/types";
-import { Button, Input } from "@lumiforum/ui";
+import { Button, Input, Select } from "@lumiforum/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -36,6 +36,25 @@ export function AdminLogsView() {
           placeholder="搜索摘要 / 管理员"
           className="max-w-xs"
         />
+        <Select
+          value={params.target_type ?? ""}
+          onChange={(event) =>
+            setParams((current) => ({
+              ...current,
+              page: 1,
+              target_type: event.target.value || undefined,
+            }))
+          }
+        >
+          <option value="">全部目标</option>
+          <option value="user">用户</option>
+          <option value="topic">帖子</option>
+          <option value="comment">评论</option>
+          <option value="category">分类</option>
+          <option value="file">文件</option>
+          <option value="role">角色</option>
+          <option value="system">系统</option>
+        </Select>
         <Button
           type="button"
           onClick={() =>
