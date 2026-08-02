@@ -11,12 +11,13 @@ use uuid::Uuid;
 use crate::events::{NotificationEvent, PollEndedEvent, PollVotedEvent};
 use crate::models::{
     AuthenticatedPrincipal, CreatePollDraft, HotPollItem, PollDetail, PollOptionItem, PollRecord,
-    PollResults, PollStatus, UpdatePollRequest, VotePollRequest,
-    PERMISSION_ADMIN_ACCESS, PERMISSION_POLL_MANAGE, PERMISSION_POLL_VOTE,
-    PERMISSION_TOPIC_CREATE,
+    PollResults, PollStatus, UpdatePollRequest, VotePollRequest, PERMISSION_ADMIN_ACCESS,
+    PERMISSION_POLL_MANAGE, PERMISSION_POLL_VOTE, PERMISSION_TOPIC_CREATE,
 };
 use crate::realtime::RealtimeBus;
-use crate::repositories::{option_item, PollRepository, PollUpdateError, TopicRepository, VoteError};
+use crate::repositories::{
+    option_item, PollRepository, PollUpdateError, TopicRepository, VoteError,
+};
 use crate::services::{ModerationService, NotificationService};
 
 const RESULTS_CACHE_TTL_SECS: u64 = 60;
@@ -122,16 +123,13 @@ impl PollService {
         // Auto-moderation screening on the poll title + options.
         let screening = self
             .moderation
-            .screen_content(
-                principal,
-                "poll",
-                &draft.title,
-                &draft.options.join(" "),
-            )
+            .screen_content(principal, "poll", &draft.title, &draft.options.join(" "))
             .await
             .map_err(map_moderation)?;
         if !screening.is_allowed() {
-            return Err(PollError::Validation("投票内容未通过自动审核，请修改后重试"));
+            return Err(PollError::Validation(
+                "投票内容未通过自动审核，请修改后重试",
+            ));
         }
 
         let options: Vec<String> = draft.options;
@@ -239,12 +237,11 @@ impl PollService {
             .map_err(internal)?;
 
         let my_votes = match viewer {
-            Some(principal) => {
-                self.repository
-                    .my_votes(poll.id, principal.user_id)
-                    .await
-                    .map_err(internal)?
-            }
+            Some(principal) => self
+                .repository
+                .my_votes(poll.id, principal.user_id)
+                .await
+                .map_err(internal)?,
             None => Vec::new(),
         };
 
@@ -317,9 +314,7 @@ impl PollService {
         }
         if poll.multiple_choice && existing + option_ids.len() as i64 > i64::from(poll.max_choices)
         {
-            return Err(PollError::Validation(
-                "加上已选选项后超出最多可选数量",
-            ));
+            return Err(PollError::Validation("加上已选选项后超出最多可选数量"));
         }
 
         // Each option is inserted under the poll row lock (serialized votes).
@@ -405,11 +400,8 @@ impl PollService {
             return Err(PollError::Validation("你还没有参与该投票"));
         }
 
-        let (total_votes, participants) = self
-            .repository
-            .totals(poll_id)
-            .await
-            .map_err(internal)?;
+        let (total_votes, participants) =
+            self.repository.totals(poll_id).await.map_err(internal)?;
         self.after_change(poll_id, poll.topic_id, "cancel", total_votes, participants)
             .await;
 
@@ -469,10 +461,7 @@ impl PollService {
             return Err(PollError::PollClosed);
         }
 
-        let title = request
-            .title
-            .map(normalize_title)
-            .transpose()?;
+        let title = request.title.map(normalize_title).transpose()?;
         let description = match request.description {
             None => None,
             Some(value) => Some(normalize_description(Some(value))?),
@@ -495,8 +484,7 @@ impl PollService {
             .await
             .map_err(internal)?;
         let options_to_add = normalize_options_to_add(request.options_to_add)?;
-        let option_ids_to_remove =
-            dedupe_options(request.option_ids_to_remove.clone());
+        let option_ids_to_remove = dedupe_options(request.option_ids_to_remove.clone());
         if existing_options.len() + options_to_add.len() > MAX_OPTIONS {
             return Err(PollError::Validation("投票最多支持 20 个选项"));
         }
@@ -512,9 +500,7 @@ impl PollService {
                         return Err(PollError::Validation("选项不存在或不属于该投票"));
                     }
                     Some(votes) if *votes > 0 => {
-                        return Err(PollError::Validation(
-                            "已有票数的选项无法删除",
-                        ));
+                        return Err(PollError::Validation("已有票数的选项无法删除"));
                     }
                     _ => {}
                 }
@@ -543,7 +529,8 @@ impl PollService {
             )
             .await
             .map_err(map_update_error)?;
-        self.after_change(poll_id, poll.topic_id, "update", 0, 0).await;
+        self.after_change(poll_id, poll.topic_id, "update", 0, 0)
+            .await;
         self.get_by_id(Some(principal), poll_id).await
     }
 
@@ -561,7 +548,8 @@ impl PollService {
             .ok_or(PollError::NotFound)?;
         self.require_manager(principal, &poll)?;
         self.repository.close(poll_id).await.map_err(internal)?;
-        self.after_change(poll_id, poll.topic_id, "close", 0, 0).await;
+        self.after_change(poll_id, poll.topic_id, "close", 0, 0)
+            .await;
         self.get_by_id(Some(principal), poll_id).await
     }
 
@@ -648,11 +636,16 @@ impl PollService {
         let offset = i64::from(page - 1) * i64::from(page_size);
         let (items, total) = self
             .repository
-            .list_admin(q.as_deref(), status.as_deref(), i64::from(page_size), offset)
+            .list_admin(
+                q.as_deref(),
+                status.as_deref(),
+                i64::from(page_size),
+                offset,
+            )
             .await
             .map_err(internal)?;
-        let total = u64::try_from(total)
-            .map_err(|_| internal(anyhow::anyhow!("negative poll count")))?;
+        let total =
+            u64::try_from(total).map_err(|_| internal(anyhow::anyhow!("negative poll count")))?;
         Ok(crate::models::Paginated {
             items,
             pagination: crate::models::PaginationMeta::new(page, page_size, total),
@@ -722,8 +715,8 @@ impl PollService {
         principal: &AuthenticatedPrincipal,
         poll: &PollRecord,
     ) -> Result<(), PollError> {
-        let allowed = principal.user_id == poll.author_id
-            || principal.has_permission(PERMISSION_POLL_MANAGE);
+        let allowed =
+            principal.user_id == poll.author_id || principal.has_permission(PERMISSION_POLL_MANAGE);
         if allowed {
             Ok(())
         } else {
@@ -757,9 +750,12 @@ impl PollService {
 
     async fn cached_results(&self, key: &str) -> Option<PollResults> {
         let mut redis = self.redis.clone();
-        redis.get::<_, Option<Vec<u8>>>(key).await.ok().flatten().and_then(|bytes| {
-            serde_json::from_slice(&bytes).ok()
-        })
+        redis
+            .get::<_, Option<Vec<u8>>>(key)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
     }
 
     async fn set_results_cache(&self, key: &str, results: &PollResults) {
@@ -774,7 +770,9 @@ impl PollService {
 
     async fn invalidate_results_cache(&self, poll_id: Uuid) {
         let mut redis = self.redis.clone();
-        let _ = redis.del::<_, ()>(format!("{RESULTS_CACHE_PREFIX}{poll_id}")).await;
+        let _ = redis
+            .del::<_, ()>(format!("{RESULTS_CACHE_PREFIX}{poll_id}"))
+            .await;
     }
 
     async fn cached_hot(&self) -> Option<Vec<HotPollItem>> {
@@ -906,10 +904,7 @@ fn normalize_description(description: Option<String>) -> Result<Option<String>, 
 
 fn normalize_option(content: &str) -> String {
     // Collapse internal whitespace runs for clean display + dedup.
-    content
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    content.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn normalize_options_to_add(options: Vec<String>) -> Result<Vec<String>, PollError> {
@@ -964,11 +959,7 @@ fn to_detail(
         author_id: poll.author_id,
         title: poll.title.clone(),
         description: poll.description.clone(),
-        poll_type: if poll.poll_type == "standard" {
-            crate::models::PollType::Standard
-        } else {
-            crate::models::PollType::Standard
-        },
+        poll_type: crate::models::PollType::Standard,
         status: if poll.status == "closed" {
             PollStatus::Closed
         } else {
@@ -990,10 +981,7 @@ fn to_detail(
     }
 }
 
-fn require(
-    principal: &AuthenticatedPrincipal,
-    permission: &'static str,
-) -> Result<(), PollError> {
+fn require(principal: &AuthenticatedPrincipal, permission: &'static str) -> Result<(), PollError> {
     if principal.has_permission(permission) {
         Ok(())
     } else {
@@ -1019,12 +1007,8 @@ fn map_moderation(error: crate::services::ModerationError) -> PollError {
 fn map_update_error(error: PollUpdateError) -> PollError {
     match error {
         PollUpdateError::NotFound => PollError::NotFound,
-        PollUpdateError::OptionHasVotes => {
-            PollError::Validation("已有票数的选项无法删除")
-        }
-        PollUpdateError::UnknownOption => {
-            PollError::Validation("选项不存在或不属于该投票")
-        }
+        PollUpdateError::OptionHasVotes => PollError::Validation("已有票数的选项无法删除"),
+        PollUpdateError::UnknownOption => PollError::Validation("选项不存在或不属于该投票"),
         PollUpdateError::Database(error) => internal(error),
     }
 }

@@ -36,8 +36,10 @@ pub async fn enforce_mutation_origin(
     request: Request,
     next: Next,
 ) -> AppResult<Response> {
-    if !matches!(request.method(), &Method::GET | &Method::HEAD | &Method::OPTIONS)
-        && !origin_matches(&request, &layer.allowed_origin)
+    if !matches!(
+        request.method(),
+        &Method::GET | &Method::HEAD | &Method::OPTIONS
+    ) && !origin_matches(&request, &layer.allowed_origin)
     {
         return Err(AppError::CsrfValidationFailed);
     }

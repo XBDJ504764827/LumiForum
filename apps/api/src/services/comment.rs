@@ -117,9 +117,7 @@ impl CommentService {
             .map_err(map_moderation)?;
         let (status, collapsed) = match decision.action {
             crate::models::RuleAction::Reject => {
-                return Err(CommentError::Validation(
-                    "内容未通过自动审核，请修改后重试",
-                ));
+                return Err(CommentError::Validation("内容未通过自动审核，请修改后重试"));
             }
             crate::models::RuleAction::RateLimit => return Err(CommentError::RateLimited),
             crate::models::RuleAction::Hide => ("hidden", false),
@@ -141,7 +139,13 @@ impl CommentService {
         if !decision.is_allowed() {
             let _ = self
                 .moderation
-                .record_screening("comment", comment.id, principal.user_id, &decision, &content)
+                .record_screening(
+                    "comment",
+                    comment.id,
+                    principal.user_id,
+                    &decision,
+                    &content,
+                )
                 .await;
         }
         self.emit_comment_created(principal.user_id, topic_id, comment.id)
@@ -181,9 +185,7 @@ impl CommentService {
             .map_err(map_moderation)?;
         let (status, collapsed) = match decision.action {
             crate::models::RuleAction::Reject => {
-                return Err(CommentError::Validation(
-                    "内容未通过自动审核，请修改后重试",
-                ));
+                return Err(CommentError::Validation("内容未通过自动审核，请修改后重试"));
             }
             crate::models::RuleAction::RateLimit => return Err(CommentError::RateLimited),
             crate::models::RuleAction::Hide => ("hidden", false),
@@ -208,7 +210,13 @@ impl CommentService {
         if !decision.is_allowed() {
             let _ = self
                 .moderation
-                .record_screening("comment", comment.id, principal.user_id, &decision, &content)
+                .record_screening(
+                    "comment",
+                    comment.id,
+                    principal.user_id,
+                    &decision,
+                    &content,
+                )
                 .await;
         }
         self.emit_comment_replied(

@@ -191,10 +191,10 @@ async fn handle_socket(
             poll_event = poll_rx.recv() => {
                 match poll_event {
                     Ok((poll_id, message)) => {
-                        if poll_subscriptions.contains(&poll_id) {
-                            if sender.send(json_message(&message)).await.is_err() {
-                                break;
-                            }
+                        if poll_subscriptions.contains(&poll_id)
+                            && sender.send(json_message(&message)).await.is_err()
+                        {
+                            break;
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
@@ -219,7 +219,8 @@ async fn handle_socket(
 async fn presence_updates(
     state: &AppState,
     client: &ClientMessage,
-) -> Result<Vec<ServerMessage>, &'static str> {    let user_ids = client
+) -> Result<Vec<ServerMessage>, &'static str> {
+    let user_ids = client
         .data
         .get("user_ids")
         .and_then(|value| value.as_array())

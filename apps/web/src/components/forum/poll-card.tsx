@@ -18,13 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useRealtime } from "@/components/realtime/realtime-provider";
 import { errorMessage } from "@/lib/api/errors";
-import {
-  cancelPollVote,
-  closePoll,
-  deletePoll,
-  pollKeys,
-  votePoll,
-} from "@/lib/api/polls";
+import { cancelPollVote, closePoll, deletePoll, pollKeys, votePoll } from "@/lib/api/polls";
 import { cn } from "@lumiforum/ui";
 
 export function PollCard({ poll }: { poll: Poll }) {
@@ -145,13 +139,9 @@ export function PollCard({ poll }: { poll: Poll }) {
                 </Badge>
               ) : null}
               {poll.multiple_choice ? (
-                <Badge className="text-muted-foreground">
-                  多选（最多 {poll.max_choices} 项）
-                </Badge>
+                <Badge className="text-muted-foreground">多选（最多 {poll.max_choices} 项）</Badge>
               ) : (
-                <Badge className="text-muted-foreground">
-                  单选
-                </Badge>
+                <Badge className="text-muted-foreground">单选</Badge>
               )}
               {poll.anonymous ? (
                 <Badge className="gap-1 text-muted-foreground">
@@ -208,12 +198,18 @@ export function PollCard({ poll }: { poll: Poll }) {
                     voted ? (
                       <CheckCircle2 className="size-4 shrink-0 text-primary" aria-hidden="true" />
                     ) : (
-                      <Circle className="size-4 shrink-0 text-muted-foreground/40" aria-hidden="true" />
+                      <Circle
+                        className="size-4 shrink-0 text-muted-foreground/40"
+                        aria-hidden="true"
+                      />
                     )
                   ) : picked ? (
                     <CheckCircle2 className="size-4 shrink-0 text-primary" aria-hidden="true" />
                   ) : (
-                    <Circle className="size-4 shrink-0 text-muted-foreground/40" aria-hidden="true" />
+                    <Circle
+                      className="size-4 shrink-0 text-muted-foreground/40"
+                      aria-hidden="true"
+                    />
                   )}
                   <span className="truncate">{option.content}</span>
                 </span>
@@ -276,8 +272,7 @@ export function PollCard({ poll }: { poll: Poll }) {
             ) : null}
             {authStatus === "authenticated" &&
             user?.role.code !== "moderator" &&
-            (user?.role.code === "administrator" ||
-              user?.role.code === "super_administrator") ? (
+            (user?.role.code === "administrator" || user?.role.code === "super_administrator") ? (
               <Button
                 type="button"
                 size="sm"

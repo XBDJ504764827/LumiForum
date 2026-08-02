@@ -25,9 +25,9 @@ use crate::middleware::{
 };
 use crate::models::{
     AdminLogListQuery, AppealListQuery, AuthenticatedPrincipal, CaseActionRequest, CaseQuery,
-    CreateAppealRequest, CreateSanctionRequest, ModerationReportQuery,
-    NoteRequest, ResolveReportRequestV2, ReviewAppealRequest, RevokeSanctionRequest, RuleListQuery,
-    RuleRequest, SanctionListQuery, PERMISSION_ADMIN_ACCESS,
+    CreateAppealRequest, CreateSanctionRequest, ModerationReportQuery, NoteRequest,
+    ResolveReportRequestV2, ReviewAppealRequest, RevokeSanctionRequest, RuleListQuery, RuleRequest,
+    SanctionListQuery, PERMISSION_ADMIN_ACCESS,
 };
 use crate::services::{AdminAuditContext, BatchResult};
 use crate::state::AppState;
@@ -67,9 +67,15 @@ pub fn admin_router(state: AppState) -> Router<AppState> {
         .route("/admin/moderation/reports", get(list_reports))
         .route("/admin/moderation/reports/batch", post(batch_reports))
         .route("/admin/moderation/reports/{id}", get(get_report_detail))
-        .route("/admin/moderation/reports/{id}/resolve", post(resolve_report))
+        .route(
+            "/admin/moderation/reports/{id}/resolve",
+            post(resolve_report),
+        )
         .route("/admin/moderation/reports/{id}/reject", post(reject_report))
-        .route("/admin/moderation/reports/{id}/duplicate", post(duplicate_report))
+        .route(
+            "/admin/moderation/reports/{id}/duplicate",
+            post(duplicate_report),
+        )
         .route("/admin/moderation/cases", get(list_cases))
         .route("/admin/moderation/cases/{id}", get(get_case_detail))
         .route("/admin/moderation/cases/{id}/assign", post(assign_case))
@@ -78,10 +84,19 @@ pub fn admin_router(state: AppState) -> Router<AppState> {
         .route("/admin/moderation/cases/{id}/close", post(close_case))
         .route("/admin/moderation/cases/{id}/notes", post(add_note))
         .route("/admin/moderation/topics/{id}/actions", post(topic_action))
-        .route("/admin/moderation/comments/{id}/actions", post(comment_action))
-        .route("/admin/moderation/users/{id}/sanctions", get(list_user_sanctions).post(issue_sanction))
+        .route(
+            "/admin/moderation/comments/{id}/actions",
+            post(comment_action),
+        )
+        .route(
+            "/admin/moderation/users/{id}/sanctions",
+            get(list_user_sanctions).post(issue_sanction),
+        )
         .route("/admin/moderation/sanctions", get(list_sanctions))
-        .route("/admin/moderation/sanctions/{id}/revoke", post(revoke_sanction))
+        .route(
+            "/admin/moderation/sanctions/{id}/revoke",
+            post(revoke_sanction),
+        )
         .route("/admin/moderation/appeals", get(list_appeals))
         .route("/admin/moderation/appeals/{id}/review", post(review_appeal))
         .route("/admin/moderation/rules", get(list_rules).post(create_rule))
@@ -102,7 +117,9 @@ pub fn admin_router(state: AppState) -> Router<AppState> {
 }
 
 pub fn metrics_router(state: AppState) -> Router<AppState> {
-    Router::new().route("/metrics", get(metrics_text)).with_state(state)
+    Router::new()
+        .route("/metrics", get(metrics_text))
+        .with_state(state)
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +170,10 @@ async fn get_my_report(
     path: Result<Path<Uuid>, PathRejection>,
 ) -> AppResult<Json<ApiResponse<crate::models::ReportItemV2>>> {
     let report_id = parse_path(path)?;
-    let data = state.moderation().get_my_report(&principal, report_id).await?;
+    let data = state
+        .moderation()
+        .get_my_report(&principal, report_id)
+        .await?;
     Ok(Json(ApiResponse::new(data)))
 }
 
@@ -163,7 +183,10 @@ async fn cancel_report(
     path: Result<Path<Uuid>, PathRejection>,
 ) -> AppResult<Json<ApiResponse<crate::models::ReportItemV2>>> {
     let report_id = parse_path(path)?;
-    let data = state.moderation().cancel_report(&principal, report_id).await?;
+    let data = state
+        .moderation()
+        .cancel_report(&principal, report_id)
+        .await?;
     Ok(Json(ApiResponse::new(data)))
 }
 
@@ -186,7 +209,10 @@ async fn get_my_sanction(
     path: Result<Path<Uuid>, PathRejection>,
 ) -> AppResult<Json<ApiResponse<crate::models::SanctionItem>>> {
     let sanction_id = parse_path(path)?;
-    let data = state.moderation().get_my_sanction(&principal, sanction_id).await?;
+    let data = state
+        .moderation()
+        .get_my_sanction(&principal, sanction_id)
+        .await?;
     Ok(Json(ApiResponse::new(data)))
 }
 
@@ -201,7 +227,10 @@ async fn appeal_sanction(
     request.sanction_id = Some(sanction_id);
     request.content_type = None;
     request.content_id = None;
-    let data = state.moderation().create_appeal(&principal, request).await?;
+    let data = state
+        .moderation()
+        .create_appeal(&principal, request)
+        .await?;
     Ok((StatusCode::CREATED, Json(ApiResponse::new(data))))
 }
 
@@ -211,7 +240,10 @@ async fn create_appeal(
     payload: Result<Json<CreateAppealRequest>, JsonRejection>,
 ) -> AppResult<(StatusCode, Json<ApiResponse<crate::models::AppealItem>>)> {
     let request = parse_json(payload)?;
-    let data = state.moderation().create_appeal(&principal, request).await?;
+    let data = state
+        .moderation()
+        .create_appeal(&principal, request)
+        .await?;
     Ok((StatusCode::CREATED, Json(ApiResponse::new(data))))
 }
 
@@ -234,7 +266,10 @@ async fn get_my_appeal(
     path: Result<Path<Uuid>, PathRejection>,
 ) -> AppResult<Json<ApiResponse<crate::models::AppealItem>>> {
     let appeal_id = parse_path(path)?;
-    let data = state.moderation().get_my_appeal(&principal, appeal_id).await?;
+    let data = state
+        .moderation()
+        .get_my_appeal(&principal, appeal_id)
+        .await?;
     Ok(Json(ApiResponse::new(data)))
 }
 
@@ -258,7 +293,10 @@ async fn get_report_detail(
     path: Result<Path<Uuid>, PathRejection>,
 ) -> AppResult<Json<ApiResponse<serde_json::Value>>> {
     let report_id = parse_path(path)?;
-    let (report, case) = state.moderation().get_report_detail(&principal, report_id).await?;
+    let (report, case) = state
+        .moderation()
+        .get_report_detail(&principal, report_id)
+        .await?;
     Ok(Json(ApiResponse::new(serde_json::json!({
         "report": report,
         "case": case,
@@ -292,7 +330,12 @@ async fn resolve_report(
     let request = parse_json(payload)?;
     let data = state
         .moderation()
-        .handle_report(&principal, report_id, request, &audit_context(addr, &headers))
+        .handle_report(
+            &principal,
+            report_id,
+            request,
+            &audit_context(addr, &headers),
+        )
         .await?;
     Ok(Json(ApiResponse::new(data)))
 }
@@ -413,7 +456,10 @@ async fn close_case(
         .get("reason")
         .and_then(|value| value.as_str())
         .map(str::to_owned);
-    let data = state.moderation().close_case(&principal, case_id, reason).await?;
+    let data = state
+        .moderation()
+        .close_case(&principal, case_id, reason)
+        .await?;
     Ok(Json(ApiResponse::new(data)))
 }
 
@@ -425,7 +471,10 @@ async fn add_note(
 ) -> AppResult<Json<ApiResponse<Vec<crate::models::ModerationNoteItem>>>> {
     let case_id = parse_path(path)?;
     let request = parse_json(payload)?;
-    let data = state.moderation().add_note(&principal, case_id, request).await?;
+    let data = state
+        .moderation()
+        .add_note(&principal, case_id, request)
+        .await?;
     Ok(Json(ApiResponse::new(data)))
 }
 
@@ -441,7 +490,12 @@ async fn topic_action(
     let request = parse_json(payload)?;
     let data = state
         .moderation()
-        .topic_action(&principal, topic_id, request, &audit_context(addr, &headers))
+        .topic_action(
+            &principal,
+            topic_id,
+            request,
+            &audit_context(addr, &headers),
+        )
         .await?;
     Ok(Json(ApiResponse::new(data)))
 }
@@ -458,7 +512,12 @@ async fn comment_action(
     let request = parse_json(payload)?;
     let data = state
         .moderation()
-        .comment_action(&principal, comment_id, request, &audit_context(addr, &headers))
+        .comment_action(
+            &principal,
+            comment_id,
+            request,
+            &audit_context(addr, &headers),
+        )
         .await?;
     Ok(Json(ApiResponse::new(data)))
 }
@@ -515,7 +574,12 @@ async fn revoke_sanction(
     let request = parse_json(payload)?;
     let data = state
         .moderation()
-        .revoke_sanction(&principal, sanction_id, request, &audit_context(addr, &headers))
+        .revoke_sanction(
+            &principal,
+            sanction_id,
+            request,
+            &audit_context(addr, &headers),
+        )
         .await?;
     Ok(Json(ApiResponse::new(data)))
 }
@@ -542,7 +606,12 @@ async fn review_appeal(
     let request = parse_json(payload)?;
     let data = state
         .moderation()
-        .review_appeal(&principal, appeal_id, request, &audit_context(addr, &headers))
+        .review_appeal(
+            &principal,
+            appeal_id,
+            request,
+            &audit_context(addr, &headers),
+        )
         .await?;
     Ok(Json(ApiResponse::new(data)))
 }
@@ -612,7 +681,10 @@ async fn list_audit_logs(
     query: Result<axum::extract::Query<AdminLogListQuery>, QueryRejection>,
 ) -> AppResult<Json<ApiResponse<crate::models::Paginated<crate::models::AdminLogItem>>>> {
     let query = parse_query(query)?;
-    let data = state.moderation().list_audit_logs(&principal, query).await?;
+    let data = state
+        .moderation()
+        .list_audit_logs(&principal, query)
+        .await?;
     Ok(Json(ApiResponse::new(data)))
 }
 
@@ -624,25 +696,37 @@ async fn governance_metrics(
     Ok(Json(ApiResponse::new(data)))
 }
 
-async fn metrics_text(
-    State(state): State<AppState>,
-) -> AppResult<axum::response::Response> {
+async fn metrics_text(State(state): State<AppState>) -> AppResult<axum::response::Response> {
     let mut body = state.metrics().render();
     // Append live gauges computed from the database (low cardinality, no auth).
     match state.moderation().metrics_snapshot().await {
         Ok(metrics) => {
-            body.push_str("# HELP moderation_reports_pending Reports currently open or under review\n");
+            body.push_str(
+                "# HELP moderation_reports_pending Reports currently open or under review\n",
+            );
             body.push_str("# TYPE moderation_reports_pending gauge\n");
-            body.push_str(&format!("moderation_reports_pending {}\n", metrics.reports_pending));
+            body.push_str(&format!(
+                "moderation_reports_pending {}\n",
+                metrics.reports_pending
+            ));
             body.push_str("# HELP moderation_sanctions_active Active sanctions\n");
             body.push_str("# TYPE moderation_sanctions_active gauge\n");
-            body.push_str(&format!("moderation_sanctions_active {}\n", metrics.sanctions_active));
+            body.push_str(&format!(
+                "moderation_sanctions_active {}\n",
+                metrics.sanctions_active
+            ));
             body.push_str("# HELP moderation_appeals_pending Appeals currently pending\n");
             body.push_str("# TYPE moderation_appeals_pending gauge\n");
-            body.push_str(&format!("moderation_appeals_pending {}\n", metrics.appeals_pending));
+            body.push_str(&format!(
+                "moderation_appeals_pending {}\n",
+                metrics.appeals_pending
+            ));
             body.push_str("# HELP moderation_queue_backlog Open moderation cases\n");
             body.push_str("# TYPE moderation_queue_backlog gauge\n");
-            body.push_str(&format!("moderation_queue_backlog {}\n", metrics.queue_backlog));
+            body.push_str(&format!(
+                "moderation_queue_backlog {}\n",
+                metrics.queue_backlog
+            ));
         }
         Err(error) => {
             tracing::warn!(%error, "metrics gauge refresh failed");

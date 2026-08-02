@@ -7,10 +7,10 @@ use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::models::{
-    AppealItem, AppealStatus, AppealType, CaseItem, CaseSource, CaseStatus, CountItem,
-    DailyMetric, GovernanceMetrics, ModerationActionItem, ModerationNoteItem, ReportItemV2,
-    ReportPriority, ReportStatus, ReportTargetType, RuleAction, RuleHitItem,
-    RuleItem, RuleType, SanctionItem, SanctionStatus, SanctionType,
+    AppealItem, AppealStatus, AppealType, CaseItem, CaseSource, CaseStatus, CountItem, DailyMetric,
+    GovernanceMetrics, ModerationActionItem, ModerationNoteItem, ReportItemV2, ReportPriority,
+    ReportStatus, ReportTargetType, RuleAction, RuleHitItem, RuleItem, RuleType, SanctionItem,
+    SanctionStatus, SanctionType,
 };
 
 #[derive(Clone)]
@@ -436,12 +436,11 @@ impl ModerationRepository {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<ReportItemV2>, i64), sqlx::Error> {
-        let total = sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM reports WHERE reporter_id = $1",
-        )
-        .bind(reporter_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let total =
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM reports WHERE reporter_id = $1")
+                .bind(reporter_id)
+                .fetch_one(&self.pool)
+                .await?;
         let rows = sqlx::query_as::<_, ReportRow>(
             r#"
             SELECT r.id, r.reporter_id, ru.username AS reporter_username,
@@ -633,11 +632,10 @@ impl ModerationRepository {
         .await?;
         match inserted {
             Some(id) => Ok(id),
-            None => {
-                self.find_open_case(target_type, target_id)
-                    .await?
-                    .ok_or(sqlx::Error::RowNotFound)
-            }
+            None => self
+                .find_open_case(target_type, target_id)
+                .await?
+                .ok_or(sqlx::Error::RowNotFound),
         }
     }
 
@@ -646,13 +644,11 @@ impl ModerationRepository {
         report_id: Uuid,
         case_id: Uuid,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            "UPDATE reports SET case_id = $2 WHERE id = $1 AND case_id IS NULL",
-        )
-        .bind(report_id)
-        .bind(case_id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("UPDATE reports SET case_id = $2 WHERE id = $1 AND case_id IS NULL")
+            .bind(report_id)
+            .bind(case_id)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -861,10 +857,7 @@ impl ModerationRepository {
         Ok(true)
     }
 
-    pub async fn close_case(
-        &self,
-        case_id: Uuid,
-    ) -> Result<bool, sqlx::Error> {
+    pub async fn close_case(&self, case_id: Uuid) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
             r#"
             UPDATE moderation_cases
@@ -1109,14 +1102,12 @@ impl ModerationRepository {
         author_id: Uuid,
         note: &str,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            "INSERT INTO moderation_notes (case_id, author_id, note) VALUES ($1, $2, $3)",
-        )
-        .bind(case_id)
-        .bind(author_id)
-        .bind(note)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("INSERT INTO moderation_notes (case_id, author_id, note) VALUES ($1, $2, $3)")
+            .bind(case_id)
+            .bind(author_id)
+            .bind(note)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -1141,7 +1132,10 @@ impl ModerationRepository {
         .await
     }
 
-    pub async fn get_comment(&self, comment_id: Uuid) -> Result<Option<ModCommentRow>, sqlx::Error> {
+    pub async fn get_comment(
+        &self,
+        comment_id: Uuid,
+    ) -> Result<Option<ModCommentRow>, sqlx::Error> {
         sqlx::query_as::<_, ModCommentRow>(
             r#"
             SELECT c.id, c.topic_id, t.slug AS topic_slug, t.title AS topic_title,
@@ -1331,6 +1325,7 @@ impl ModerationRepository {
     // Sanctions
     // ------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_sanction(
         &self,
         tx: &mut Transaction<'_, Postgres>,
@@ -1381,7 +1376,10 @@ impl ModerationRepository {
         Ok(id)
     }
 
-    pub async fn get_sanction(&self, sanction_id: Uuid) -> Result<Option<SanctionItem>, sqlx::Error> {
+    pub async fn get_sanction(
+        &self,
+        sanction_id: Uuid,
+    ) -> Result<Option<SanctionItem>, sqlx::Error> {
         let row = sqlx::query_as::<_, SanctionRow>(
             r#"
             SELECT s.id, s.user_id, u.username, s.sanction_type, s.reason,
@@ -1522,7 +1520,11 @@ impl ModerationRepository {
         }
     }
 
-    pub async fn count_user_uploads(&self, user_id: Uuid, ids: &[Uuid]) -> Result<i64, sqlx::Error> {
+    pub async fn count_user_uploads(
+        &self,
+        user_id: Uuid,
+        ids: &[Uuid],
+    ) -> Result<i64, sqlx::Error> {
         if ids.is_empty() {
             return Ok(0);
         }
@@ -1663,6 +1665,7 @@ impl ModerationRepository {
     // Appeals
     // ------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_appeal(
         &self,
         user_id: Uuid,
@@ -1674,8 +1677,8 @@ impl ModerationRepository {
         details: Option<&str>,
         evidence: &[Uuid],
     ) -> Result<Uuid, sqlx::Error> {
-        let evidence: Value = serde_json::to_value(evidence)
-            .unwrap_or_else(|_| serde_json::json!([]));
+        let evidence: Value =
+            serde_json::to_value(evidence).unwrap_or_else(|_| serde_json::json!([]));
         sqlx::query_scalar::<_, Uuid>(
             r#"
             INSERT INTO appeals (
@@ -1785,20 +1788,24 @@ impl ModerationRepository {
             WHERE id = $1 AND status IN ('pending', 'reviewing')
         "#;
         let result = match tx {
-            Some(tx) => sqlx::query(query)
-                .bind(appeal_id)
-                .bind(status)
-                .bind(reviewer_id)
-                .bind(note)
-                .execute(&mut **tx)
-                .await?,
-            None => sqlx::query(query)
-                .bind(appeal_id)
-                .bind(status)
-                .bind(reviewer_id)
-                .bind(note)
-                .execute(&self.pool)
-                .await?,
+            Some(tx) => {
+                sqlx::query(query)
+                    .bind(appeal_id)
+                    .bind(status)
+                    .bind(reviewer_id)
+                    .bind(note)
+                    .execute(&mut **tx)
+                    .await?
+            }
+            None => {
+                sqlx::query(query)
+                    .bind(appeal_id)
+                    .bind(status)
+                    .bind(reviewer_id)
+                    .bind(note)
+                    .execute(&self.pool)
+                    .await?
+            }
         };
         Ok(result.rows_affected() == 1)
     }
@@ -1827,16 +1834,11 @@ impl ModerationRepository {
         Ok(())
     }
 
-    pub async fn count_appeals_for_sanction(
-        &self,
-        sanction_id: Uuid,
-    ) -> Result<i64, sqlx::Error> {
-        sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM appeals WHERE sanction_id = $1",
-        )
-        .bind(sanction_id)
-        .fetch_one(&self.pool)
-        .await
+    pub async fn count_appeals_for_sanction(&self, sanction_id: Uuid) -> Result<i64, sqlx::Error> {
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM appeals WHERE sanction_id = $1")
+            .bind(sanction_id)
+            .fetch_one(&self.pool)
+            .await
     }
 
     // ------------------------------------------------------------------
@@ -1850,9 +1852,11 @@ impl ModerationRepository {
         offset: i64,
     ) -> Result<(Vec<RuleItem>, i64), sqlx::Error> {
         let total = if enabled_only {
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM moderation_rules WHERE enabled = true")
-                .fetch_one(&self.pool)
-                .await?
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM moderation_rules WHERE enabled = true",
+            )
+            .fetch_one(&self.pool)
+            .await?
         } else {
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM moderation_rules")
                 .fetch_one(&self.pool)
@@ -1889,6 +1893,7 @@ impl ModerationRepository {
         Ok(row.map(map_rule))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_rule(
         &self,
         name: &str,
@@ -1923,6 +1928,7 @@ impl ModerationRepository {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_rule(
         &self,
         rule_id: Uuid,
@@ -1998,12 +2004,10 @@ impl ModerationRepository {
         .bind(action)
         .execute(&self.pool)
         .await?;
-        sqlx::query(
-            "UPDATE moderation_rules SET hit_count = hit_count + 1 WHERE id = $1",
-        )
-        .bind(rule_id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("UPDATE moderation_rules SET hit_count = hit_count + 1 WHERE id = $1")
+            .bind(rule_id)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -2047,9 +2051,7 @@ impl ModerationRepository {
     // ------------------------------------------------------------------
 
     /// Expire sanctions whose window has passed. Returns (expired ids, restored user ids).
-    pub async fn expire_due_sanctions(
-        &self,
-    ) -> Result<(Vec<Uuid>, Vec<Uuid>), sqlx::Error> {
+    pub async fn expire_due_sanctions(&self) -> Result<(Vec<Uuid>, Vec<Uuid>), sqlx::Error> {
         let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
             r#"
             UPDATE user_sanctions s
@@ -2070,7 +2072,8 @@ impl ModerationRepository {
             if !still_banned {
                 if let Some(user) = user {
                     if user.status != "active" {
-                        self.set_user_status(&mut tx, *user_id, "active", false).await?;
+                        self.set_user_status(&mut tx, *user_id, "active", false)
+                            .await?;
                         restored.push(*user_id);
                     }
                 }
@@ -2100,7 +2103,12 @@ impl ModerationRepository {
         .map(|rows| {
             rows.into_iter()
                 .map(|(id, user_id, kind, ends_at)| {
-                    (id, user_id, kind.parse().unwrap_or(SanctionType::Warning), ends_at)
+                    (
+                        id,
+                        user_id,
+                        kind.parse().unwrap_or(SanctionType::Warning),
+                        ends_at,
+                    )
                 })
                 .collect()
         })

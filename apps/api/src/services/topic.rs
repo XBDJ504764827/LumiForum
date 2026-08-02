@@ -143,14 +143,10 @@ impl TopicService {
             .map_err(map_moderation)?;
         let status = match screening.action {
             crate::models::RuleAction::Reject => {
-                return Err(TopicError::Validation(
-                    "内容未通过自动审核，请修改后重试",
-                ));
+                return Err(TopicError::Validation("内容未通过自动审核，请修改后重试"));
             }
             crate::models::RuleAction::RateLimit => {
-                return Err(TopicError::Validation(
-                    "内容发布过于频繁，请稍后再试",
-                ));
+                return Err(TopicError::Validation("内容发布过于频繁，请稍后再试"));
             }
             crate::models::RuleAction::Hide => "hidden",
             _ => "published",

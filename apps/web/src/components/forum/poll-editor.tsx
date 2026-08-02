@@ -2,14 +2,7 @@
 
 import { Button, Input, Label, Textarea } from "@lumiforum/ui";
 import { useFieldArray, useFormContext } from "react-hook-form";
-import {
-  ArrowDown,
-  ArrowUp,
-  BarChart3,
-  GripVertical,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, BarChart3, GripVertical, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type DragEvent } from "react";
 
 import type { CreatePollDraft, Poll, UpdatePollRequest } from "@lumiforum/types";
@@ -190,9 +183,7 @@ export function PollEditor({ existing }: { existing?: Poll }) {
             ) : null}
           </div>
           {formState.errors.poll?.max_choices ? (
-            <p className="text-xs text-destructive">
-              {formState.errors.poll.max_choices.message}
-            </p>
+            <p className="text-xs text-destructive">{formState.errors.poll.max_choices.message}</p>
           ) : null}
 
           <div>
@@ -307,9 +298,7 @@ export function PollEditor({ existing }: { existing?: Poll }) {
 }
 
 /** Convert editor values into the API draft (create mode). */
-export function pollDraftFromValues(
-  poll: TopicEditorValues["poll"],
-): CreatePollDraft | undefined {
+export function pollDraftFromValues(poll: TopicEditorValues["poll"]): CreatePollDraft | undefined {
   if (!poll?.enabled) return undefined;
   const options = (poll.options ?? []).map((option) => option.value.trim()).filter(Boolean);
   if (options.length < 2) return undefined;

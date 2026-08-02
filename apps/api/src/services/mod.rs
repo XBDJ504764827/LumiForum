@@ -24,7 +24,9 @@ pub use authorization::{AuthorizationError, AuthorizationService};
 pub use category::{CategoryError, CategoryService};
 pub use comment::{CommentError, CommentService};
 pub use metrics::MetricsRegistry;
-pub use moderation::{BatchResult, BatchResultItem, ModerationError, ModerationService, ScreeningDecision};
+pub use moderation::{
+    BatchResult, BatchResultItem, ModerationError, ModerationService, ScreeningDecision,
+};
 pub use notification::{NotificationError, NotificationService};
 pub use password::PasswordService;
 pub use poll::{PollError, PollService};

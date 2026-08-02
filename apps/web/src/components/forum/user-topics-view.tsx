@@ -29,7 +29,10 @@ export function UserTopicsView({ userId }: { userId: string }) {
             首页
           </Link>
           <span>/</span>
-          <Link href={`/users/${encodeURIComponent(userId)}/followers`} className="hover:text-foreground">
+          <Link
+            href={`/users/${encodeURIComponent(userId)}/followers`}
+            className="hover:text-foreground"
+          >
             用户
           </Link>
           <span>/</span>
@@ -39,9 +42,7 @@ export function UserTopicsView({ userId }: { userId: string }) {
           <FileText className="size-7 text-primary" aria-hidden="true" />
           发布的帖子
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          该用户发布的全部帖子，按发布时间排序
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">该用户发布的全部帖子，按发布时间排序</p>
       </div>
 
       {topics.isPending ? (
@@ -63,9 +64,8 @@ export function UserTopicsView({ userId }: { userId: string }) {
               icon={<ChevronLeft className="size-4" />}
             />
             <span className="text-muted-foreground">
-              第 {topics.data.pagination.page} /{" "}
-              {Math.max(1, topics.data.pagination.total_pages)} 页 · 共{" "}
-              {topics.data.pagination.total} 个帖子
+              第 {topics.data.pagination.page} / {Math.max(1, topics.data.pagination.total_pages)}{" "}
+              页 · 共 {topics.data.pagination.total} 个帖子
             </span>
             <PageLink
               href={pageUrl(userId, page + 1)}

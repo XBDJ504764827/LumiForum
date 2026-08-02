@@ -1,6 +1,6 @@
+use futures_util::StreamExt;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
-use futures_util::StreamExt;
 use serde_json::{json, Value};
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
@@ -97,7 +97,10 @@ impl RealtimeBus {
                 }
             };
             let (Some(poll_id), Some(message)) = (
-                envelope.get("poll_id").and_then(Value::as_str).and_then(|raw| Uuid::parse_str(raw).ok()),
+                envelope
+                    .get("poll_id")
+                    .and_then(Value::as_str)
+                    .and_then(|raw| Uuid::parse_str(raw).ok()),
                 envelope.get("message"),
             ) else {
                 continue;

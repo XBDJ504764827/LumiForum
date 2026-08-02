@@ -4,8 +4,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::events::{
-    CommentCreatedEvent, CommentLikedEvent, CommentRepliedEvent, NotificationEvent,
-    PollEndedEvent, PollVotedEvent, TopicFavoritedEvent, TopicLikedEvent, UserFollowedEvent,
+    CommentCreatedEvent, CommentLikedEvent, CommentRepliedEvent, NotificationEvent, PollEndedEvent,
+    PollVotedEvent, TopicFavoritedEvent, TopicLikedEvent, UserFollowedEvent,
 };
 use crate::models::{
     AuthenticatedPrincipal, NotificationQuery, NotificationResponse, NotificationTargetType,
@@ -172,9 +172,7 @@ impl NotificationService {
     pub async fn send(&self, input: NewNotification<'_>) -> Result<(), NotificationError> {
         match self.create_inbox(input).await {
             Ok(()) => Ok(()),
-            Err(NotificationError::Internal(error))
-                if is_unique_violation(&error) =>
-            {
+            Err(NotificationError::Internal(error)) if is_unique_violation(&error) => {
                 // Already delivered for this logical key.
                 Ok(())
             }

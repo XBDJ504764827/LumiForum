@@ -159,7 +159,10 @@ impl PollRepository {
         .await
     }
 
-    pub async fn find_by_topic_id(&self, topic_id: Uuid) -> Result<Option<PollRecord>, sqlx::Error> {
+    pub async fn find_by_topic_id(
+        &self,
+        topic_id: Uuid,
+    ) -> Result<Option<PollRecord>, sqlx::Error> {
         sqlx::query_as::<_, PollRecord>(
             r#"
             SELECT id, topic_id, author_id, title, description, poll_type, status,
@@ -309,39 +312,35 @@ impl PollRepository {
         let mut tx = self.pool.begin().await?;
 
         let removed: Vec<Uuid> = match option_id {
-            Some(option_id) => {
-                sqlx::query(
-                    r#"
+            Some(option_id) => sqlx::query(
+                r#"
                     DELETE FROM poll_votes
                     WHERE poll_id = $1 AND user_id = $2 AND option_id = $3
                     RETURNING option_id
                     "#,
-                )
-                .bind(poll_id)
-                .bind(user_id)
-                .bind(option_id)
-                .fetch_all(&mut *tx)
-                .await?
-                .into_iter()
-                .map(|row| row.get::<Uuid, _>("option_id"))
-                .collect()
-            }
-            None => {
-                sqlx::query(
-                    r#"
+            )
+            .bind(poll_id)
+            .bind(user_id)
+            .bind(option_id)
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .map(|row| row.get::<Uuid, _>("option_id"))
+            .collect(),
+            None => sqlx::query(
+                r#"
                     DELETE FROM poll_votes
                     WHERE poll_id = $1 AND user_id = $2
                     RETURNING option_id
                     "#,
-                )
-                .bind(poll_id)
-                .bind(user_id)
-                .fetch_all(&mut *tx)
-                .await?
-                .into_iter()
-                .map(|row| row.get::<Uuid, _>("option_id"))
-                .collect()
-            }
+            )
+            .bind(poll_id)
+            .bind(user_id)
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .map(|row| row.get::<Uuid, _>("option_id"))
+            .collect(),
         };
 
         if !removed.is_empty() {
@@ -420,12 +419,11 @@ impl PollRepository {
 
         let Some(poll) = poll else { return Ok(None) };
 
-        let (topic_slug, topic_title) = sqlx::query_as::<_, (String, String)>(
-            "SELECT slug, title FROM topics WHERE id = $1",
-        )
-        .bind(poll.topic_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let (topic_slug, topic_title) =
+            sqlx::query_as::<_, (String, String)>("SELECT slug, title FROM topics WHERE id = $1")
+                .bind(poll.topic_id)
+                .fetch_one(&self.pool)
+                .await?;
 
         let rows = sqlx::query_as::<_, PollOptionRecord>(
             r#"
@@ -517,7 +515,8 @@ impl PollRepository {
         description: Option<Option<&str>>,
         expires_at: Option<Option<DateTime<Utc>>>,
         allow_cancel: Option<bool>,
-    ) -> Result<PollRecord, sqlx::Error> {        sqlx::query_as::<_, PollRecord>(
+    ) -> Result<PollRecord, sqlx::Error> {
+        sqlx::query_as::<_, PollRecord>(
             r#"
             UPDATE polls
             SET title = COALESCE($2, title),

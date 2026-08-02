@@ -21,7 +21,7 @@ pub use category::{
     RepositoryCategory,
 };
 pub use comment::{repository_comment_to_node, CommentRepository, NewComment, RepositoryComment};
-pub use moderation::{ModCommentRow, ModerationRepository, ModTopicRow, ModUserRow};
+pub use moderation::{ModCommentRow, ModTopicRow, ModUserRow, ModerationRepository};
 pub use notification::{NewNotification, NotificationListFilter, NotificationRepository};
 pub use poll::{option_item, NewPoll, NewPollOption, PollRepository, PollUpdateError, VoteError};
 pub use reaction::{FollowCounters, ReactionRepository};

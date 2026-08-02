@@ -318,9 +318,7 @@ impl From<PollError> for AppError {
             PollError::Validation(message) => Self::Validation(message),
             PollError::NotFound | PollError::TopicUnavailable => Self::NotFound,
             PollError::PollExists => Self::Conflict,
-            PollError::PollClosed | PollError::PollExpired => {
-                Self::Validation("投票已结束")
-            }
+            PollError::PollClosed | PollError::PollExpired => Self::Validation("投票已结束"),
             PollError::Forbidden => Self::Forbidden,
             PollError::AlreadyVoted | PollError::AlreadyParticipated => Self::Conflict,
             PollError::Internal(error) => Self::Internal(error),
@@ -335,7 +333,9 @@ impl From<ModerationError> for AppError {
             ModerationError::NotFound => Self::NotFound,
             ModerationError::Forbidden => Self::Forbidden,
             ModerationError::RateLimited => Self::RateLimited,
-            ModerationError::Conflict(_) => Self::Validation("operation conflicts with current state"),
+            ModerationError::Conflict(_) => {
+                Self::Validation("operation conflicts with current state")
+            }
             ModerationError::Internal(error) => Self::Internal(error),
         }
     }

@@ -38,7 +38,16 @@ export const topicEditorSchema = z.object({
       }
     })
     .optional()
-    .default({ enabled: false, title: "", description: "", multiple_choice: false, anonymous: false, allow_cancel: true, max_choices: 2, options: [{ value: "" }, { value: "" }] }),
+    .default({
+      enabled: false,
+      title: "",
+      description: "",
+      multiple_choice: false,
+      anonymous: false,
+      allow_cancel: true,
+      max_choices: 2,
+      options: [{ value: "" }, { value: "" }],
+    }),
 });
 
 export type TopicEditorValues = z.infer<typeof topicEditorSchema>;

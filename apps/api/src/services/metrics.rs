@@ -97,10 +97,10 @@ impl MetricsRegistry {
                 count.fetch_add(1, Ordering::Relaxed);
             }
         }
-        self.inner.review_duration.sum_seconds.fetch_add(
-            (seconds * 1000.0) as u64,
-            Ordering::Relaxed,
-        );
+        self.inner
+            .review_duration
+            .sum_seconds
+            .fetch_add((seconds * 1000.0) as u64, Ordering::Relaxed);
         self.inner
             .review_duration
             .count
@@ -180,7 +180,9 @@ fn help_text(name: &str) -> &'static str {
         "moderation_reports_total" => "Total reports by status",
         "moderation_reports_pending" => "Reports currently open or under review",
         "moderation_actions_total" => "Governance actions by action and target type",
-        "moderation_auto_rules_triggered_total" => "Auto-moderation rule triggers by rule type and action",
+        "moderation_auto_rules_triggered_total" => {
+            "Auto-moderation rule triggers by rule type and action"
+        }
         "moderation_sanctions_active" => "Active sanctions by type",
         "moderation_appeals_total" => "Appeals by status",
         "moderation_appeals_pending" => "Appeals currently pending",

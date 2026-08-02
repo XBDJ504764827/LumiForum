@@ -84,7 +84,12 @@ impl TopicRepository {
         options: TopicListOptions<'_>,
     ) -> Result<(Vec<RepositoryTopic>, i64), sqlx::Error> {
         let mut items = QueryBuilder::<Postgres>::new(TOPIC_LIST_SELECT);
-        push_public_filters(&mut items, options.category_slug, options.author_id, options.sort);
+        push_public_filters(
+            &mut items,
+            options.category_slug,
+            options.author_id,
+            options.sort,
+        );
         push_order(&mut items, options.sort);
         items
             .push(" LIMIT ")
@@ -100,7 +105,12 @@ impl TopicRepository {
         let mut count = QueryBuilder::<Postgres>::new(
             "SELECT count(*) FROM topics t JOIN categories c ON c.id = t.category_id",
         );
-        push_public_filters(&mut count, options.category_slug, options.author_id, options.sort);
+        push_public_filters(
+            &mut count,
+            options.category_slug,
+            options.author_id,
+            options.sort,
+        );
         let total = count
             .build_query_scalar::<i64>()
             .fetch_one(&self.pool)

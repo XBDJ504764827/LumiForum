@@ -156,130 +156,138 @@ export function TopicEditor(props: Props) {
 
       <FormProvider {...form}>
         <form onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-        {form.formState.errors.root?.message ? (
-          <Alert className="mb-5">
-            <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
-            {form.formState.errors.root.message}
-          </Alert>
-        ) : null}
+          {form.formState.errors.root?.message ? (
+            <Alert className="mb-5">
+              <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
+              {form.formState.errors.root.message}
+            </Alert>
+          ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="min-w-0 space-y-5">
-            <Field label="标题" error={form.formState.errors.title?.message} htmlFor="topic-title">
-              <Input
-                id="topic-title"
-                autoFocus
-                aria-invalid={Boolean(form.formState.errors.title)}
-                {...form.register("title")}
-              />
-            </Field>
-
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-4">
-                <Label htmlFor="topic-content">正文</Label>
-                <div className="inline-flex rounded-md border border-border p-0.5">
-                  <ModeButton
-                    active={view === "write"}
-                    onClick={() => setView("write")}
-                    icon={PenLine}
-                  >
-                    编写
-                  </ModeButton>
-                  <ModeButton
-                    active={view === "preview"}
-                    onClick={() => setView("preview")}
-                    icon={Eye}
-                  >
-                    预览
-                  </ModeButton>
-                </div>
-              </div>
-              {view === "write" ? (
-                <Textarea
-                  id="topic-content"
-                  className="min-h-[420px] font-mono"
-                  placeholder="# 标题&#10;&#10;使用 Markdown 编写内容..."
-                  aria-invalid={Boolean(form.formState.errors.content)}
-                  {...contentField}
-                  ref={(element) => {
-                    contentRef.current = element;
-                    contentField.ref(element);
-                  }}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+            <div className="min-w-0 space-y-5">
+              <Field
+                label="标题"
+                error={form.formState.errors.title?.message}
+                htmlFor="topic-title"
+              >
+                <Input
+                  id="topic-title"
+                  autoFocus
+                  aria-invalid={Boolean(form.formState.errors.title)}
+                  {...form.register("title")}
                 />
-              ) : (
-                <div className="min-h-[420px] border border-border bg-white px-5 py-2">
-                  {content ? (
-                    <MarkdownContent content={content} />
-                  ) : (
-                    <p className="py-5 text-sm text-muted-foreground">暂无可预览内容</p>
-                  )}
+              </Field>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-4">
+                  <Label htmlFor="topic-content">正文</Label>
+                  <div className="inline-flex rounded-md border border-border p-0.5">
+                    <ModeButton
+                      active={view === "write"}
+                      onClick={() => setView("write")}
+                      icon={PenLine}
+                    >
+                      编写
+                    </ModeButton>
+                    <ModeButton
+                      active={view === "preview"}
+                      onClick={() => setView("preview")}
+                      icon={Eye}
+                    >
+                      预览
+                    </ModeButton>
+                  </div>
                 </div>
-              )}
-              {view === "write" ? (
-                <div className="mt-3">
-                  <FileUpload
-                    category="topic_image"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    maxBytes={10 * 1024 * 1024}
-                    onUploaded={(upload) => insertImage(upload.url, upload.original_filename)}
+                {view === "write" ? (
+                  <Textarea
+                    id="topic-content"
+                    className="min-h-[420px] font-mono"
+                    placeholder="# 标题&#10;&#10;使用 Markdown 编写内容..."
+                    aria-invalid={Boolean(form.formState.errors.content)}
+                    {...contentField}
+                    ref={(element) => {
+                      contentRef.current = element;
+                      contentField.ref(element);
+                    }}
                   />
-                </div>
-              ) : null}
-              <p className="mt-2 min-h-5 text-sm text-destructive">
-                {form.formState.errors.content?.message}
-              </p>
+                ) : (
+                  <div className="min-h-[420px] border border-border bg-white px-5 py-2">
+                    {content ? (
+                      <MarkdownContent content={content} />
+                    ) : (
+                      <p className="py-5 text-sm text-muted-foreground">暂无可预览内容</p>
+                    )}
+                  </div>
+                )}
+                {view === "write" ? (
+                  <div className="mt-3">
+                    <FileUpload
+                      category="topic_image"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      maxBytes={10 * 1024 * 1024}
+                      onUploaded={(upload) => insertImage(upload.url, upload.original_filename)}
+                    />
+                  </div>
+                ) : null}
+                <p className="mt-2 min-h-5 text-sm text-destructive">
+                  {form.formState.errors.content?.message}
+                </p>
+              </div>
+
+              {props.mode === "create" ? (
+                <PollEditor />
+              ) : existingPoll.isPending ? (
+                <p className="rounded-xl border border-border bg-surface/60 p-5 text-sm text-muted-foreground">
+                  正在加载投票数据…
+                </p>
+              ) : (
+                <PollEditor existing={existingPoll.data} />
+              )}
             </div>
 
-            {props.mode === "create" ? (
-              <PollEditor />
-            ) : existingPoll.isPending ? (
-              <p className="rounded-xl border border-border bg-surface/60 p-5 text-sm text-muted-foreground">
-                正在加载投票数据…
-              </p>
-            ) : (
-              <PollEditor existing={existingPoll.data} />
-            )}
-          </div>
-
-          <aside className="space-y-5 border-t border-border pt-6 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-            <Field
-              label="板块"
-              error={form.formState.errors.categoryId?.message}
-              htmlFor="topic-category"
-            >
-              <Select
-                id="topic-category"
-                aria-invalid={Boolean(form.formState.errors.categoryId)}
-                {...form.register("categoryId")}
+            <aside className="space-y-5 border-t border-border pt-6 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+              <Field
+                label="板块"
+                error={form.formState.errors.categoryId?.message}
+                htmlFor="topic-category"
               >
-                <option value="">选择板块</option>
-                {(categories.data ?? []).map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+                <Select
+                  id="topic-category"
+                  aria-invalid={Boolean(form.formState.errors.categoryId)}
+                  {...form.register("categoryId")}
+                >
+                  <option value="">选择板块</option>
+                  {(categories.data ?? []).map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-            <Field
-              label="摘要（可选）"
-              error={form.formState.errors.summary?.message}
-              htmlFor="topic-summary"
-            >
-              <Textarea id="topic-summary" className="min-h-28" {...form.register("summary")} />
-            </Field>
+              <Field
+                label="摘要（可选）"
+                error={form.formState.errors.summary?.message}
+                htmlFor="topic-summary"
+              >
+                <Textarea id="topic-summary" className="min-h-28" {...form.register("summary")} />
+              </Field>
 
-            <Button type="submit" className="w-full gap-2" disabled={mutation.isPending}>
-              {mutation.isPending ? (
-                <LoadingIndicator />
-              ) : (
-                <Send className="size-4" aria-hidden="true" />
-              )}
-              {mutation.isPending ? "正在保存" : props.mode === "create" ? "发布帖子" : "保存修改"}
-            </Button>
-          </aside>
-        </div>
-      </form>
+              <Button type="submit" className="w-full gap-2" disabled={mutation.isPending}>
+                {mutation.isPending ? (
+                  <LoadingIndicator />
+                ) : (
+                  <Send className="size-4" aria-hidden="true" />
+                )}
+                {mutation.isPending
+                  ? "正在保存"
+                  : props.mode === "create"
+                    ? "发布帖子"
+                    : "保存修改"}
+              </Button>
+            </aside>
+          </div>
+        </form>
       </FormProvider>
     </main>
   );

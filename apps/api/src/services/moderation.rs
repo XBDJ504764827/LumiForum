@@ -14,24 +14,26 @@ use crate::models::{
     CaseItem, CaseQuery, CaseSource, CaseStatus, ContentActionResult, CreateAppealRequest,
     CreateReportRequestV2, CreateSanctionRequest, GovernanceMetrics, ModerationActionKind,
     ModerationReportQuery, NoteRequest, Paginated, PaginationMeta, ReportItemV2, ReportPriority,
-    ReportStatus, ReportTargetType, ResolveReportRequestV2, RESTRICTION_NO_COMMENTS,
-    RESTRICTION_NO_REPORTS, RESTRICTION_NO_TOPICS, RESTRICTION_NO_UPLOADS, ReviewAppealRequest,
+    ReportStatus, ReportTargetType, ResolveReportRequestV2, ReviewAppealRequest,
     RevokeSanctionRequest, RuleAction, RuleItem, RuleListQuery, RuleRequest, RuleType,
-    SanctionItem, SanctionListQuery, SanctionStatus, SanctionType, PERMISSION_MODERATION_APPEAL_READ,
-    PERMISSION_MODERATION_APPEAL_REVIEW, PERMISSION_MODERATION_AUDIT_READ,
-    PERMISSION_MODERATION_CONTENT_DELETE, PERMISSION_MODERATION_CONTENT_HIDE,
-    PERMISSION_MODERATION_CONTENT_RESTORE, PERMISSION_MODERATION_METRICS_READ,
-    PERMISSION_MODERATION_REPORT_ASSIGN, PERMISSION_MODERATION_REPORT_READ,
-    PERMISSION_MODERATION_REPORT_REVIEW, PERMISSION_MODERATION_RULE_MANAGE,
-    PERMISSION_MODERATION_SANCTION_REVOKE, PERMISSION_MODERATION_TOPIC_LOCK,
-    PERMISSION_MODERATION_TOPIC_MOVE, PERMISSION_MODERATION_USER_BAN,
-    PERMISSION_MODERATION_USER_MUTE, PERMISSION_MODERATION_USER_SUSPEND,
-    PERMISSION_MODERATION_USER_WARN, PERMISSION_REPORT_CREATE, PERMISSION_TOPIC_PIN,
-    ROLE_SUPER_ADMINISTRATOR,
+    SanctionItem, SanctionListQuery, SanctionStatus, SanctionType,
+    PERMISSION_MODERATION_APPEAL_READ, PERMISSION_MODERATION_APPEAL_REVIEW,
+    PERMISSION_MODERATION_AUDIT_READ, PERMISSION_MODERATION_CONTENT_DELETE,
+    PERMISSION_MODERATION_CONTENT_HIDE, PERMISSION_MODERATION_CONTENT_RESTORE,
+    PERMISSION_MODERATION_METRICS_READ, PERMISSION_MODERATION_REPORT_ASSIGN,
+    PERMISSION_MODERATION_REPORT_READ, PERMISSION_MODERATION_REPORT_REVIEW,
+    PERMISSION_MODERATION_RULE_MANAGE, PERMISSION_MODERATION_SANCTION_REVOKE,
+    PERMISSION_MODERATION_TOPIC_LOCK, PERMISSION_MODERATION_TOPIC_MOVE,
+    PERMISSION_MODERATION_USER_BAN, PERMISSION_MODERATION_USER_MUTE,
+    PERMISSION_MODERATION_USER_SUSPEND, PERMISSION_MODERATION_USER_WARN, PERMISSION_REPORT_CREATE,
+    PERMISSION_TOPIC_PIN, RESTRICTION_NO_COMMENTS, RESTRICTION_NO_REPORTS, RESTRICTION_NO_TOPICS,
+    RESTRICTION_NO_UPLOADS, ROLE_SUPER_ADMINISTRATOR,
 };
 use crate::realtime::RealtimeBus;
 use crate::repositories::{AdminRepository, CategoryRepository, ModerationRepository};
-use crate::services::{MetricsRegistry, AdminAuditContext, AuthorizationService, NotificationService};
+use crate::services::{
+    AdminAuditContext, AuthorizationService, MetricsRegistry, NotificationService,
+};
 
 const RULES_CACHE_KEY: &str = "mod:rules:v1";
 const RULES_CACHE_TTL_SECS: u64 = 60;
@@ -168,12 +170,15 @@ impl ModerationService {
             .details
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty());
-        if details.as_ref().is_some_and(|value| value.chars().count() > 2000) {
+        if details
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 2000)
+        {
             return Err(ModerationError::Validation("details are too long"));
         }
 
         // Self-reporting is forbidden; target must exist and be visible.
-        self.verify_report_target(&principal, request.target_type, request.target_id)
+        self.verify_report_target(principal, request.target_type, request.target_id)
             .await?;
 
         // Prevent repeated reports of the same target within the window.
@@ -243,11 +248,18 @@ impl ModerationService {
             .await
             .map_err(internal)?;
         self.repository
-            .insert_report_event(report.id, "reporter", Some(principal.user_id), "created", None)
+            .insert_report_event(
+                report.id,
+                "reporter",
+                Some(principal.user_id),
+                "created",
+                None,
+            )
             .await
             .map_err(internal)?;
 
-        self.metrics.inc("moderation_reports_total", &[("status", "open")]);
+        self.metrics
+            .inc("moderation_reports_total", &[("status", "open")]);
         self.notify_staff_realtime(
             "moderation.case.created",
             json!({
@@ -312,9 +324,7 @@ impl ModerationService {
                     .map_err(internal)?
                     .ok_or(ModerationError::NotFound)?;
                 if user.id == principal.user_id {
-                    return Err(ModerationError::Validation(
-                        "you cannot report yourself",
-                    ));
+                    return Err(ModerationError::Validation("you cannot report yourself"));
                 }
                 if user.status != "active" {
                     return Err(ModerationError::Validation(
@@ -354,9 +364,9 @@ impl ModerationService {
             .await
             .map_err(internal)?
             .ok_or(ModerationError::NotFound)?;
-        if report.reporter_id == principal.user_id {
-            Ok(report)
-        } else if principal.has_permission(PERMISSION_MODERATION_REPORT_READ) {
+        if report.reporter_id == principal.user_id
+            || principal.has_permission(PERMISSION_MODERATION_REPORT_READ)
+        {
             Ok(report)
         } else {
             Err(ModerationError::NotFound)
@@ -385,14 +395,27 @@ impl ModerationService {
         }
         let changed = self
             .repository
-            .update_report_status(None, report_id, None, ReportStatus::Cancelled.as_str(), None, None)
+            .update_report_status(
+                None,
+                report_id,
+                None,
+                ReportStatus::Cancelled.as_str(),
+                None,
+                None,
+            )
             .await
             .map_err(internal)?;
         if !changed {
             return Err(ModerationError::Conflict("report is already handled"));
         }
         self.repository
-            .insert_report_event(report_id, "reporter", Some(principal.user_id), "cancelled", None)
+            .insert_report_event(
+                report_id,
+                "reporter",
+                Some(principal.user_id),
+                "cancelled",
+                None,
+            )
             .await
             .map_err(internal)?;
         self.repository
@@ -700,13 +723,15 @@ impl ModerationService {
             .map_err(internal)?
             .ok_or(ModerationError::NotFound)?;
         if target.status != "active" {
-            return Err(ModerationError::Validation(
-                "target assignee is not active",
-            ));
+            return Err(ModerationError::Validation("target assignee is not active"));
         }
         if !self
             .repository
-            .update_case_assignment(case_id, Some(target_assignee), CaseStatus::Reviewing.as_str())
+            .update_case_assignment(
+                case_id,
+                Some(target_assignee),
+                CaseStatus::Reviewing.as_str(),
+            )
             .await
             .map_err(internal)?
         {
@@ -750,10 +775,17 @@ impl ModerationService {
         reason: Option<String>,
     ) -> Result<CaseItem, ModerationError> {
         require(principal, PERMISSION_MODERATION_REPORT_REVIEW)?;
-        if !self.repository.close_case(case_id).await.map_err(internal)? {
+        if !self
+            .repository
+            .close_case(case_id)
+            .await
+            .map_err(internal)?
+        {
             return Err(ModerationError::Conflict("case is already closed"));
         }
-        let reason = reason.map(|value| value.trim().to_owned()).filter(|value| !value.is_empty());
+        let reason = reason
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
         self.repository
             .insert_action(
                 None,
@@ -966,7 +998,9 @@ impl ModerationService {
         if !matches!(report.status, ReportStatus::Open | ReportStatus::Reviewing) {
             return Err(ModerationError::Conflict("report is already handled"));
         }
-        let note = note.map(|value| value.trim().to_owned()).filter(|value| !value.is_empty());
+        let note = note
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
         let changed = self
             .repository
             .update_report_status(
@@ -1091,19 +1125,28 @@ impl ModerationService {
         let mut failed = Vec::new();
         for item in items {
             let outcome = match item.action.as_str() {
-                "resolve" => self.handle_report(
-                    principal,
-                    item.id,
-                    ResolveReportRequestV2 {
-                        action: item.content_action,
-                        action_reason: item.action_reason.clone(),
-                        resolution_note: item.note.clone(),
-                    },
-                    audit,
-                ).await,
-                "reject" => self.reject_report(principal, item.id, item.note.clone(), audit).await,
+                "resolve" => {
+                    self.handle_report(
+                        principal,
+                        item.id,
+                        ResolveReportRequestV2 {
+                            action: item.content_action,
+                            action_reason: item.action_reason.clone(),
+                            resolution_note: item.note.clone(),
+                        },
+                        audit,
+                    )
+                    .await
+                }
+                "reject" => {
+                    self.reject_report(principal, item.id, item.note.clone(), audit)
+                        .await
+                }
                 "duplicate" => match item.duplicate_of {
-                    Some(target) => self.duplicate_report(principal, item.id, target, audit).await,
+                    Some(target) => {
+                        self.duplicate_report(principal, item.id, target, audit)
+                            .await
+                    }
                     None => Err(ModerationError::Validation("duplicate_of is required")),
                 },
                 _ => Err(ModerationError::Validation("unknown batch action")),
@@ -1150,7 +1193,9 @@ impl ModerationService {
     }
 
     async fn maybe_close_case(&self, case_id: Option<Uuid>) -> Result<(), ModerationError> {
-        let Some(case_id) = case_id else { return Ok(()) };
+        let Some(case_id) = case_id else {
+            return Ok(());
+        };
         let open = sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM reports WHERE case_id = $1 AND status IN ('open', 'reviewing')",
         )
@@ -1267,9 +1312,7 @@ impl ModerationService {
             ModerationActionKind::RestrictInteractions => {
                 ("published", "interactions", "restricted")
             }
-            ModerationActionKind::UnrestrictInteractions => {
-                ("published", "interactions", "normal")
-            }
+            ModerationActionKind::UnrestrictInteractions => ("published", "interactions", "normal"),
             ModerationActionKind::MoveCategory => {
                 return Err(ModerationError::Validation(
                     "move_category requires a target category",
@@ -1285,7 +1328,10 @@ impl ModerationService {
         let mut tx = self.repository.pool().begin().await.map_err(internal)?;
 
         // Snapshot before destructive actions.
-        if matches!(action, ModerationActionKind::Hide | ModerationActionKind::Delete) {
+        if matches!(
+            action,
+            ModerationActionKind::Hide | ModerationActionKind::Delete
+        ) {
             self.repository
                 .insert_snapshot(
                     Some(&mut tx),
@@ -1305,7 +1351,10 @@ impl ModerationService {
 
         let status = if matches!(action, ModerationActionKind::Hide) {
             Some("hidden")
-        } else if matches!(action, ModerationActionKind::Restore | ModerationActionKind::Delete) {
+        } else if matches!(
+            action,
+            ModerationActionKind::Restore | ModerationActionKind::Delete
+        ) {
             Some(after)
         } else {
             None
@@ -1365,8 +1414,10 @@ impl ModerationService {
             .map_err(internal)?;
         tx.commit().await.map_err(internal)?;
 
-        self.metrics
-            .inc("moderation_actions_total", &[("action", action.as_str()), ("target_type", "topic")]);
+        self.metrics.inc(
+            "moderation_actions_total",
+            &[("action", action.as_str()), ("target_type", "topic")],
+        );
         self.notify_content_author(
             &topic.author_id,
             action,
@@ -1456,15 +1507,20 @@ impl ModerationService {
                 "moderation.topic.move",
                 "topic",
                 Some(topic_id),
-                &format!("moved topic {} to category {}", updated.title, target_category),
+                &format!(
+                    "moved topic {} to category {}",
+                    updated.title, target_category
+                ),
                 json!({ "reason": reason }),
                 audit.ip,
                 audit.user_agent.as_deref(),
             )
             .await
             .map_err(internal)?;
-        self.metrics
-            .inc("moderation_actions_total", &[("action", "move_category"), ("target_type", "topic")]);
+        self.metrics.inc(
+            "moderation_actions_total",
+            &[("action", "move_category"), ("target_type", "topic")],
+        );
         Ok(ContentActionResult {
             action: "move_category",
             target_type: "topic",
@@ -1493,9 +1549,13 @@ impl ModerationService {
         let reason = normalize_reason(request.reason)?;
 
         let (status, collapse, sensitive, replies_locked, valid) = match request.action {
-            ModerationActionKind::Hide => {
-                (Some("hidden"), None, None, None, comment.status == "published")
-            }
+            ModerationActionKind::Hide => (
+                Some("hidden"),
+                None,
+                None,
+                None,
+                comment.status == "published",
+            ),
             ModerationActionKind::Restore => (
                 Some("published"),
                 None,
@@ -1601,7 +1661,11 @@ impl ModerationService {
                 &format!("moderation.{}", request.action.as_str()),
                 "comment",
                 Some(comment_id),
-                &format!("{} comment {}", request.action.as_str(), comment.content.chars().take(60).collect::<String>()),
+                &format!(
+                    "{} comment {}",
+                    request.action.as_str(),
+                    comment.content.chars().take(60).collect::<String>()
+                ),
                 json!({ "before": before, "after": after_status, "reason": reason }),
                 audit.ip,
                 audit.user_agent.as_deref(),
@@ -1610,10 +1674,21 @@ impl ModerationService {
             .map_err(internal)?;
         tx.commit().await.map_err(internal)?;
 
-        self.metrics
-            .inc("moderation_actions_total", &[("action", request.action.as_str()), ("target_type", "comment")]);
-        self.notify_content_author(&comment.author_id, &request.action, "comment", comment_id, "")
-            .await;
+        self.metrics.inc(
+            "moderation_actions_total",
+            &[
+                ("action", request.action.as_str()),
+                ("target_type", "comment"),
+            ],
+        );
+        self.notify_content_author(
+            &comment.author_id,
+            &request.action,
+            "comment",
+            comment_id,
+            "",
+        )
+        .await;
         Ok(ContentActionResult {
             action: request.action.as_str(),
             target_type: "comment",
@@ -1701,7 +1776,11 @@ impl ModerationService {
             ),
             _ => return,
         };
-        let dedup_key = format!("{}-{}:{target_id}", notification_type.as_str(), action.as_str());
+        let dedup_key = format!(
+            "{}-{}:{target_id}",
+            notification_type.as_str(),
+            action.as_str()
+        );
         let _ = self
             .notifications
             .send(crate::repositories::NewNotification {
@@ -1730,15 +1809,17 @@ impl ModerationService {
         audit: &AdminAuditContext,
     ) -> Result<SanctionItem, ModerationError> {
         require_sanction_permission(principal, request.sanction_type)?;
-        let reason = normalize_reason(Some(request.reason))?.ok_or(ModerationError::Validation(
-            "sanction reason is required",
-        ))?;
+        let reason = normalize_reason(Some(request.reason))?
+            .ok_or(ModerationError::Validation("sanction reason is required"))?;
         let user_visible_reason = normalize_reason(request.user_visible_reason)?;
         let internal_note = request
             .internal_note
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty());
-        if internal_note.as_ref().is_some_and(|value| value.chars().count() > 2000) {
+        if internal_note
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 2000)
+        {
             return Err(ModerationError::Validation("internal note is too long"));
         }
         let mut restrictions = request.restrictions.clone();
@@ -1783,7 +1864,9 @@ impl ModerationService {
         };
         if let Some(ends_at) = ends_at {
             if ends_at <= starts_at {
-                return Err(ModerationError::Validation("ends_at must be after starts_at"));
+                return Err(ModerationError::Validation(
+                    "ends_at must be after starts_at",
+                ));
             }
         }
         let status = if starts_at <= now {
@@ -1800,9 +1883,7 @@ impl ModerationService {
             .map_err(internal)?
             .ok_or(ModerationError::NotFound)?;
         if target.id == principal.user_id {
-            return Err(ModerationError::Validation(
-                "you cannot sanction yourself",
-            ));
+            return Err(ModerationError::Validation("you cannot sanction yourself"));
         }
         if target.role_priority >= principal_role_priority(principal) {
             return Err(ModerationError::Forbidden);
@@ -1835,8 +1916,10 @@ impl ModerationService {
             .map_err(internal)?;
 
         // Suspension / permanent ban block authentication entirely.
-        if matches!(request.sanction_type, SanctionType::Suspension | SanctionType::Ban)
-            && status == SanctionStatus::Active
+        if matches!(
+            request.sanction_type,
+            SanctionType::Suspension | SanctionType::Ban
+        ) && status == SanctionStatus::Active
             && target.status == "active"
         {
             let user_status = if request.sanction_type == SanctionType::Ban {
@@ -1901,7 +1984,8 @@ impl ModerationService {
             "moderation_actions_total",
             &[("action", "sanction"), ("target_type", "user")],
         );
-        self.notify_sanctioned_user(user_id, &request.sanction_type, sanction_id, ends_at).await;
+        self.notify_sanctioned_user(user_id, &request.sanction_type, sanction_id, ends_at)
+            .await;
         self.repository
             .get_sanction(sanction_id)
             .await
@@ -1941,7 +2025,10 @@ impl ModerationService {
         let mut metadata = json!({ "sanction_id": sanction_id, "href": "/profile/sanctions" });
         if let Some(ends_at) = ends_at {
             metadata["ends_at"] = json!(ends_at);
-            metadata["note"] = json!(format!("处罚将于 {} 结束", ends_at.format("%Y-%m-%d %H:%M")));
+            metadata["note"] = json!(format!(
+                "处罚将于 {} 结束",
+                ends_at.format("%Y-%m-%d %H:%M")
+            ));
         }
         let dedup_key = format!("{}:{sanction_id}", notification_type.as_str());
         let _ = self
@@ -1971,7 +2058,13 @@ impl ModerationService {
         let sanction_type = normalize_filter(query.sanction_type)?;
         let (items, total) = self
             .repository
-            .list_sanctions(query.user_id, status.as_deref(), sanction_type.as_deref(), limit, offset)
+            .list_sanctions(
+                query.user_id,
+                status.as_deref(),
+                sanction_type.as_deref(),
+                limit,
+                offset,
+            )
             .await
             .map_err(internal)?;
         Ok(paginate(items, page, page_size, total))
@@ -2027,7 +2120,10 @@ impl ModerationService {
             .await
             .map_err(internal)?
             .ok_or(ModerationError::NotFound)?;
-        if !matches!(sanction.status, SanctionStatus::Scheduled | SanctionStatus::Active) {
+        if !matches!(
+            sanction.status,
+            SanctionStatus::Scheduled | SanctionStatus::Active
+        ) {
             return Err(ModerationError::Conflict("sanction is already resolved"));
         }
         let reason = normalize_reason(request.reason)?;
@@ -2049,7 +2145,8 @@ impl ModerationService {
             .await
             .map_err(internal)?
             .ok_or(ModerationError::NotFound)?;
-        if target.role_priority >= principal_role_priority(principal) && target.id != principal.user_id
+        if target.role_priority >= principal_role_priority(principal)
+            && target.id != principal.user_id
         {
             return Err(ModerationError::Forbidden);
         }
@@ -2293,7 +2390,10 @@ impl ModerationService {
         for hit in &decision.hits {
             self.metrics.inc(
                 "moderation_auto_rules_triggered_total",
-                &[("rule_type", hit.rule_type.as_str()), ("action", hit.action.as_str())],
+                &[
+                    ("rule_type", hit.rule_type.as_str()),
+                    ("action", hit.action.as_str()),
+                ],
             );
             self.repository
                 .insert_rule_hit(
@@ -2422,7 +2522,13 @@ impl ModerationService {
         }
     }
 
-    async fn check_duplicate(&self, user_id: Uuid, target_type: &str, normalized: &str, window: i64) -> bool {
+    async fn check_duplicate(
+        &self,
+        user_id: Uuid,
+        target_type: &str,
+        normalized: &str,
+        window: i64,
+    ) -> bool {
         let mut hasher = Sha256::new();
         hasher.update(normalized.as_bytes());
         let digest = format!("{:x}", hasher.finalize());
@@ -2459,7 +2565,10 @@ impl ModerationService {
             .details
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty());
-        if details.as_ref().is_some_and(|value| value.chars().count() > 2000) {
+        if details
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 2000)
+        {
             return Err(ModerationError::Validation("details are too long"));
         }
         let has_sanction = request.sanction_id.is_some();
@@ -2495,12 +2604,7 @@ impl ModerationService {
                     "the appeal limit for this sanction has been reached",
                 ));
             }
-            (
-                AppealType::Sanction.as_str(),
-                Some(sanction.id),
-                None,
-                None,
-            )
+            (AppealType::Sanction.as_str(), Some(sanction.id), None, None)
         } else {
             let content_type = request
                 .content_type
@@ -2530,7 +2634,12 @@ impl ModerationService {
             if owner != principal.user_id {
                 return Err(ModerationError::NotFound);
             }
-            (AppealType::Content.as_str(), None, Some(content_type), Some(content_id))
+            (
+                AppealType::Content.as_str(),
+                None,
+                Some(content_type),
+                Some(content_id),
+            )
         };
 
         // Evidence uploads must belong to the user.
@@ -2541,9 +2650,7 @@ impl ModerationService {
                 .await
                 .map_err(internal)?;
             if owned != request.evidence.len() as i64 {
-                return Err(ModerationError::Validation(
-                    "evidence uploads are invalid",
-                ));
+                return Err(ModerationError::Validation("evidence uploads are invalid"));
             }
         }
 
@@ -2562,10 +2669,17 @@ impl ModerationService {
             .await
             .map_err(internal)?;
         self.repository
-            .insert_appeal_event(appeal_id, "user", Some(principal.user_id), "submitted", None)
+            .insert_appeal_event(
+                appeal_id,
+                "user",
+                Some(principal.user_id),
+                "submitted",
+                None,
+            )
             .await
             .map_err(internal)?;
-        self.metrics.inc("moderation_appeals_total", &[("status", "pending")]);
+        self.metrics
+            .inc("moderation_appeals_total", &[("status", "pending")]);
         self.notify_staff_realtime(
             "moderation.appeal.submitted",
             json!({ "appeal_id": appeal_id }),
@@ -2604,9 +2718,9 @@ impl ModerationService {
             .await
             .map_err(internal)?
             .ok_or(ModerationError::NotFound)?;
-        if appeal.user_id == principal.user_id {
-            Ok(appeal)
-        } else if principal.has_permission(PERMISSION_MODERATION_APPEAL_READ) {
+        if appeal.user_id == principal.user_id
+            || principal.has_permission(PERMISSION_MODERATION_APPEAL_READ)
+        {
             Ok(appeal)
         } else {
             Err(ModerationError::NotFound)
@@ -2644,7 +2758,10 @@ impl ModerationService {
             .await
             .map_err(internal)?
             .ok_or(ModerationError::NotFound)?;
-        if !matches!(appeal.status, AppealStatus::Pending | AppealStatus::Reviewing) {
+        if !matches!(
+            appeal.status,
+            AppealStatus::Pending | AppealStatus::Reviewing
+        ) {
             return Err(ModerationError::Conflict("appeal is already handled"));
         }
         let note = request
@@ -2727,9 +2844,7 @@ impl ModerationService {
                 }
             }
             _ => {
-                return Err(ModerationError::Validation(
-                    "invalid appeal decision",
-                ));
+                return Err(ModerationError::Validation("invalid appeal decision"));
             }
         }
 
@@ -2754,11 +2869,7 @@ impl ModerationService {
                 &format!("moderation.appeal.{}", request.decision.as_str()),
                 "appeal",
                 Some(appeal_id),
-                &format!(
-                    "appeal {} set to {}",
-                    appeal_id,
-                    request.decision.as_str()
-                ),
+                &format!("appeal {} set to {}", appeal_id, request.decision.as_str()),
                 json!({ "note": note, "user_id": appeal.user_id }),
                 audit.ip,
                 audit.user_agent.as_deref(),
@@ -2827,9 +2938,7 @@ impl ModerationService {
                     sanction.status,
                     SanctionStatus::Scheduled | SanctionStatus::Active
                 ) {
-                    return Err(ModerationError::Conflict(
-                        "sanction is already resolved",
-                    ));
+                    return Err(ModerationError::Conflict("sanction is already resolved"));
                 }
                 let _ = self
                     .repository
@@ -2891,11 +3000,12 @@ impl ModerationService {
                         "content appeal without content_type"
                     )));
                 };
-                let content_id = appeal
-                    .content_id
-                    .ok_or(ModerationError::Internal(anyhow::anyhow!(
-                        "content appeal without content_id"
-                    )))?;
+                let content_id =
+                    appeal
+                        .content_id
+                        .ok_or(ModerationError::Internal(anyhow::anyhow!(
+                            "content appeal without content_id"
+                        )))?;
                 match content_type {
                     "topic" => {
                         let topic = self
@@ -2974,9 +3084,7 @@ impl ModerationService {
                             .map_err(internal)?;
                     }
                     _ => {
-                        return Err(ModerationError::Validation(
-                            "invalid content type",
-                        ));
+                        return Err(ModerationError::Validation("invalid content type"));
                     }
                 }
             }
@@ -3017,7 +3125,10 @@ impl ModerationService {
                 "rule name must contain between 1 and 100 characters",
             ));
         }
-        if !matches!(request.target_type.as_str(), "topic" | "comment" | "user" | "all") {
+        if !matches!(
+            request.target_type.as_str(),
+            "topic" | "comment" | "user" | "all"
+        ) {
             return Err(ModerationError::Validation("invalid target type"));
         }
         let risk_score = request.risk_score.unwrap_or(5).clamp(1, 100);
@@ -3045,7 +3156,7 @@ impl ModerationService {
                 "moderation.rule.create",
                 "rule",
                 Some(id),
-                &format!("created moderation rule {}", name),
+                &format!("created moderation rule {name}"),
                 json!({ "rule_type": request.rule_type.as_str() }),
                 audit.ip,
                 audit.user_agent.as_deref(),
@@ -3053,7 +3164,11 @@ impl ModerationService {
             .await
             .map_err(internal)?;
         self.invalidate_rules_cache().await;
-        self.repository.get_rule(id).await.map_err(internal)?.ok_or(ModerationError::NotFound)
+        self.repository
+            .get_rule(id)
+            .await
+            .map_err(internal)?
+            .ok_or(ModerationError::NotFound)
     }
 
     pub async fn update_rule(
@@ -3095,7 +3210,7 @@ impl ModerationService {
                 "moderation.rule.update",
                 "rule",
                 Some(rule_id),
-                &format!("updated moderation rule {}", name),
+                &format!("updated moderation rule {name}"),
                 json!({ "rule_type": request.rule_type.as_str() }),
                 audit.ip,
                 audit.user_agent.as_deref(),
@@ -3103,7 +3218,11 @@ impl ModerationService {
             .await
             .map_err(internal)?;
         self.invalidate_rules_cache().await;
-        self.repository.get_rule(rule_id).await.map_err(internal)?.ok_or(ModerationError::NotFound)
+        self.repository
+            .get_rule(rule_id)
+            .await
+            .map_err(internal)?
+            .ok_or(ModerationError::NotFound)
     }
 
     pub async fn delete_rule(
@@ -3113,7 +3232,12 @@ impl ModerationService {
         audit: &AdminAuditContext,
     ) -> Result<(), ModerationError> {
         require(principal, PERMISSION_MODERATION_RULE_MANAGE)?;
-        if !self.repository.delete_rule(rule_id).await.map_err(internal)? {
+        if !self
+            .repository
+            .delete_rule(rule_id)
+            .await
+            .map_err(internal)?
+        {
             return Err(ModerationError::NotFound);
         }
         self.admin_logs
@@ -3144,10 +3268,11 @@ impl ModerationService {
             .active_restrictions(user_id)
             .await
             .map_err(internal)?;
-        if restrictions.iter().any(|value| value == RESTRICTION_NO_TOPICS) {
-            return Err(ModerationError::Validation(
-                "你的账号当前被限制发布内容",
-            ));
+        if restrictions
+            .iter()
+            .any(|value| value == RESTRICTION_NO_TOPICS)
+        {
+            return Err(ModerationError::Validation("你的账号当前被限制发布内容"));
         }
         Ok(())
     }
@@ -3162,12 +3287,18 @@ impl ModerationService {
             .active_restrictions(user_id)
             .await
             .map_err(internal)?;
-        if restrictions.iter().any(|value| value == RESTRICTION_NO_COMMENTS) {
-            return Err(ModerationError::Validation(
-                "你的账号当前被限制发表评论",
-            ));
+        if restrictions
+            .iter()
+            .any(|value| value == RESTRICTION_NO_COMMENTS)
+        {
+            return Err(ModerationError::Validation("你的账号当前被限制发表评论"));
         }
-        if self.repository.is_topic_locked(topic_id).await.map_err(internal)? {
+        if self
+            .repository
+            .is_topic_locked(topic_id)
+            .await
+            .map_err(internal)?
+        {
             return Err(ModerationError::Validation("该帖子已被锁定，无法评论"));
         }
         Ok(())
@@ -3197,10 +3328,11 @@ impl ModerationService {
             .active_restrictions(user_id)
             .await
             .map_err(internal)?;
-        if restrictions.iter().any(|value| value == RESTRICTION_NO_REPORTS) {
-            return Err(ModerationError::Validation(
-                "你的账号当前被限制提交举报",
-            ));
+        if restrictions
+            .iter()
+            .any(|value| value == RESTRICTION_NO_REPORTS)
+        {
+            return Err(ModerationError::Validation("你的账号当前被限制提交举报"));
         }
         Ok(())
     }
@@ -3211,10 +3343,11 @@ impl ModerationService {
             .active_restrictions(user_id)
             .await
             .map_err(internal)?;
-        if restrictions.iter().any(|value| value == RESTRICTION_NO_UPLOADS) {
-            return Err(ModerationError::Validation(
-                "你的账号当前被限制上传文件",
-            ));
+        if restrictions
+            .iter()
+            .any(|value| value == RESTRICTION_NO_UPLOADS)
+        {
+            return Err(ModerationError::Validation("你的账号当前被限制上传文件"));
         }
         Ok(())
     }
@@ -3225,8 +3358,7 @@ impl ModerationService {
         match redis.incr::<_, u64, u64>(&key, 1_u64).await {
             Ok(count) => {
                 if count == 1 {
-                    let _: Result<(), _> =
-                        redis.expire(&key, REPORT_RATE_WINDOW_SECS as i64).await;
+                    let _: Result<(), _> = redis.expire(&key, REPORT_RATE_WINDOW_SECS as i64).await;
                 }
                 if count > REPORT_RATE_LIMIT {
                     Err(ModerationError::RateLimited)
@@ -3303,7 +3435,11 @@ impl ModerationService {
                 "moderation_websocket_events_total",
                 &[("event_type", event_type)],
             );
-            if let Err(error) = self.realtime.publish_to_user(user_id, event_type, data.clone()).await {
+            if let Err(error) = self
+                .realtime
+                .publish_to_user(user_id, event_type, data.clone())
+                .await
+            {
                 tracing::debug!(%error, %user_id, "moderation realtime publish failed");
             }
         }
@@ -3451,7 +3587,10 @@ fn risk_to_priority(risk: i32) -> ReportPriority {
     }
 }
 
-fn page_bounds(page: Option<u32>, page_size: Option<u32>) -> Result<(u32, u32, i64, i64), ModerationError> {
+fn page_bounds(
+    page: Option<u32>,
+    page_size: Option<u32>,
+) -> Result<(u32, u32, i64, i64), ModerationError> {
     let page = page.unwrap_or(1);
     let page_size = page_size.unwrap_or(DEFAULT_PAGE_SIZE);
     if page == 0 || page > MAX_PAGE {
@@ -3477,7 +3616,10 @@ fn normalize_search(value: Option<String>) -> Result<Option<String>, ModerationE
     let value = value
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty());
-    if value.as_ref().is_some_and(|value| value.chars().count() > 100) {
+    if value
+        .as_ref()
+        .is_some_and(|value| value.chars().count() > 100)
+    {
         return Err(ModerationError::Validation("search query is too long"));
     }
     Ok(value)
@@ -3493,7 +3635,10 @@ fn normalize_reason(value: Option<String>) -> Result<Option<String>, ModerationE
     let value = value
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty());
-    if value.as_ref().is_some_and(|value| value.chars().count() > 500) {
+    if value
+        .as_ref()
+        .is_some_and(|value| value.chars().count() > 500)
+    {
         return Err(ModerationError::Validation("reason is too long"));
     }
     Ok(value)
@@ -3616,7 +3761,7 @@ fn normalize_text(value: &str) -> String {
 fn extract_domains(normalized: &str) -> Vec<String> {
     // crude URL/domain extraction on the normalized (punctuation-stripped) text
     let mut domains = Vec::new();
-    for token in normalized.split(|ch: char| ch == '/' || ch == ' ' || ch == '。') {
+    for token in normalized.split(['/', ' ', '。']) {
         if token.contains("http") || token.contains("www") {
             let domain = token
                 .trim_start_matches("http")
