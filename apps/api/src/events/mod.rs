@@ -4,6 +4,6 @@
 mod notification;
 
 pub use notification::{
-    CommentCreatedEvent, CommentLikedEvent, CommentRepliedEvent, NotificationEvent,
-    TopicFavoritedEvent, TopicLikedEvent, UserFollowedEvent,
+    CommentCreatedEvent, CommentLikedEvent, CommentRepliedEvent, NotificationEvent, PollEndedEvent,
+    PollVotedEvent, TopicFavoritedEvent, TopicLikedEvent, UserFollowedEvent,
 };

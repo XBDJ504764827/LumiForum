@@ -27,6 +27,7 @@ export function search(params: SearchParams): Promise<SearchResponse> {
   if (params.limit) query.set("limit", String(params.limit));
   if (params.from) query.set("from", params.from);
   if (params.to) query.set("to", params.to);
+  if (params.has_poll !== undefined) query.set("has_poll", String(params.has_poll));
   const suffix = query.size ? `?${query}` : "";
   return apiRequest<SearchResponse>(`/search${suffix}`);
 }

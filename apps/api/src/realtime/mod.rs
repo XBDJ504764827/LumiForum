@@ -9,6 +9,7 @@ pub use presence::{PresenceService, PresenceStatus};
 pub use protocol::{ClientMessage, RealtimeEnvelope, ServerMessage};
 
 pub const USER_EVENTS_CHANNEL: &str = "realtime:user-events";
+pub const POLL_EVENTS_CHANNEL: &str = "realtime:poll-events";
 pub const DEFAULT_MAX_CONNECTIONS_PER_USER: usize = 5;
 pub const DEFAULT_HEARTBEAT_SECS: u64 = 30;
 pub const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 90;

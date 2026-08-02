@@ -4,8 +4,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::events::{
-    CommentCreatedEvent, CommentLikedEvent, CommentRepliedEvent, NotificationEvent,
-    TopicFavoritedEvent, TopicLikedEvent, UserFollowedEvent,
+    CommentCreatedEvent, CommentLikedEvent, CommentRepliedEvent, NotificationEvent, PollEndedEvent,
+    PollVotedEvent, TopicFavoritedEvent, TopicLikedEvent, UserFollowedEvent,
 };
 use crate::models::{
     AuthenticatedPrincipal, NotificationQuery, NotificationResponse, NotificationTargetType,
@@ -162,6 +162,21 @@ impl NotificationService {
             NotificationEvent::CommentReplied(event) => self.on_comment_replied(event).await,
             NotificationEvent::TopicFavorited(event) => self.on_topic_favorited(event).await,
             NotificationEvent::UserFollowed(event) => self.on_user_followed(event).await,
+            NotificationEvent::PollVoted(event) => self.on_poll_voted(event).await,
+            NotificationEvent::PollEnded(event) => self.on_poll_ended(event).await,
+        }
+    }
+
+    /// Send a notification directly (used by moderation and other services).
+    /// Idempotent: duplicate (dedup_key) insertions are treated as success.
+    pub async fn send(&self, input: NewNotification<'_>) -> Result<(), NotificationError> {
+        match self.create_inbox(input).await {
+            Ok(()) => Ok(()),
+            Err(NotificationError::Internal(error)) if is_unique_violation(&error) => {
+                // Already delivered for this logical key.
+                Ok(())
+            }
+            Err(error) => Err(error),
         }
     }
 
@@ -183,6 +198,7 @@ impl NotificationService {
                 "topic_title": event.topic_title,
                 "href": format!("/topics/{}", event.topic_slug),
             }),
+            dedup_key: None,
         })
         .await
     }
@@ -205,6 +221,7 @@ impl NotificationService {
                 "topic_slug": event.topic_slug,
                 "href": format!("/topics/{}#comment-{}", event.topic_slug, event.comment_id),
             }),
+            dedup_key: None,
         })
         .await
     }
@@ -231,6 +248,7 @@ impl NotificationService {
                 "topic_title": event.topic_title,
                 "href": format!("/topics/{}#comment-{}", event.topic_slug, event.comment_id),
             }),
+            dedup_key: None,
         })
         .await
     }
@@ -257,6 +275,7 @@ impl NotificationService {
                 "topic_slug": event.topic_slug,
                 "href": format!("/topics/{}#comment-{}", event.topic_slug, event.comment_id),
             }),
+            dedup_key: None,
         })
         .await
     }
@@ -282,6 +301,7 @@ impl NotificationService {
                 "topic_title": event.topic_title,
                 "href": format!("/topics/{}", event.topic_slug),
             }),
+            dedup_key: None,
         })
         .await
     }
@@ -302,6 +322,55 @@ impl NotificationService {
                 "user_id": event.actor_id,
                 "href": format!("/users/{}/followers", event.recipient_id),
             }),
+            dedup_key: None,
+        })
+        .await
+    }
+
+    async fn on_poll_voted(&self, event: PollVotedEvent) -> Result<(), NotificationError> {
+        if event.actor_id == event.recipient_id {
+            return Ok(());
+        }
+        self.create_inbox(NewNotification {
+            user_id: event.recipient_id,
+            actor_id: Some(event.actor_id),
+            notification_type: NotificationType::PollVoted,
+            title: "有人参与了你的投票",
+            content: &format!("有人参与了《{}》", event.poll_title),
+            target_type: Some(NotificationTargetType::Topic),
+            target_id: Some(event.topic_id),
+            metadata: json!({
+                "poll_id": event.poll_id,
+                "topic_id": event.topic_id,
+                "topic_slug": event.topic_slug,
+                "topic_title": event.topic_title,
+                "poll_title": event.poll_title,
+                "href": format!("/topics/{}", event.topic_slug),
+            }),
+            // One notification per (poll, voter) — multi-choice votes don't spam.
+            dedup_key: Some("poll_vote"),
+        })
+        .await
+    }
+
+    async fn on_poll_ended(&self, event: PollEndedEvent) -> Result<(), NotificationError> {
+        self.create_inbox(NewNotification {
+            user_id: event.recipient_id,
+            actor_id: None,
+            notification_type: NotificationType::PollEnded,
+            title: "投票已结束",
+            content: &format!("《{}》的投票已结束，去看看结果吧", event.poll_title),
+            target_type: Some(NotificationTargetType::Topic),
+            target_id: Some(event.topic_id),
+            metadata: json!({
+                "poll_id": event.poll_id,
+                "topic_id": event.topic_id,
+                "topic_slug": event.topic_slug,
+                "topic_title": event.topic_title,
+                "poll_title": event.poll_title,
+                "href": format!("/topics/{}", event.topic_slug),
+            }),
+            dedup_key: Some("poll_ended"),
         })
         .await
     }
@@ -388,6 +457,19 @@ fn require(
 
 fn internal(error: impl Into<anyhow::Error>) -> NotificationError {
     NotificationError::Internal(error.into())
+}
+
+fn is_unique_violation(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .filter_map(|cause| cause.downcast_ref::<sqlx::Error>())
+        .find_map(|db_error| {
+            db_error
+                .as_database_error()
+                .and_then(|inner| inner.code().map(|code| code.into_owned()))
+        })
+        .as_deref()
+        == Some("23505")
 }
 
 #[cfg(test)]

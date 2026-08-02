@@ -9,6 +9,7 @@ use crate::models::{Paginated, PaginationMeta, UploadCategory, UploadListQuery, 
 use crate::repositories::{
     repository_upload_to_response, NewUpload, RepositoryUpload, UploadRepository,
 };
+use crate::services::ModerationService;
 use crate::storage::{PutOptions, StorageProvider};
 
 use super::upload_image::process_image;
@@ -26,6 +27,7 @@ pub struct UploadInput {
 pub struct UploadService {
     repository: UploadRepository,
     storage: Arc<dyn StorageProvider>,
+    moderation: Option<ModerationService>,
 }
 
 #[derive(Debug, Error)]
@@ -56,10 +58,24 @@ struct PreparedUpload {
 }
 
 impl UploadService {
+    /// Backward-compatible constructor used by isolated upload tests.
     pub fn new(repository: UploadRepository, storage: Arc<dyn StorageProvider>) -> Self {
         Self {
             repository,
             storage,
+            moderation: None,
+        }
+    }
+
+    pub fn with_moderation(
+        repository: UploadRepository,
+        storage: Arc<dyn StorageProvider>,
+        moderation: ModerationService,
+    ) -> Self {
+        Self {
+            repository,
+            storage,
+            moderation: Some(moderation),
         }
     }
 
@@ -68,6 +84,12 @@ impl UploadService {
         user_id: Uuid,
         input: UploadInput,
     ) -> Result<UploadResponse, UploadError> {
+        if let Some(moderation) = &self.moderation {
+            moderation
+                .enforce_upload_creation(user_id)
+                .await
+                .map_err(map_moderation)?;
+        }
         if input.data.is_empty() {
             return Err(UploadError::Validation("file is empty"));
         }
@@ -386,6 +408,17 @@ fn to_response(upload: RepositoryUpload) -> Result<UploadResponse, UploadError> 
 
 fn internal(error: impl Into<anyhow::Error>) -> UploadError {
     UploadError::Internal(error.into())
+}
+
+fn map_moderation(error: crate::services::ModerationError) -> UploadError {
+    match error {
+        crate::services::ModerationError::Validation(message) => UploadError::Validation(message),
+        crate::services::ModerationError::Forbidden => UploadError::Forbidden,
+        crate::services::ModerationError::RateLimited => {
+            UploadError::Validation("upload rate limited")
+        }
+        _ => UploadError::Internal(anyhow::anyhow!("moderation rejected upload")),
+    }
 }
 
 #[cfg(test)]

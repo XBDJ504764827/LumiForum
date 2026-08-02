@@ -17,7 +17,7 @@ pub struct CategoryRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CategorySummary {
     pub id: Uuid,
     pub slug: String,

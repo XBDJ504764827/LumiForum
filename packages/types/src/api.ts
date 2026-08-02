@@ -146,6 +146,137 @@ export interface TopicStats {
   likes: number;
 }
 
+export type PollStatus = "active" | "closed";
+export type PollType = "standard";
+
+export interface PollOption {
+  id: string;
+  content: string;
+  sort_order: number;
+  vote_count: number;
+}
+
+export interface PollVoter {
+  user_id: string;
+  username: string;
+  nickname: string | null;
+  avatar: string | null;
+  option_id: string;
+}
+
+export interface Poll {
+  id: string;
+  topic_id: string;
+  topic_slug: string;
+  topic_title: string;
+  author_id: string;
+  title: string;
+  description: string | null;
+  poll_type: PollType;
+  status: PollStatus;
+  multiple_choice: boolean;
+  anonymous: boolean;
+  allow_cancel: boolean;
+  max_choices: number;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  options: PollOption[];
+  total_votes: number;
+  participant_count: number;
+  my_votes: string[];
+  can_vote: boolean;
+  can_manage: boolean;
+}
+
+export interface PollResultOption {
+  option_id: string;
+  content: string;
+  vote_count: number;
+  percentage: number;
+}
+
+export interface PollResults {
+  poll_id: string;
+  topic_id: string;
+  topic_slug: string;
+  topic_title: string;
+  title: string;
+  status: PollStatus;
+  multiple_choice: boolean;
+  anonymous: boolean;
+  expires_at: string | null;
+  total_votes: number;
+  participant_count: number;
+  options: PollResultOption[];
+  voters?: PollVoter[];
+}
+
+export interface HotPollItem {
+  poll_id: string;
+  topic_id: string;
+  topic_slug: string;
+  topic_title: string;
+  poll_title: string;
+  participant_count: number;
+  option_count: number;
+  is_closed: boolean;
+  category: CategorySummary;
+  created_at: string;
+}
+
+export interface CreatePollDraft {
+  title: string;
+  description?: string;
+  multiple_choice?: boolean;
+  anonymous?: boolean;
+  allow_cancel?: boolean;
+  max_choices?: number;
+  expires_at?: string | null;
+  options: string[];
+}
+
+export interface VotePollRequest {
+  option_ids: string[];
+}
+
+export interface UpdatePollRequest {
+  title?: string;
+  description?: string | null;
+  expires_at?: string | null;
+  allow_cancel?: boolean;
+  /** New options to append (edit mode). */
+  options_to_add?: string[];
+  /** Existing zero-vote options to remove (edit mode). */
+  option_ids_to_remove?: string[];
+}
+
+export interface AdminPollItem {
+  id: string;
+  topic_id: string;
+  topic_title: string;
+  topic_slug: string;
+  title: string;
+  status: PollStatus;
+  multiple_choice: boolean;
+  anonymous: boolean;
+  max_choices: number;
+  option_count: number;
+  participant_count: number;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  author_id: string;
+  author_username: string;
+}
+
+export interface AdminPollListParams {
+  q?: string;
+  status?: PollStatus | "";
+  page?: number;
+  page_size?: number;
+}
+
 export interface TopicSummary {
   id: string;
   title: string;
@@ -156,6 +287,7 @@ export interface TopicSummary {
   stats: TopicStats;
   is_pinned: boolean;
   is_featured: boolean;
+  has_poll: boolean;
   last_reply_at: string | null;
   created_at: string;
   updated_at: string;
@@ -184,6 +316,8 @@ export type TopicSort = "latest" | "hot" | "featured" | "pinned";
 
 export interface TopicListParams {
   category?: string;
+  /** Restrict to topics authored by this user. */
+  author_id?: string;
   sort?: TopicSort;
   page?: number;
   page_size?: number;
@@ -194,6 +328,7 @@ export interface CreateTopicRequest {
   title: string;
   content: string;
   summary?: string;
+  poll?: CreatePollDraft;
 }
 
 export interface UpdateTopicRequest {
@@ -285,7 +420,23 @@ export type NotificationType =
   | "topic_favorited"
   | "user_followed"
   | "mentioned"
-  | "system_message";
+  | "system_message"
+  | "report_submitted"
+  | "report_processed"
+  | "content_hidden"
+  | "content_deleted"
+  | "topic_locked"
+  | "user_warned"
+  | "user_muted"
+  | "user_banned"
+  | "sanction_expiring"
+  | "sanction_revoked"
+  | "appeal_submitted"
+  | "appeal_approved"
+  | "appeal_rejected"
+  | "moderation_inbox"
+  | "poll_voted"
+  | "poll_ended";
 
 export type NotificationTargetType = "topic" | "comment" | "user" | "system";
 
@@ -337,6 +488,7 @@ export interface SearchParams {
   limit?: number;
   from?: string;
   to?: string;
+  has_poll?: boolean;
 }
 
 export interface SearchAuthor {
@@ -358,6 +510,7 @@ export interface TopicSearchHit {
   stats: TopicStats;
   created_at: string;
   rank: number;
+  has_poll: boolean;
 }
 
 export interface CommentSearchHit {

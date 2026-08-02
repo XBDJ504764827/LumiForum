@@ -6,6 +6,8 @@ import type {
   AdminFileListParams,
   AdminLogItem,
   AdminLogListParams,
+  AdminPollItem,
+  AdminPollListParams,
   AdminTopicItem,
   AdminTopicListParams,
   AdminTopicUpdateRequest,
@@ -36,6 +38,7 @@ export const adminKeys = {
   categories: ["admin", "categories"] as const,
   files: (params: AdminFileListParams) => ["admin", "files", params] as const,
   reports: (params: ReportListParams) => ["admin", "reports", params] as const,
+  polls: (params: AdminPollListParams) => ["admin", "polls", params] as const,
   logs: (params: AdminLogListParams) => ["admin", "logs", params] as const,
 };
 
@@ -217,6 +220,21 @@ export function listAdminLogs(params: AdminLogListParams = {}): Promise<Paginate
     `/admin/logs${queryString({
       q: params.q,
       action: params.action,
+      page: params.page,
+      page_size: params.page_size,
+    })}`,
+    {},
+    true,
+  );
+}
+
+export function listAdminPolls(
+  params: AdminPollListParams = {},
+): Promise<Paginated<AdminPollItem>> {
+  return apiRequest(
+    `/admin/polls${queryString({
+      q: params.q,
+      status: params.status || undefined,
       page: params.page,
       page_size: params.page_size,
     })}`,

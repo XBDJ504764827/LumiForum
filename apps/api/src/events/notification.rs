@@ -10,6 +10,8 @@ pub enum NotificationEvent {
     CommentReplied(CommentRepliedEvent),
     TopicFavorited(TopicFavoritedEvent),
     UserFollowed(UserFollowedEvent),
+    PollVoted(PollVotedEvent),
+    PollEnded(PollEndedEvent),
 }
 
 #[derive(Clone, Debug)]
@@ -63,4 +65,25 @@ pub struct TopicFavoritedEvent {
 pub struct UserFollowedEvent {
     pub actor_id: Uuid,
     pub recipient_id: Uuid,
+}
+
+#[derive(Clone, Debug)]
+pub struct PollVotedEvent {
+    pub actor_id: Uuid,
+    pub recipient_id: Uuid,
+    pub poll_id: Uuid,
+    pub topic_id: Uuid,
+    pub topic_slug: String,
+    pub topic_title: String,
+    pub poll_title: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct PollEndedEvent {
+    pub recipient_id: Uuid,
+    pub poll_id: Uuid,
+    pub topic_id: Uuid,
+    pub topic_slug: String,
+    pub topic_title: String,
+    pub poll_title: String,
 }

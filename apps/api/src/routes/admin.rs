@@ -18,7 +18,7 @@ use crate::middleware::{require_permission, AuthorizationLayer};
 use crate::models::{
     AdminCommentListQuery, AdminDashboard, AdminFileListQuery, AdminLogListQuery,
     AdminTopicListQuery, AdminTopicUpdateRequest, AdminUserListQuery, AdminUserUpdateRequest,
-    AuthenticatedPrincipal, CategoryResponse, CreateCategoryRequest, CreateReportRequest,
+    AuthenticatedPrincipal, CategoryResponse, CreateCategoryRequest, CreateReportRequestV2,
     Paginated, ReportListQuery, ResolveReportRequest, UpdateCategoryRequest,
     PERMISSION_ADMIN_ACCESS,
 };
@@ -60,6 +60,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/admin/files/{id}", axum::routing::delete(delete_file))
         .route("/admin/reports", get(list_reports))
         .route("/admin/reports/{id}", patch(resolve_report))
+        .route("/admin/polls", get(list_polls))
         .route("/admin/logs", get(list_logs))
         .route_layer(middleware::from_fn_with_state(
             AuthorizationLayer::new(state.clone(), PERMISSION_ADMIN_ACCESS),
@@ -372,10 +373,10 @@ async fn cleanup_files(
 async fn create_report(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthenticatedPrincipal>,
-    payload: Result<Json<CreateReportRequest>, JsonRejection>,
-) -> AppResult<(StatusCode, Json<ApiResponse<crate::models::ReportItem>>)> {
+    payload: Result<Json<CreateReportRequestV2>, JsonRejection>,
+) -> AppResult<(StatusCode, Json<ApiResponse<crate::models::ReportItemV2>>)> {
     let data = state
-        .admin()
+        .moderation()
         .create_report(&principal, parse_json(payload)?)
         .await?;
     Ok((StatusCode::CREATED, Json(ApiResponse::new(data))))
@@ -410,6 +411,16 @@ async fn resolve_report(
             &audit_context(addr, &headers),
         )
         .await?;
+    Ok(Json(ApiResponse::new(data)))
+}
+
+async fn list_polls(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    query: Result<axum::extract::Query<crate::models::AdminPollListQuery>, QueryRejection>,
+) -> AppResult<Json<ApiResponse<crate::models::Paginated<crate::models::AdminPollItem>>>> {
+    let query = parse_query(query)?;
+    let data = state.polls().list_admin(&principal, query).await?;
     Ok(Json(ApiResponse::new(data)))
 }
 

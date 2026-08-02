@@ -18,6 +18,7 @@ pub struct TopicSearchFilter<'a> {
     pub author_id: Option<Uuid>,
     pub from: Option<DateTime<Utc>>,
     pub to: Option<DateTime<Utc>>,
+    pub has_poll: Option<bool>,
     pub sort: SearchSort,
     pub limit: i64,
     pub offset: i64,
@@ -62,6 +63,7 @@ struct TopicHitRow {
     author_avatar: Option<String>,
     author_role_code: String,
     author_role_name: String,
+    has_poll: bool,
 }
 
 #[derive(sqlx::FromRow)]
@@ -119,6 +121,9 @@ impl SearchRepository {
               AND ($3::uuid IS NULL OR t.author_id = $3)
               AND ($4::timestamptz IS NULL OR t.created_at >= $4)
               AND ($5::timestamptz IS NULL OR t.created_at <= $5)
+              AND ($6::boolean IS NULL
+                   OR ($6 = true AND EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = t.id))
+                   OR ($6 = false AND NOT EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = t.id)))
               AND (
                     t.search_vector @@ plainto_tsquery('simple', $1)
                     OR t.title ILIKE '%' || $1 || '%' ESCAPE '\'
@@ -133,6 +138,7 @@ impl SearchRepository {
         .bind(filter.author_id)
         .bind(filter.from)
         .bind(filter.to)
+        .bind(filter.has_poll)
         .fetch_one(&self.pool)
         .await?;
 
@@ -179,7 +185,8 @@ impl SearchRepository {
                 u.nickname AS author_nickname,
                 u.avatar_url AS author_avatar,
                 r.code AS author_role_code,
-                r.name AS author_role_name
+                r.name AS author_role_name,
+                EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = t.id) AS has_poll
             FROM topics t
             JOIN categories c ON c.id = t.category_id
             JOIN users u ON u.id = t.author_id
@@ -190,6 +197,9 @@ impl SearchRepository {
               AND ($3::uuid IS NULL OR t.author_id = $3)
               AND ($4::timestamptz IS NULL OR t.created_at >= $4)
               AND ($5::timestamptz IS NULL OR t.created_at <= $5)
+              AND ($6::boolean IS NULL
+                   OR ($6 = true AND EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = t.id))
+                   OR ($6 = false AND NOT EXISTS (SELECT 1 FROM polls poll WHERE poll.topic_id = t.id)))
               AND (
                     t.search_vector @@ plainto_tsquery('simple', $1)
                     OR t.title ILIKE '%' || $1 || '%' ESCAPE '\'
@@ -198,7 +208,7 @@ impl SearchRepository {
                     OR coalesce(u.nickname, '') ILIKE '%' || $1 || '%' ESCAPE '\'
                   )
             ORDER BY {order_sql}
-            LIMIT $6 OFFSET $7
+            LIMIT $7 OFFSET $8
             "#
         );
 
@@ -208,6 +218,7 @@ impl SearchRepository {
             .bind(filter.author_id)
             .bind(filter.from)
             .bind(filter.to)
+            .bind(filter.has_poll)
             .bind(filter.limit)
             .bind(filter.offset)
             .fetch_all(&self.pool)
@@ -451,6 +462,7 @@ fn map_topic_hit(row: TopicHitRow) -> TopicSearchHit {
         },
         created_at: row.created_at,
         rank: row.rank,
+        has_poll: row.has_poll,
     }
 }
 

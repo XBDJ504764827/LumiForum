@@ -70,6 +70,7 @@ impl SearchService {
                         author_id: query.author_id,
                         from: query.from,
                         to: query.to,
+                        has_poll: query.has_poll,
                         sort,
                         limit: i64::from(page_size),
                         offset,

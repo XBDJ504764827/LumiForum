@@ -89,6 +89,9 @@ function ProfileContent({ user, onUpdated }: { user: User; onUpdated: (user: Use
               <Link href={`/users/${user.id}/following`} className="hover:text-foreground">
                 <span className="font-medium text-foreground">{user.following_count}</span> 关注
               </Link>
+              <Link href={`/users/${user.id}/topics`} className="hover:text-foreground">
+                我发布的帖子
+              </Link>
               <Link href="/favorites" className="hover:text-foreground">
                 我的收藏
               </Link>

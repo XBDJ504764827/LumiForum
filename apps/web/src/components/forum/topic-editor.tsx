@@ -9,14 +9,20 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { FormProvider, useForm, useWatch } from "react-hook-form";
 
 import { MarkdownContent } from "@/components/forum/markdown-content";
+import {
+  PollEditor,
+  pollDraftFromValues,
+  pollUpdateFromValues,
+} from "@/components/forum/poll-editor";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
 import { FileUpload } from "@/components/uploads/file-upload";
 import { errorMessage } from "@/lib/api/errors";
 import { createTopic, forumKeys, listCategories, updateTopic } from "@/lib/api/forum";
+import { createPoll, getTopicPoll, pollKeys, updatePoll } from "@/lib/api/polls";
 import { topicEditorSchema, type TopicEditorValues } from "@/lib/forum/schemas";
 
 type Props = { mode: "create"; topic?: never } | { mode: "edit"; topic: TopicDetail };
@@ -27,6 +33,14 @@ export function TopicEditor(props: Props) {
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
   const [view, setView] = useState<"write" | "preview">("write");
   const categories = useQuery({ queryKey: forumKeys.categories, queryFn: listCategories });
+  // Edit mode: load the existing poll so the author can edit it too.
+  const existingPoll = useQuery({
+    queryKey: pollKeys.topicPoll(props.topic?.id ?? ""),
+    queryFn: () => getTopicPoll(props.topic!.id),
+    enabled: props.mode === "edit" && Boolean(props.topic?.has_poll),
+    staleTime: 30_000,
+    retry: false,
+  });
   const form = useForm<TopicEditorValues>({
     resolver: zodResolver(topicEditorSchema),
     defaultValues: {
@@ -34,6 +48,15 @@ export function TopicEditor(props: Props) {
       title: props.topic?.title ?? "",
       content: props.topic?.content ?? "",
       summary: props.topic?.summary ?? "",
+      poll: {
+        enabled: false,
+        title: "",
+        description: "",
+        multiple_choice: false,
+        anonymous: false,
+        max_choices: 2,
+        options: [{ value: "" }, { value: "" }],
+      },
     },
   });
   const mutation = useMutation({
@@ -44,6 +67,7 @@ export function TopicEditor(props: Props) {
           title: values.title,
           content: values.content,
           summary: values.summary || undefined,
+          poll: pollDraftFromValues(values.poll),
         };
         return createTopic(input);
       }
@@ -53,12 +77,28 @@ export function TopicEditor(props: Props) {
         content: values.content,
         summary: values.summary || null,
       };
-      return updateTopic(props.topic.id, input);
+      const topic = await updateTopic(props.topic.id, input);
+      // Poll changes: patch the existing poll, or attach a new one when the
+      // topic previously had none and the author enabled the poll editor.
+      if (props.mode === "edit") {
+        const existing = existingPoll.data;
+        if (existing) {
+          await updatePoll(existing.id, pollUpdateFromValues(values.poll, existing));
+        } else if (values.poll.enabled) {
+          const draft = pollDraftFromValues(values.poll);
+          if (draft) await createPoll(topic.id, draft);
+        }
+      }
+      return topic;
     },
     onSuccess: async (topic) => {
       queryClient.setQueryData(forumKeys.topic(topic.slug), topic);
       await queryClient.invalidateQueries({ queryKey: ["forum", "topics"] });
       await queryClient.invalidateQueries({ queryKey: forumKeys.categories });
+      if (props.mode === "edit") {
+        await queryClient.invalidateQueries({ queryKey: pollKeys.topicPoll(topic.id) });
+        await queryClient.invalidateQueries({ queryKey: pollKeys.results(topic.id) });
+      }
       router.push(`/topics/${topic.slug}` as Route);
     },
     onError: (error) => form.setError("root", { message: errorMessage(error) }),
@@ -114,121 +154,141 @@ export function TopicEditor(props: Props) {
         ) : null}
       </div>
 
-      <form onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-        {form.formState.errors.root?.message ? (
-          <Alert className="mb-5">
-            <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
-            {form.formState.errors.root.message}
-          </Alert>
-        ) : null}
+      <FormProvider {...form}>
+        <form onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+          {form.formState.errors.root?.message ? (
+            <Alert className="mb-5">
+              <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
+              {form.formState.errors.root.message}
+            </Alert>
+          ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="min-w-0 space-y-5">
-            <Field label="标题" error={form.formState.errors.title?.message} htmlFor="topic-title">
-              <Input
-                id="topic-title"
-                autoFocus
-                aria-invalid={Boolean(form.formState.errors.title)}
-                {...form.register("title")}
-              />
-            </Field>
-
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-4">
-                <Label htmlFor="topic-content">正文</Label>
-                <div className="inline-flex rounded-md border border-border p-0.5">
-                  <ModeButton
-                    active={view === "write"}
-                    onClick={() => setView("write")}
-                    icon={PenLine}
-                  >
-                    编写
-                  </ModeButton>
-                  <ModeButton
-                    active={view === "preview"}
-                    onClick={() => setView("preview")}
-                    icon={Eye}
-                  >
-                    预览
-                  </ModeButton>
-                </div>
-              </div>
-              {view === "write" ? (
-                <Textarea
-                  id="topic-content"
-                  className="min-h-[420px] font-mono"
-                  placeholder="# 标题&#10;&#10;使用 Markdown 编写内容..."
-                  aria-invalid={Boolean(form.formState.errors.content)}
-                  {...contentField}
-                  ref={(element) => {
-                    contentRef.current = element;
-                    contentField.ref(element);
-                  }}
-                />
-              ) : (
-                <div className="min-h-[420px] border border-border bg-white px-5 py-2">
-                  {content ? (
-                    <MarkdownContent content={content} />
-                  ) : (
-                    <p className="py-5 text-sm text-muted-foreground">暂无可预览内容</p>
-                  )}
-                </div>
-              )}
-              {view === "write" ? (
-                <div className="mt-3">
-                  <FileUpload
-                    category="topic_image"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    maxBytes={10 * 1024 * 1024}
-                    onUploaded={(upload) => insertImage(upload.url, upload.original_filename)}
-                  />
-                </div>
-              ) : null}
-              <p className="mt-2 min-h-5 text-sm text-destructive">
-                {form.formState.errors.content?.message}
-              </p>
-            </div>
-          </div>
-
-          <aside className="space-y-5 border-t border-border pt-6 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-            <Field
-              label="板块"
-              error={form.formState.errors.categoryId?.message}
-              htmlFor="topic-category"
-            >
-              <Select
-                id="topic-category"
-                aria-invalid={Boolean(form.formState.errors.categoryId)}
-                {...form.register("categoryId")}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+            <div className="min-w-0 space-y-5">
+              <Field
+                label="标题"
+                error={form.formState.errors.title?.message}
+                htmlFor="topic-title"
               >
-                <option value="">选择板块</option>
-                {(categories.data ?? []).map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+                <Input
+                  id="topic-title"
+                  autoFocus
+                  aria-invalid={Boolean(form.formState.errors.title)}
+                  {...form.register("title")}
+                />
+              </Field>
 
-            <Field
-              label="摘要（可选）"
-              error={form.formState.errors.summary?.message}
-              htmlFor="topic-summary"
-            >
-              <Textarea id="topic-summary" className="min-h-28" {...form.register("summary")} />
-            </Field>
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-4">
+                  <Label htmlFor="topic-content">正文</Label>
+                  <div className="inline-flex rounded-md border border-border p-0.5">
+                    <ModeButton
+                      active={view === "write"}
+                      onClick={() => setView("write")}
+                      icon={PenLine}
+                    >
+                      编写
+                    </ModeButton>
+                    <ModeButton
+                      active={view === "preview"}
+                      onClick={() => setView("preview")}
+                      icon={Eye}
+                    >
+                      预览
+                    </ModeButton>
+                  </div>
+                </div>
+                {view === "write" ? (
+                  <Textarea
+                    id="topic-content"
+                    className="min-h-[420px] font-mono"
+                    placeholder="# 标题&#10;&#10;使用 Markdown 编写内容..."
+                    aria-invalid={Boolean(form.formState.errors.content)}
+                    {...contentField}
+                    ref={(element) => {
+                      contentRef.current = element;
+                      contentField.ref(element);
+                    }}
+                  />
+                ) : (
+                  <div className="min-h-[420px] border border-border bg-white px-5 py-2">
+                    {content ? (
+                      <MarkdownContent content={content} />
+                    ) : (
+                      <p className="py-5 text-sm text-muted-foreground">暂无可预览内容</p>
+                    )}
+                  </div>
+                )}
+                {view === "write" ? (
+                  <div className="mt-3">
+                    <FileUpload
+                      category="topic_image"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      maxBytes={10 * 1024 * 1024}
+                      onUploaded={(upload) => insertImage(upload.url, upload.original_filename)}
+                    />
+                  </div>
+                ) : null}
+                <p className="mt-2 min-h-5 text-sm text-destructive">
+                  {form.formState.errors.content?.message}
+                </p>
+              </div>
 
-            <Button type="submit" className="w-full gap-2" disabled={mutation.isPending}>
-              {mutation.isPending ? (
-                <LoadingIndicator />
+              {props.mode === "create" ? (
+                <PollEditor />
+              ) : existingPoll.isPending ? (
+                <p className="rounded-xl border border-border bg-surface/60 p-5 text-sm text-muted-foreground">
+                  正在加载投票数据…
+                </p>
               ) : (
-                <Send className="size-4" aria-hidden="true" />
+                <PollEditor existing={existingPoll.data} />
               )}
-              {mutation.isPending ? "正在保存" : props.mode === "create" ? "发布帖子" : "保存修改"}
-            </Button>
-          </aside>
-        </div>
-      </form>
+            </div>
+
+            <aside className="space-y-5 border-t border-border pt-6 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+              <Field
+                label="板块"
+                error={form.formState.errors.categoryId?.message}
+                htmlFor="topic-category"
+              >
+                <Select
+                  id="topic-category"
+                  aria-invalid={Boolean(form.formState.errors.categoryId)}
+                  {...form.register("categoryId")}
+                >
+                  <option value="">选择板块</option>
+                  {(categories.data ?? []).map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              <Field
+                label="摘要（可选）"
+                error={form.formState.errors.summary?.message}
+                htmlFor="topic-summary"
+              >
+                <Textarea id="topic-summary" className="min-h-28" {...form.register("summary")} />
+              </Field>
+
+              <Button type="submit" className="w-full gap-2" disabled={mutation.isPending}>
+                {mutation.isPending ? (
+                  <LoadingIndicator />
+                ) : (
+                  <Send className="size-4" aria-hidden="true" />
+                )}
+                {mutation.isPending
+                  ? "正在保存"
+                  : props.mode === "create"
+                    ? "发布帖子"
+                    : "保存修改"}
+              </Button>
+            </aside>
+          </div>
+        </form>
+      </FormProvider>
     </main>
   );
 }
