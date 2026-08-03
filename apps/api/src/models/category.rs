@@ -25,6 +25,8 @@ pub struct CategorySummary {
     pub icon: Option<String>,
     /// Only staff (moderator+) may post in this category.
     pub restricted_posting: bool,
+    /// Anonymous posting is allowed in this category.
+    pub allow_anonymous: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -37,6 +39,7 @@ pub struct CategoryResponse {
     pub sort_order: i32,
     pub is_visible: bool,
     pub restricted_posting: bool,
+    pub allow_anonymous: bool,
     pub topic_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -50,6 +53,8 @@ pub struct CreateCategoryRequest {
     pub icon: Option<String>,
     pub sort_order: Option<i32>,
     pub is_visible: Option<bool>,
+    pub restricted_posting: Option<bool>,
+    pub allow_anonymous: Option<bool>,
 }
 
 #[derive(Default, Deserialize)]
@@ -62,4 +67,6 @@ pub struct UpdateCategoryRequest {
     pub icon: PatchField<String>,
     pub sort_order: Option<i32>,
     pub is_visible: Option<bool>,
+    pub restricted_posting: Option<bool>,
+    pub allow_anonymous: Option<bool>,
 }

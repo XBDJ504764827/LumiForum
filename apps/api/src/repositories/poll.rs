@@ -802,6 +802,7 @@ impl PollRepository {
                     name: row.category_name,
                     icon: row.category_icon,
                     restricted_posting: false,
+                    allow_anonymous: false,
                 },
                 created_at: row.created_at,
             })

@@ -93,6 +93,8 @@ impl CategoryService {
                 icon: icon.as_deref(),
                 sort_order,
                 is_visible: request.is_visible.unwrap_or(true),
+                restricted_posting: request.restricted_posting.unwrap_or(false),
+                allow_anonymous: request.allow_anonymous.unwrap_or(false),
             })
             .await
             .map(repository_category_to_response)
@@ -123,6 +125,8 @@ impl CategoryService {
             && !icon_changed
             && request.sort_order.is_none()
             && request.is_visible.is_none()
+            && request.restricted_posting.is_none()
+            && request.allow_anonymous.is_none()
         {
             return Err(CategoryError::Validation(
                 "category update contains no fields",
@@ -141,6 +145,8 @@ impl CategoryService {
                     icon: icon.as_deref(),
                     sort_order: request.sort_order,
                     is_visible: request.is_visible,
+                    restricted_posting: request.restricted_posting,
+                    allow_anonymous: request.allow_anonymous,
                 },
             )
             .await

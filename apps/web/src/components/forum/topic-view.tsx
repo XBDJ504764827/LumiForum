@@ -111,30 +111,44 @@ export function TopicView({ slug }: { slug: string }) {
 
           <div className="mt-6 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
             <div className="flex items-center gap-3">
-              <Avatar className="size-10 border border-border">
-                {data.author.avatar ? <AvatarImage src={data.author.avatar} alt="" /> : null}
-                <AvatarFallback>
-                  {authorInitials(data.author.nickname || data.author.username)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="text-sm">
-                <p className="font-medium">{data.author.nickname || data.author.username}</p>
-                <p className="text-xs text-muted-foreground">{data.author.role.name}</p>
-              </div>
-              <Link
-                href={`/users/${data.author.id}/topics` as Route}
-                className="text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-              >
-                TA 的帖子
-              </Link>
-              {canFollow ? (
-                <FollowAuthorButton
-                  authorId={data.author.id}
-                  following={data.following_author}
-                  slug={slug}
-                />
-              ) : null}
-              <ReportButton targetType="user" targetId={data.author.id} />
+              {data.author_anonymous ? (
+                <>
+                  <Avatar className="size-10 border border-border bg-muted">
+                    <AvatarFallback>匿</AvatarFallback>
+                  </Avatar>
+                  <div className="text-sm">
+                    <p className="font-medium">匿名玩家</p>
+                    <p className="text-xs text-muted-foreground">匿名发帖 · 身份仅管理员可见</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Avatar className="size-10 border border-border">
+                    {data.author.avatar ? <AvatarImage src={data.author.avatar} alt="" /> : null}
+                    <AvatarFallback>
+                      {authorInitials(data.author.nickname || data.author.username)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="text-sm">
+                    <p className="font-medium">{data.author.nickname || data.author.username}</p>
+                    <p className="text-xs text-muted-foreground">{data.author.role.name}</p>
+                  </div>
+                  <Link
+                    href={`/users/${data.author.id}/topics` as Route}
+                    className="text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                  >
+                    TA 的帖子
+                  </Link>
+                  {canFollow ? (
+                    <FollowAuthorButton
+                      authorId={data.author.id}
+                      following={data.following_author}
+                      slug={slug}
+                    />
+                  ) : null}
+                  <ReportButton targetType="user" targetId={data.author.id} />
+                </>
+              )}
             </div>
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
               <Meta icon={CalendarDays} value={formatDate(data.created_at)} />

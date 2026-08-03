@@ -66,6 +66,7 @@ pub struct TopicRecord {
     pub like_count: i64,
     pub is_pinned: bool,
     pub is_featured: bool,
+    pub is_anonymous: bool,
     pub last_reply_at: Option<DateTime<Utc>>,
     pub last_reply_user_id: Option<Uuid>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -100,6 +101,8 @@ pub struct TopicSummary {
     pub stats: TopicStats,
     pub is_pinned: bool,
     pub is_featured: bool,
+    /// Author identity is masked in this topic.
+    pub author_anonymous: bool,
     pub last_reply_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -120,6 +123,8 @@ pub struct TopicDetail {
     pub stats: TopicStats,
     pub is_pinned: bool,
     pub is_featured: bool,
+    /// Author identity is masked in this topic.
+    pub author_anonymous: bool,
     pub last_reply_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -145,6 +150,9 @@ pub struct CreateTopicRequest {
     pub title: String,
     pub content: String,
     pub summary: Option<String>,
+    /// Post anonymously (only allowed in categories with allow_anonymous).
+    #[serde(default)]
+    pub anonymous: bool,
     /// Optional poll draft — attached atomically after topic creation.
     #[serde(default)]
     pub poll: Option<CreatePollDraft>,

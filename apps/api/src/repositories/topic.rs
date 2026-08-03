@@ -26,6 +26,7 @@ pub struct RepositoryTopic {
     pub like_count: i64,
     pub is_pinned: bool,
     pub is_featured: bool,
+    pub is_anonymous: bool,
     pub last_reply_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
@@ -35,6 +36,7 @@ pub struct RepositoryTopic {
     pub category_icon: Option<String>,
     pub category_is_visible: bool,
     pub category_restricted_posting: bool,
+    pub category_allow_anonymous: bool,
     pub author_username: String,
     pub author_nickname: Option<String>,
     pub author_avatar: Option<String>,
@@ -60,6 +62,7 @@ pub struct NewTopic<'a> {
     pub summary: Option<&'a str>,
     /// Initial status: "published" or "hidden" (auto-moderation).
     pub status: &'a str,
+    pub is_anonymous: bool,
 }
 
 pub struct TopicUpdate<'a> {
@@ -140,8 +143,8 @@ impl TopicRepository {
     pub async fn create(&self, topic: NewTopic<'_>) -> Result<RepositoryTopic, sqlx::Error> {
         let id = sqlx::query_scalar::<_, Uuid>(
             r#"
-            INSERT INTO topics (category_id, author_id, title, slug, content, summary, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO topics (category_id, author_id, title, slug, content, summary, status, is_anonymous)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
             "#,
         )
@@ -152,6 +155,7 @@ impl TopicRepository {
         .bind(topic.content)
         .bind(topic.summary)
         .bind(topic.status)
+        .bind(topic.is_anonymous)
         .fetch_one(&self.pool)
         .await?;
 
@@ -247,6 +251,7 @@ pub fn repository_topic_to_summary(topic: RepositoryTopic) -> TopicSummary {
         stats,
         is_pinned: topic.is_pinned,
         is_featured: topic.is_featured,
+        author_anonymous: topic.is_anonymous,
         last_reply_at: topic.last_reply_at,
         created_at: topic.created_at,
         updated_at: topic.updated_at,
@@ -275,6 +280,7 @@ pub fn repository_topic_to_detail(topic: RepositoryTopic) -> Result<TopicDetail,
         created_at: topic.created_at,
         updated_at: topic.updated_at,
         has_poll: topic.has_poll,
+        author_anonymous: topic.is_anonymous,
         liked_by_me: false,
         favorited_by_me: false,
         following_author: false,
@@ -288,10 +294,24 @@ fn category_summary(topic: &RepositoryTopic) -> CategorySummary {
         name: topic.category_name.clone(),
         icon: topic.category_icon.clone(),
         restricted_posting: topic.category_restricted_posting,
+        allow_anonymous: topic.category_allow_anonymous,
     }
 }
 
 fn author_summary(topic: &RepositoryTopic) -> TopicAuthorSummary {
+    if topic.is_anonymous {
+        // Anonymous topics mask the author identity entirely.
+        return TopicAuthorSummary {
+            id: topic.author_id,
+            username: "匿名玩家".into(),
+            nickname: None,
+            avatar: None,
+            role: crate::models::RoleSummary {
+                code: "anonymous".into(),
+                name: "匿名".into(),
+            },
+        };
+    }
     TopicAuthorSummary {
         id: topic.author_id,
         username: topic.author_username.clone(),
@@ -325,7 +345,10 @@ fn push_public_filters(
             .push_bind(category_slug.to_owned());
     }
     if let Some(author_id) = author_id {
-        query.push(" AND t.author_id = ").push_bind(author_id);
+        query
+            .push(" AND t.author_id = ")
+            .push_bind(author_id)
+            .push(" AND NOT t.is_anonymous");
     }
     match sort {
         TopicListSort::Featured => {
@@ -364,6 +387,7 @@ const TOPIC_LIST_SELECT: &str = r#"
         t.like_count,
         t.is_pinned,
         t.is_featured,
+        t.is_anonymous,
         t.last_reply_at,
         t.deleted_at,
         t.created_at,
@@ -373,6 +397,7 @@ const TOPIC_LIST_SELECT: &str = r#"
         c.icon AS category_icon,
         c.is_visible AS category_is_visible,
         c.restricted_posting AS category_restricted_posting,
+        c.allow_anonymous AS category_allow_anonymous,
         u.username AS author_username,
         u.nickname AS author_nickname,
         u.avatar_url AS author_avatar,
@@ -400,6 +425,7 @@ const TOPIC_BY_ID: &str = r#"
         t.like_count,
         t.is_pinned,
         t.is_featured,
+        t.is_anonymous,
         t.last_reply_at,
         t.deleted_at,
         t.created_at,
@@ -409,6 +435,7 @@ const TOPIC_BY_ID: &str = r#"
         c.icon AS category_icon,
         c.is_visible AS category_is_visible,
         c.restricted_posting AS category_restricted_posting,
+        c.allow_anonymous AS category_allow_anonymous,
         u.username AS author_username,
         u.nickname AS author_nickname,
         u.avatar_url AS author_avatar,
@@ -450,6 +477,7 @@ const TOPIC_BY_SLUG_AND_INCREMENT: &str = r#"
         viewed.like_count,
         viewed.is_pinned,
         viewed.is_featured,
+        viewed.is_anonymous,
         viewed.last_reply_at,
         viewed.deleted_at,
         viewed.created_at,
@@ -459,6 +487,7 @@ const TOPIC_BY_SLUG_AND_INCREMENT: &str = r#"
         c.icon AS category_icon,
         c.is_visible AS category_is_visible,
         c.restricted_posting AS category_restricted_posting,
+        c.allow_anonymous AS category_allow_anonymous,
         u.username AS author_username,
         u.nickname AS author_nickname,
         u.avatar_url AS author_avatar,
