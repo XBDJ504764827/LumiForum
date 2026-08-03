@@ -43,12 +43,12 @@ implementations only put/delete objects and construct public URLs.
 Attachment allowlist (verified by magic bytes, never by filename or the
 client-declared MIME type):
 
-| Group    | Types                                                                 |
-| -------- | --------------------------------------------------------------------- |
-| Documents | PDF, plain text, RTF, DOC/DOCX, XLS/XLSX, PPT/PPTX, ODT/ODS/ODP       |
-| Archives | ZIP, 7z, RAR, TAR, GZ, BZ2, XZ, ZSTD                                  |
-| Audio    | MP3, M4A, OGG, Opus, FLAC, WAV, AAC, MIDI                             |
-| Video    | MP4, WebM, MKV, MOV, AVI, WMV, MPEG, M4V                              |
+| Group     | Types                                                           |
+| --------- | --------------------------------------------------------------- |
+| Documents | PDF, plain text, RTF, DOC/DOCX, XLS/XLSX, PPT/PPTX, ODT/ODS/ODP |
+| Archives  | ZIP, 7z, RAR, TAR, GZ, BZ2, XZ, ZSTD                            |
+| Audio     | MP3, M4A, OGG, Opus, FLAC, WAV, AAC, MIDI                       |
+| Video     | MP4, WebM, MKV, MOV, AVI, WMV, MPEG, M4V                        |
 
 SVG and executable formats (PE/ELF/Mach-O, Wasm, Java classes, shell scripts,
 HTML, XML, fonts, MSI, Debian packages, certificates) are rejected. Image MIME
