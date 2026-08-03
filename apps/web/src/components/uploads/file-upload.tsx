@@ -7,6 +7,7 @@ import { useId, useState } from "react";
 
 import { errorMessage } from "@/lib/api/errors";
 import { uploadFile } from "@/lib/api/uploads";
+import { ATTACHMENT_HINT } from "@/components/uploads/accept";
 
 interface Props {
   category: Exclude<UploadCategory, "avatar">;
@@ -82,6 +83,9 @@ export function FileUpload({ category, accept, maxBytes, onUploaded }: Props) {
           <span>{uploading ? `正在上传 ${progress}%` : "拖入文件或点击选择"}</span>
         </label>
       </div>
+      {category === "attachment" ? (
+        <p className="text-xs text-muted-foreground">{ATTACHMENT_HINT}</p>
+      ) : null}
       {uploading ? (
         <div className="h-1 overflow-hidden bg-muted" aria-label={`上传进度 ${progress}%`}>
           <div className="h-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />

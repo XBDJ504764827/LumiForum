@@ -28,7 +28,7 @@ impl UploadCategory {
             Self::Avatar => 5 * 1024 * 1024,
             Self::TopicImage => 10 * 1024 * 1024,
             Self::CommentImage => 8 * 1024 * 1024,
-            Self::Attachment => 20 * 1024 * 1024,
+            Self::Attachment => 50 * 1024 * 1024,
         }
     }
 

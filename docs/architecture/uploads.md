@@ -38,10 +38,48 @@ implementations only put/delete objects and construct public URLs.
 | `avatar`        | JPEG, PNG, WebP      |        5 MiB | resize to fit 512x512, compress, thumbnail 128x128   |
 | `topic_image`   | JPEG, PNG, WebP, GIF |       10 MiB | resize to fit 2560x2560, compress, thumbnail 480x480 |
 | `comment_image` | JPEG, PNG, WebP, GIF |        8 MiB | resize to fit 1920x1920, compress, thumbnail 480x480 |
-| `attachment`    | PDF, plain text, ZIP |       20 MiB | none                                                 |
+| `attachment`    | see allowlist below  |       50 MiB | none                                                 |
 
-SVG and executable formats are rejected. Image MIME is derived by decoding the bytes. Attachment
-MIME is checked by magic bytes where possible and compared with the allowlist.
+Attachment allowlist (verified by magic bytes, never by filename or the
+client-declared MIME type):
+
+| Group     | Types                                                           |
+| --------- | --------------------------------------------------------------- |
+| Documents | PDF, plain text, RTF, DOC/DOCX, XLS/XLSX, PPT/PPTX, ODT/ODS/ODP |
+| Archives  | ZIP, 7z, RAR, TAR, GZ, BZ2, XZ, ZSTD                            |
+| Audio     | MP3, M4A, OGG, Opus, FLAC, WAV, AAC, MIDI                       |
+| Video     | MP4, WebM, MKV, MOV, AVI, WMV, MPEG, M4V                        |
+
+SVG and executable formats (PE/ELF/Mach-O, Wasm, Java classes, shell scripts,
+HTML, XML, fonts, MSI, Debian packages, certificates) are rejected. Image MIME
+is derived by decoding the bytes. Attachment MIME is checked by magic bytes
+where possible and compared with the allowlist; text without a signature is
+accepted only when it is UTF-8, contains no NUL bytes, and does not start like
+an active-content document or shebang script.
+
+## Serving security
+
+Uploaded objects are never rendered inside the forum origin:
+
+- Images are re-encoded server-side (except animated GIF, which keeps its
+  bytes but is served as `image/gif`) and are the only content served inline.
+- Every non-image object is stored under a server-owned extension and is
+  served with `Content-Disposition: attachment` so the browser downloads it
+  instead of rendering it (PDF with embedded scripts, XML, etc.).
+- All `/storage` responses carry `X-Content-Type-Options: nosniff`; combined
+  with the server-verified `Content-Type` this prevents content-type
+  confusion attacks.
+- The local storage provider applies these headers in `routes/mod.rs`.
+  S3/R2 stores the same disposition as object metadata; the CDN or reverse
+  proxy in front of `S3_PUBLIC_URL` must pass it through and add `nosniff`.
+- Original filenames are never used as paths or served filenames; objects are
+  stored as `{uuid}.{verified_extension}` and the original name is display
+  metadata only.
+- Decompression bombs are bounded: images are dimension-capped (40 MP) before
+  decoding, and archives are never extracted server-side, so a "zip bomb"
+  costs at most the size cap in disk and bandwidth.
+- Upload creation is rate limited per user (30 per 10 minutes) and gated by
+  the moderation reputation system.
 
 ## Object key policy
 

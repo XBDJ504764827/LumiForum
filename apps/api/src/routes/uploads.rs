@@ -24,7 +24,7 @@ use crate::state::AppState;
 
 use super::response::{parse_path, parse_query, ApiResponse, MessageResponse};
 
-const MULTIPART_LIMIT: usize = 20 * 1024 * 1024 + 64 * 1024;
+const MULTIPART_LIMIT: usize = 50 * 1024 * 1024 + 64 * 1024;
 
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
