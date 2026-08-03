@@ -122,6 +122,7 @@ export interface CategorySummary {
   name: string;
   icon: string | null;
   restricted_posting: boolean;
+  allow_anonymous: boolean;
 }
 
 export interface Category extends CategorySummary {
@@ -288,6 +289,7 @@ export interface TopicSummary {
   stats: TopicStats;
   is_pinned: boolean;
   is_featured: boolean;
+  author_anonymous: boolean;
   has_poll: boolean;
   last_reply_at: string | null;
   created_at: string;
@@ -331,6 +333,8 @@ export interface CreateTopicRequest {
   title: string;
   content: string;
   summary?: string;
+  /** Post anonymously (only in categories with allow_anonymous). */
+  anonymous?: boolean;
   poll?: CreatePollDraft;
 }
 
@@ -905,6 +909,8 @@ export interface CreateCategoryRequest {
   icon?: string;
   sort_order?: number;
   is_visible?: boolean;
+  restricted_posting?: boolean;
+  allow_anonymous?: boolean;
 }
 
 export interface UpdateCategoryRequest {
@@ -914,6 +920,8 @@ export interface UpdateCategoryRequest {
   icon?: string | null;
   sort_order?: number;
   is_visible?: boolean;
+  restricted_posting?: boolean;
+  allow_anonymous?: boolean;
 }
 
 export interface UpdateRolePermissionsRequest {
