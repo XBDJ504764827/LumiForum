@@ -64,6 +64,7 @@ pub fn create_router(state: AppState) -> Router {
                 "/storage",
                 ServeDir::new(state.config().storage_local_root.clone()),
             )
+            .route_layer(middleware::from_fn(storage_headers))
             .layer(SetResponseHeaderLayer::if_not_present(
                 header::CACHE_CONTROL,
                 HeaderValue::from_static("public, max-age=31536000, immutable"),
@@ -79,9 +80,42 @@ pub fn create_router(state: AppState) -> Router {
             count_http_request,
         ))
         .layer(TraceLayer::new_for_http())
-        .layer(RequestBodyLimitLayer::new(20 * 1024 * 1024 + 64 * 1024))
+        .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024 + 64 * 1024))
         .layer(cors)
         .with_state(state)
+}
+
+/// Security headers applied to every object served from `/storage`.
+///
+/// - `X-Content-Type-Options: nosniff` prevents content-type confusion: an
+///   uploaded file can never be reinterpreted by the browser as HTML.
+/// - Processed images (jpg/png/webp/gif) are served inline so `<img>` tags
+///   work. Every other verified type is forced to download, so uploaded
+///   content (PDF with embedded scripts, XML, …) is never rendered inside the
+///   forum origin.
+async fn storage_headers(request: Request, next: Next) -> Response {
+    let path = request.uri().path().to_owned();
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    let extension = path.rsplit('.').next().map(str::to_ascii_lowercase);
+    let is_image = matches!(
+        extension.as_deref(),
+        Some("jpg" | "jpeg" | "png" | "webp" | "gif")
+    );
+    if !is_image {
+        // Stored filenames are server-generated (`{uuid}.{verified_extension}`),
+        // so this value is safe to echo back into a header.
+        let filename = path.rsplit('/').next().unwrap_or("file");
+        let value = HeaderValue::from_str(&format!("attachment; filename=\"{filename}\""))
+            .unwrap_or_else(|_| HeaderValue::from_static("attachment"));
+        response
+            .headers_mut()
+            .insert(header::CONTENT_DISPOSITION, value);
+    }
+    response
 }
 
 /// Lightweight per-request counter backing the admin dashboard.

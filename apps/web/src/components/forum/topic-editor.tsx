@@ -20,6 +20,7 @@ import {
 } from "@/components/forum/poll-editor";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
+import { ATTACHMENT_ACCEPT, IMAGE_ACCEPT } from "@/components/uploads/accept";
 import { FileUpload } from "@/components/uploads/file-upload";
 import { errorMessage } from "@/lib/api/errors";
 import { createTopic, forumKeys, listCategories, updateTopic } from "@/lib/api/forum";
@@ -143,6 +144,24 @@ export function TopicEditor(props: Props) {
     });
   };
 
+  const insertAttachment = (url: string, originalFilename: string) => {
+    const current = form.getValues("content");
+    const cursor = contentRef.current?.selectionStart ?? current.length;
+    const markdown = `[${originalFilename}](${url})`;
+    const prefix = cursor > 0 && current[cursor - 1] !== "\n" ? "\n" : "";
+    const suffix = cursor < current.length && current[cursor] !== "\n" ? "\n" : "";
+    const insertion = `${prefix}${markdown}${suffix}`;
+    form.setValue("content", `${current.slice(0, cursor)}${insertion}${current.slice(cursor)}`, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    requestAnimationFrame(() => {
+      const nextCursor = cursor + insertion.length;
+      contentRef.current?.focus();
+      contentRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
   if (categories.isPending) return <QueryLoading label="正在加载编辑器" />;
   if (categories.isError) return <QueryError message="无法加载板块，请稍后重试" />;
 
@@ -239,13 +258,27 @@ export function TopicEditor(props: Props) {
                   </div>
                 )}
                 {view === "write" ? (
-                  <div className="mt-3">
-                    <FileUpload
-                      category="topic_image"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      maxBytes={10 * 1024 * 1024}
-                      onUploaded={(upload) => insertImage(upload.url, upload.original_filename)}
-                    />
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <p className="mb-1.5 text-sm font-medium text-foreground">插入图片</p>
+                      <FileUpload
+                        category="topic_image"
+                        accept={IMAGE_ACCEPT}
+                        maxBytes={10 * 1024 * 1024}
+                        onUploaded={(upload) => insertImage(upload.url, upload.original_filename)}
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1.5 text-sm font-medium text-foreground">添加附件</p>
+                      <FileUpload
+                        category="attachment"
+                        accept={ATTACHMENT_ACCEPT}
+                        maxBytes={50 * 1024 * 1024}
+                        onUploaded={(upload) =>
+                          insertAttachment(upload.url, upload.original_filename)
+                        }
+                      />
+                    </div>
                   </div>
                 ) : null}
                 <p className="mt-2 min-h-5 text-sm text-destructive">

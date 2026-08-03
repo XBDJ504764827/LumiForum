@@ -11,6 +11,8 @@ pub use s3::{S3Storage, S3StorageConfig};
 pub struct PutOptions<'a> {
     pub content_type: &'a str,
     pub cache_control: &'a str,
+    /// "inline" for processed images, "attachment" for every other type.
+    pub content_disposition: &'a str,
 }
 
 #[async_trait]
