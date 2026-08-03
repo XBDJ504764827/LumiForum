@@ -16,6 +16,70 @@ use super::upload_image::process_image;
 
 const CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
 
+/// Accepted non-image types, keyed by the MIME type sniffed from magic bytes.
+/// Files whose detected type is not in this table — executables (PE/ELF/Mach-O/
+/// Wasm/class), scripts (sh/bat/ps1), HTML, SVG, XML, fonts, certificates — are
+/// rejected. Client-provided names and MIME types are only cross-checked against
+/// this detection and never trusted on their own.
+const ATTACHMENT_TYPES: &[(&str, &str)] = &[
+    // Documents
+    ("application/pdf", "pdf"),
+    ("application/msword", "doc"),
+    (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "docx",
+    ),
+    ("application/vnd.ms-excel", "xls"),
+    (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xlsx",
+    ),
+    ("application/vnd.ms-powerpoint", "ppt"),
+    (
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "pptx",
+    ),
+    ("application/vnd.oasis.opendocument.text", "odt"),
+    ("application/vnd.oasis.opendocument.spreadsheet", "ods"),
+    ("application/vnd.oasis.opendocument.presentation", "odp"),
+    ("application/rtf", "rtf"),
+    ("text/plain", "txt"),
+    // Archives
+    ("application/zip", "zip"),
+    ("application/x-7z-compressed", "7z"),
+    ("application/vnd.rar", "rar"),
+    ("application/x-tar", "tar"),
+    ("application/gzip", "gz"),
+    ("application/x-bzip2", "bz2"),
+    ("application/x-xz", "xz"),
+    ("application/zstd", "zst"),
+    // Audio
+    ("audio/mpeg", "mp3"),
+    ("audio/m4a", "m4a"),
+    ("audio/ogg", "ogg"),
+    ("audio/opus", "opus"),
+    ("audio/x-flac", "flac"),
+    ("audio/x-wav", "wav"),
+    ("audio/aac", "aac"),
+    ("audio/midi", "midi"),
+    // Video
+    ("video/mp4", "mp4"),
+    ("video/webm", "webm"),
+    ("video/x-matroska", "mkv"),
+    ("video/quicktime", "mov"),
+    ("video/x-msvideo", "avi"),
+    ("video/x-ms-wmv", "wmv"),
+    ("video/mpeg", "mpg"),
+    ("video/x-m4v", "m4v"),
+];
+
+fn attachment_extension(mime_type: &str) -> Option<&'static str> {
+    ATTACHMENT_TYPES
+        .iter()
+        .find(|(mime, _)| *mime == mime_type)
+        .map(|(_, extension)| *extension)
+}
+
 pub struct UploadInput {
     pub original_filename: String,
     pub claimed_mime_type: Option<String>,
@@ -53,6 +117,9 @@ struct PreparedUpload {
     thumbnail: Option<Bytes>,
     mime_type: &'static str,
     extension: &'static str,
+    /// "inline" for processed images, "attachment" for everything else, so
+    /// uploaded content can never be rendered inside the forum origin.
+    content_disposition: &'static str,
     width: Option<i32>,
     height: Option<i32>,
 }
@@ -93,6 +160,10 @@ impl UploadService {
                 .enforce_upload_allowed(user_id)
                 .await
                 .map_err(map_moderation)?;
+            moderation
+                .enforce_upload_rate_limit(user_id)
+                .await
+                .map_err(map_moderation)?;
         }
         if input.data.is_empty() {
             return Err(UploadError::Validation("file is empty"));
@@ -115,6 +186,7 @@ impl UploadService {
         if prepared.data.len() > input.category.max_bytes() {
             return Err(UploadError::TooLarge);
         }
+        let content_disposition = prepared.content_disposition;
 
         let id = Uuid::new_v4();
         let now = Utc::now();
@@ -157,6 +229,7 @@ impl UploadService {
                 PutOptions {
                     content_type: prepared.mime_type,
                     cache_control: CACHE_CONTROL,
+                    content_disposition,
                 },
             )
             .await
@@ -175,6 +248,7 @@ impl UploadService {
                     PutOptions {
                         content_type: "image/png",
                         cache_control: CACHE_CONTROL,
+                        content_disposition: "inline",
                     },
                 )
                 .await
@@ -349,22 +423,19 @@ fn prepare(
             thumbnail: Some(image.thumbnail),
             mime_type: image.mime_type,
             extension: image.extension,
+            content_disposition: "inline",
             width: Some(image.width),
             height: Some(image.height),
         });
     }
 
-    let extension = match mime_type {
-        "application/pdf" => "pdf",
-        "text/plain" => "txt",
-        "application/zip" => "zip",
-        _ => return Err(UploadError::UnsupportedMediaType),
-    };
+    let extension = attachment_extension(mime_type).ok_or(UploadError::UnsupportedMediaType)?;
     Ok(PreparedUpload {
         data,
         thumbnail: None,
         mime_type,
         extension,
+        content_disposition: "attachment",
         width: None,
         height: None,
     })
@@ -372,20 +443,44 @@ fn prepare(
 
 fn detect_mime(data: &[u8]) -> Option<&'static str> {
     if let Some(kind) = infer::get(data) {
-        return match kind.mime_type() {
-            "image/jpeg" => Some("image/jpeg"),
-            "image/png" => Some("image/png"),
-            "image/webp" => Some("image/webp"),
-            "image/gif" => Some("image/gif"),
-            "application/pdf" => Some("application/pdf"),
-            "application/zip" => Some("application/zip"),
+        let mime = kind.mime_type();
+        return match mime {
+            "image/jpeg" | "image/png" | "image/webp" | "image/gif" => Some(mime),
+            _ if attachment_extension(mime).is_some() => Some(mime),
+            // Everything else sniffable by `infer` — PE/ELF/Mach-O executables,
+            // Java classes, Wasm, shell scripts, HTML, XML, SVG, fonts, MSI,
+            // Debian packages, certificates — is rejected here.
             _ => None,
         };
     }
-    std::str::from_utf8(data)
-        .ok()
-        .filter(|text| !text.contains('\0'))
-        .map(|_| "text/plain")
+    // No magic signature: accept only UTF-8 plain text, and only when it does
+    // not start like an executable script or an active-content document.
+    let text = std::str::from_utf8(data).ok()?;
+    if text.contains('\0') || starts_with_active_content(text) {
+        return None;
+    }
+    Some("text/plain")
+}
+
+/// Rejects text that begins like a script (shebang) or a markup document that
+/// browsers can execute or render as active content (SVG/XML/HTML). Only the
+/// file head is inspected, so normal documents that merely mention such syntax
+/// in the middle of the text are unaffected.
+fn starts_with_active_content(text: &str) -> bool {
+    let head = text
+        .trim_start_matches(|character: char| character.is_whitespace() || character == '\u{feff}')
+        .get(..32)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    head.starts_with("#!")
+        || head.starts_with("<svg")
+        || head.starts_with("<?xml")
+        || head.starts_with("<!doctype")
+        || head.starts_with("<html")
+        || head.starts_with("<script")
+        || head.starts_with("<iframe")
+        || head.starts_with("<style")
+        || head.starts_with("<title")
 }
 
 fn sanitize_filename(filename: &str) -> String {
@@ -427,7 +522,10 @@ fn map_moderation(error: crate::services::ModerationError) -> UploadError {
 
 #[cfg(test)]
 mod tests {
-    use super::{detect_mime, sanitize_filename};
+    use bytes::Bytes;
+
+    use super::{detect_mime, prepare, sanitize_filename};
+    use crate::models::UploadCategory;
 
     #[test]
     fn removes_path_from_original_filename() {
@@ -439,5 +537,70 @@ mod tests {
     fn rejects_html_and_accepts_plain_text() {
         assert_eq!(detect_mime(b"hello world"), Some("text/plain"));
         assert_eq!(detect_mime(b"<!doctype html><script>x</script>"), None);
+    }
+
+    #[test]
+    fn accepts_common_documents_archives_audio_and_video() {
+        assert_eq!(
+            detect_mime(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3"),
+            Some("application/pdf")
+        );
+        assert_eq!(
+            detect_mime(b"PK\x03\x04\x14\x00\x00\x00"),
+            Some("application/zip")
+        );
+        assert_eq!(
+            detect_mime(b"ID3\x04\x00\x00\x00\x00\x00\x00"),
+            Some("audio/mpeg")
+        );
+        assert_eq!(
+            detect_mime(b"RIFF\x24\x00\x00\x00WAVEfmt "),
+            Some("audio/x-wav")
+        );
+        assert_eq!(
+            detect_mime(b"\x1a\x45\xdf\xa3\x93\x42\x82\x88matroska"),
+            Some("video/x-matroska")
+        );
+    }
+
+    #[test]
+    fn rejects_executables_scripts_and_active_documents() {
+        // Windows PE / Unix ELF executables
+        assert_eq!(detect_mime(b"MZ\x90\x00\x03\x00\x00\x00"), None);
+        assert_eq!(detect_mime(b"\x7fELF\x02\x01\x01\x00\x00\x00\x00"), None);
+        // Shell scripts and shebang fallback
+        assert_eq!(detect_mime(b"#!/bin/sh\necho pwned"), None);
+        assert_eq!(detect_mime(b"#! /usr/bin/env python3\nprint(1)"), None);
+        // SVG / XML that could be rendered as active content
+        assert_eq!(
+            detect_mime(b"<svg xmlns=\"http://www.w3.org/2000/svg\"><script>"),
+            None
+        );
+        assert_eq!(detect_mime(b"  <?xml version=\"1.0\"?><root/>"), None);
+        // Java class / WebAssembly bytecode
+        assert_eq!(detect_mime(b"\xca\xfe\xba\xbe\x00\x00\x00\x34"), None);
+        assert_eq!(detect_mime(b"\x00asm\x01\x00\x00\x00"), None);
+    }
+
+    #[test]
+    fn maps_verified_mime_to_server_owned_extension() {
+        let zip = Bytes::from_static(b"PK\x03\x04\x14\x00\x00\x00");
+        let prepared = prepare(UploadCategory::Attachment, zip, "application/zip").unwrap();
+        assert_eq!(prepared.extension, "zip");
+        assert_eq!(prepared.mime_type, "application/zip");
+        assert_eq!(prepared.content_disposition, "attachment");
+
+        // A sniffed executable must never be stored, even if `prepare` is
+        // called with its MIME type directly.
+        let exe = Bytes::from_static(b"MZ\x90\x00");
+        let rejected = prepare(
+            UploadCategory::Attachment,
+            exe,
+            "application/vnd.microsoft.portable-executable",
+        );
+        assert!(matches!(
+            rejected,
+            Err(super::UploadError::UnsupportedMediaType)
+        ));
     }
 }

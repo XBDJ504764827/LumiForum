@@ -41,6 +41,8 @@ const RULES_CACHE_KEY: &str = "mod:rules:v1";
 const RULES_CACHE_TTL_SECS: u64 = 60;
 const REPORT_RATE_WINDOW_SECS: u64 = 60;
 const REPORT_RATE_LIMIT: u64 = 5;
+const UPLOAD_RATE_WINDOW_SECS: u64 = 600;
+const UPLOAD_RATE_LIMIT: u64 = 30;
 const REPORT_DEDUP_WINDOW_HOURS: i64 = 24;
 const MAX_APPEALS_PER_SANCTION: i64 = 2;
 const DEFAULT_PAGE_SIZE: u32 = 20;
@@ -3378,6 +3380,29 @@ impl ModerationService {
             ));
         }
         Ok(())
+    }
+
+    /// Rate limit upload creation per user (Redis counter with TTL). A failure
+    /// to reach Redis fails open with a warning, matching report limiting.
+    pub async fn enforce_upload_rate_limit(&self, user_id: Uuid) -> Result<(), ModerationError> {
+        let key = format!("rate:upload:{user_id}");
+        let mut redis = self.redis.clone();
+        match redis.incr::<_, u64, u64>(&key, 1_u64).await {
+            Ok(count) => {
+                if count == 1 {
+                    let _: Result<(), _> = redis.expire(&key, UPLOAD_RATE_WINDOW_SECS as i64).await;
+                }
+                if count > UPLOAD_RATE_LIMIT {
+                    Err(ModerationError::RateLimited)
+                } else {
+                    Ok(())
+                }
+            }
+            Err(error) => {
+                tracing::warn!(%error, %user_id, "upload rate limit unavailable; allowing request");
+                Ok(())
+            }
+        }
     }
 
     /// Add violation points and notify when reputation degrades.

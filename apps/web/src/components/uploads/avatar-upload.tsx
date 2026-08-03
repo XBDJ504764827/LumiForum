@@ -7,6 +7,7 @@ import { useId, useState } from "react";
 
 import { errorMessage } from "@/lib/api/errors";
 import { deleteAvatar, uploadFile } from "@/lib/api/uploads";
+import { IMAGE_ACCEPT } from "@/components/uploads/accept";
 
 export function AvatarUpload({ user, onUpdated }: { user: User; onUpdated: (user: User) => void }) {
   const inputId = useId();
@@ -58,7 +59,7 @@ export function AvatarUpload({ user, onUpdated }: { user: User; onUpdated: (user
         <input
           id={inputId}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept={IMAGE_ACCEPT}
           className="sr-only"
           disabled={busy}
           onChange={(event) => {

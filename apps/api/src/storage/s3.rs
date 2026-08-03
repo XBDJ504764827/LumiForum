@@ -68,6 +68,10 @@ impl StorageProvider for S3Storage {
             Attribute::CacheControl,
             options.cache_control.to_owned().into(),
         );
+        attributes.insert(
+            Attribute::ContentDisposition,
+            options.content_disposition.to_owned().into(),
+        );
         self.store
             .put_opts(
                 &Path::parse(key)?,
