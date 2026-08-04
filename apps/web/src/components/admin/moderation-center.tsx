@@ -25,6 +25,7 @@ import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { errorMessage } from "@/lib/api/errors";
 import {
   createModerationRule,
+  deleteModerationRule,
   listModerationCases,
   listModerationReports,
   listModerationRules,
@@ -434,6 +435,14 @@ function RulesTab() {
     },
     onError: (err) => setError(errorMessage(err)),
   });
+  const remove = useMutation({
+    mutationFn: ({ id }: { id: string }) => deleteModerationRule(id),
+    onSuccess: async () => {
+      setError(null);
+      await queryClient.invalidateQueries({ queryKey: moderationKeys.rules(params) });
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newRule, setNewRule] = useState<RuleRequest>({
     name: "",
@@ -444,20 +453,21 @@ function RulesTab() {
     enabled: true,
     config: { keywords: [] },
   });
-  // Raw keyword input — kept as-is so both half/full-width commas type
-  // normally; the array is derived only when creating the rule.
+  // Raw keyword input. Only one banned word may be added per rule: commas
+  // are rejected instead of being used as separators, so a comma can never
+  // end up inside a stored keyword. New words require a new rule.
   const [keywordsInput, setKeywordsInput] = useState("");
-  const parseKeywords = (value: string): string[] =>
-    value
-      .split(/[,，]/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+  const singleKeyword = keywordsInput.trim();
+  const keywordHasComma = /[,，]/.test(keywordsInput);
+  const keywordError = keywordHasComma
+    ? "每次只能添加一个违禁词，如需添加多个违禁词请分别创建规则"
+    : null;
 
   const create = useMutation({
     mutationFn: () =>
       createModerationRule({
         ...newRule,
-        config: { ...newRule.config, keywords: parseKeywords(keywordsInput) },
+        config: { ...newRule.config, keywords: singleKeyword ? [singleKeyword] : [] },
       }),
     onSuccess: async () => {
       setError(null);
@@ -471,8 +481,6 @@ function RulesTab() {
   if (rules.isPending) return <QueryLoading label="正在加载规则" />;
   if (rules.isError) return <QueryError message="规则加载失败" />;
 
-  const keywordsCount = parseKeywords(keywordsInput).length;
-
   return (
     <div>
       {error ? <p className="mb-3 text-sm text-destructive">{error}</p> : null}
@@ -485,7 +493,7 @@ function RulesTab() {
             onChange={(event) => setNewRule((r) => ({ ...r, name: event.target.value }))}
           />
           <Input
-            placeholder="敏感词，用逗号分隔（中英文逗号均可）"
+            placeholder="违禁词（每次只能添加一个）"
             value={keywordsInput}
             onChange={(event) => setKeywordsInput(event.target.value)}
           />
@@ -508,11 +516,14 @@ function RulesTab() {
             <option value="reject">拒绝发布</option>
           </Select>
         </div>
+        {keywordError ? (
+          <p className="mt-2 text-sm text-destructive">{keywordError}</p>
+        ) : null}
         <Button
           type="button"
           size="sm"
           className="mt-3"
-          disabled={create.isPending || !newRule.name.trim() || keywordsCount === 0}
+          disabled={create.isPending || !newRule.name.trim() || !singleKeyword || !!keywordError}
           onClick={() => create.mutate()}
         >
           {create.isPending ? "创建中…" : "创建规则"}
@@ -551,6 +562,18 @@ function RulesTab() {
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => setEditingId(rule.id)}>
                     编辑
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    disabled={remove.isPending}
+                    onClick={() => {
+                      if (window.confirm(`确认删除规则「${rule.name}」？删除后不可恢复。`))
+                        remove.mutate({ id: rule.id });
+                    }}
+                  >
+                    删除
                   </Button>
                 </div>
               </td>
@@ -600,16 +623,24 @@ function RuleEditRow({
   const [action, setAction] = useState<RuleRequest["action"]>(rule.action);
   const [riskScore, setRiskScore] = useState(rule.risk_score);
   const [enabled, setEnabled] = useState(rule.enabled);
+  const existingKeywords = Array.isArray(rule.config.keywords)
+    ? rule.config.keywords
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+  // Legacy rules may contain several words; editing them is not allowed —
+  // new banned words can only be added by creating a new rule.
+  const hasMultipleKeywords = existingKeywords.length > 1;
   const [keywords, setKeywords] = useState(
-    Array.isArray(rule.config.keywords) ? String(rule.config.keywords.join("，")) : "",
+    hasMultipleKeywords ? "" : (existingKeywords[0] ?? ""),
   );
+  const singleKeyword = keywords.trim();
+  const keywordHasComma = /[,，]/.test(keywords);
+  const keywordError = keywordHasComma
+    ? "每次只能添加一个违禁词，如需添加多个违禁词请分别创建规则"
+    : null;
   const [error, setError] = useState<string | null>(null);
-
-  const parseKeywords = (value: string): string[] =>
-    value
-      .split(/[,，]/)
-      .map((item) => item.trim())
-      .filter(Boolean);
 
   const save = useMutation({
     mutationFn: () =>
@@ -620,7 +651,10 @@ function RuleEditRow({
         action,
         risk_score: riskScore,
         enabled,
-        config: rule.rule_type === "keyword" ? { keywords: parseKeywords(keywords) } : rule.config,
+        config:
+          rule.rule_type === "keyword" && !hasMultipleKeywords
+            ? { keywords: singleKeyword ? [singleKeyword] : [] }
+            : rule.config,
       }),
     onSuccess: async () => {
       setError(null);
@@ -639,9 +673,20 @@ function RuleEditRow({
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
-        {rule.rule_type === "keyword" ? (
+        {rule.rule_type === "keyword" && hasMultipleKeywords ? (
+          <div className="flex flex-col justify-center gap-1 text-sm text-muted-foreground">
+            <div className="flex flex-wrap gap-1">
+              {existingKeywords.map((item) => (
+                <span key={item} className="rounded-sm bg-muted px-1.5 py-0.5 text-xs">
+                  {item}
+                </span>
+              ))}
+            </div>
+            <span>该规则包含多个违禁词，如需调整请删除规则后重新创建。</span>
+          </div>
+        ) : rule.rule_type === "keyword" ? (
           <Input
-            placeholder="敏感词，用逗号分隔（中英文逗号均可）"
+            placeholder="违禁词（每次只能添加一个）"
             value={keywords}
             onChange={(event) => setKeywords(event.target.value)}
           />
@@ -681,8 +726,20 @@ function RuleEditRow({
         </label>
       </div>
       {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+      {keywordError ? (
+        <p className="mt-2 text-sm text-destructive">{keywordError}</p>
+      ) : null}
       <div className="mt-3 flex gap-2">
-        <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
+        <Button
+          size="sm"
+          disabled={
+            save.isPending ||
+            (rule.rule_type === "keyword" &&
+              !hasMultipleKeywords &&
+              (!singleKeyword || !!keywordError))
+          }
+          onClick={() => save.mutate()}
+        >
           {save.isPending ? "保存中…" : "保存修改"}
         </Button>
         <Button size="sm" variant="ghost" onClick={onDone}>

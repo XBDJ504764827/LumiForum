@@ -3238,28 +3238,62 @@ impl ModerationService {
         &self,
         principal: &AuthenticatedPrincipal,
         rule_id: Uuid,
-        request: RuleRequest,
+        request: crate::models::RuleUpdateRequest,
         audit: &AdminAuditContext,
     ) -> Result<RuleItem, ModerationError> {
         require(principal, PERMISSION_MODERATION_RULE_MANAGE)?;
-        let name = request.name.trim().to_owned();
+        // Merge the partial update with the stored rule so fields that were
+        // not sent keep their current value (e.g. a PATCH with only
+        // `{"enabled": false}` must not fail on a missing name).
+        let existing = self
+            .repository
+            .get_rule(rule_id)
+            .await
+            .map_err(internal)?
+            .ok_or(ModerationError::NotFound)?;
+
+        let name = request
+            .name
+            .as_deref()
+            .unwrap_or(&existing.name)
+            .trim()
+            .to_owned();
         if name.is_empty() || name.chars().count() > 100 {
             return Err(ModerationError::Validation(
                 "rule name must contain between 1 and 100 characters",
             ));
+        }
+        let target_type = request.target_type.unwrap_or(existing.target_type.clone());
+        if !matches!(
+            target_type.as_str(),
+            "topic" | "comment" | "user" | "all"
+        ) {
+            return Err(ModerationError::Validation("invalid target type"));
+        }
+        let rule_type = request.rule_type.unwrap_or(existing.rule_type);
+        let action = request.action.unwrap_or(existing.action);
+        let risk_score = request
+            .risk_score
+            .unwrap_or(existing.risk_score)
+            .clamp(1, 100);
+        let priority = request.priority.unwrap_or(existing.priority).max(0);
+        let mut config = existing.config.clone();
+        if let Some(value) = request.config {
+            config = value;
+            validate_rule_config(rule_type, &mut config)?;
         }
         let changed = self
             .repository
             .update_rule(
                 rule_id,
                 Some(&name),
-                Some(request.rule_type.as_str()),
-                Some(&request.target_type),
-                Some(request.priority.unwrap_or(0).max(0)),
+                Some(rule_type.as_str()),
+                Some(&target_type),
+                Some(priority),
                 request.enabled,
-                request.risk_score.map(|value| value.clamp(1, 100)),
-                Some(request.action.as_str()),
-                request.config,
+                Some(risk_score),
+                Some(action.as_str()),
+                Some(config),
             )
             .await
             .map_err(internal)?;
@@ -3274,7 +3308,7 @@ impl ModerationService {
                 "rule",
                 Some(rule_id),
                 &format!("updated moderation rule {name}"),
-                json!({ "rule_type": request.rule_type.as_str() }),
+                json!({ "rule_type": rule_type.as_str() }),
                 audit.ip,
                 audit.user_agent.as_deref(),
             )
