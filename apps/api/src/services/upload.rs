@@ -80,6 +80,55 @@ fn attachment_extension(mime_type: &str) -> Option<&'static str> {
         .map(|(_, extension)| *extension)
 }
 
+/// Legacy MIME aliases that browsers and file managers (notably Windows
+/// Explorer) claim for files whose verified content has a canonical type.
+/// Keyed by the claimed type, mapped to the canonical detected type.
+const CLAIMED_MIME_ALIASES: &[(&str, &str)] = &[
+    ("application/x-zip-compressed", "application/zip"),
+    ("application/zip-compressed", "application/zip"),
+    ("application/x-rar-compressed", "application/vnd.rar"),
+    ("application/x-gzip", "application/gzip"),
+    ("application/x-compressed-tar", "application/gzip"),
+    ("application/x-bzip", "application/x-bzip2"),
+    ("application/x-zstd", "application/zstd"),
+    ("application/mp4", "video/mp4"),
+    ("application/x-m4a", "audio/m4a"),
+    ("audio/x-mpeg", "audio/mpeg"),
+    ("audio/mp3", "audio/mpeg"),
+    ("audio/wav", "audio/x-wav"),
+    ("image/jpg", "image/jpeg"),
+];
+
+/// Whether the browser-declared MIME type is compatible with the type sniffed
+/// from the file content. The declared value is only a hint: content sniffing
+/// is authoritative for what gets stored and served. Comparison is
+/// case-insensitive, ignores parameters, and tolerates the legacy aliases
+/// above; a blatant mismatch (e.g. a ZIP claiming to be an image) is still
+/// rejected.
+fn claimed_mime_matches(claimed: &str, detected: &str) -> bool {
+    let claimed = claimed
+        .split(';')
+        .next()
+        .unwrap_or(claimed)
+        .trim()
+        .to_ascii_lowercase();
+    if claimed.is_empty() || claimed == "application/octet-stream" {
+        return true;
+    }
+    if claimed == detected {
+        return true;
+    }
+    if CLAIMED_MIME_ALIASES
+        .iter()
+        .any(|(alias, canonical)| *alias == claimed && *canonical == detected)
+    {
+        return true;
+    }
+    // Markdown, CSV, logs, … are all verified plain text; accept any text/*
+    // declaration for them.
+    detected == "text/plain" && claimed.starts_with("text/")
+}
+
 pub struct UploadInput {
     pub original_filename: String,
     pub claimed_mime_type: Option<String>,
@@ -177,8 +226,7 @@ impl UploadService {
         if input
             .claimed_mime_type
             .as_deref()
-            .filter(|value| *value != "application/octet-stream")
-            .is_some_and(|value| value != detected_mime)
+            .is_some_and(|claimed| !claimed_mime_matches(claimed, detected_mime))
         {
             return Err(UploadError::UnsupportedMediaType);
         }
@@ -580,6 +628,43 @@ mod tests {
         // Java class / WebAssembly bytecode
         assert_eq!(detect_mime(b"\xca\xfe\xba\xbe\x00\x00\x00\x34"), None);
         assert_eq!(detect_mime(b"\x00asm\x01\x00\x00\x00"), None);
+    }
+
+    #[test]
+    fn accepts_browser_mime_aliases_and_rejects_blatant_mismatches() {
+        use super::claimed_mime_matches;
+
+        // Windows file pickers claim these legacy types for common archives.
+        assert!(claimed_mime_matches(
+            "application/x-zip-compressed",
+            "application/zip"
+        ));
+        assert!(claimed_mime_matches(
+            "application/x-gzip",
+            "application/gzip"
+        ));
+        assert!(claimed_mime_matches(
+            "application/x-rar-compressed",
+            "application/vnd.rar"
+        ));
+        assert!(claimed_mime_matches("audio/x-mpeg", "audio/mpeg"));
+        // Parameters and case must not matter.
+        assert!(claimed_mime_matches(
+            "text/plain; charset=utf-8",
+            "text/plain"
+        ));
+        assert!(claimed_mime_matches("APPLICATION/ZIP", "application/zip"));
+        // Unknown or generic declarations never cause a rejection.
+        assert!(claimed_mime_matches(
+            "application/octet-stream",
+            "application/zip"
+        ));
+        assert!(claimed_mime_matches("", "application/zip"));
+        // Markdown/CSV-style claims are fine for verified plain text.
+        assert!(claimed_mime_matches("text/markdown", "text/plain"));
+        // A ZIP claiming to be an image is a renamed file — still rejected.
+        assert!(!claimed_mime_matches("image/png", "application/zip"));
+        assert!(!claimed_mime_matches("text/html", "application/zip"));
     }
 
     #[test]
