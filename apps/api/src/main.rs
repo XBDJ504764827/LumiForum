@@ -5,7 +5,12 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
+    // 开发环境自动加载 .env.development（不存在时回退 .env）。
+    // 生产环境由 systemd EnvironmentFile 注入进程环境变量，dotenvy
+    // 不会覆盖已存在的环境变量，因此不影响生产部署。
+    if dotenvy::from_filename(".env.development").is_err() {
+        dotenvy::dotenv().ok();
+    }
 
     tracing_subscriber::registry()
         .with(

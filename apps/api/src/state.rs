@@ -134,6 +134,7 @@ impl AppState {
             category_repository,
             moderation.clone(),
             polls.clone(),
+            admin_repository.clone(),
         );
         let comments = CommentService::new(
             CommentRepository::new(db.clone()),

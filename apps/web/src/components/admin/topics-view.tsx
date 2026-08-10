@@ -85,7 +85,6 @@ export function AdminTopicsView() {
           <option value="">全部状态</option>
           <option value="published">已发布</option>
           <option value="hidden">已隐藏</option>
-          <option value="deleted">已删除</option>
         </Select>
         <Select
           value={params.sort ?? ""}

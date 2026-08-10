@@ -499,7 +499,9 @@ impl AdminService {
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty());
         if let Some(status) = status.as_deref() {
-            if !matches!(status, "published" | "hidden" | "deleted") {
+            // Deleted topics are intentionally not listed in the admin
+            // console — author deletions only live in the audit log.
+            if !matches!(status, "published" | "hidden") {
                 return Err(AdminError::Validation("invalid topic status filter"));
             }
         }
