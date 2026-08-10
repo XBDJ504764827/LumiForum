@@ -733,7 +733,7 @@ async fn update_rule(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     path: Result<Path<Uuid>, PathRejection>,
-    payload: Result<Json<RuleRequest>, JsonRejection>,
+    payload: Result<Json<crate::models::RuleUpdateRequest>, JsonRejection>,
 ) -> AppResult<Json<ApiResponse<crate::models::RuleItem>>> {
     let rule_id = parse_path(path)?;
     let request = parse_json(payload)?;

@@ -14,7 +14,7 @@ use crate::repositories::{
     is_unique_violation, repository_user_to_response, RepositoryUser, SteamAuthRepository,
 };
 
-use super::{AuthService, IssuedSession, PasswordService, SteamOpenIdClient};
+use super::{AuthService, IssuedSession, PasswordService, SteamRelayClient};
 
 const STATE_TTL_SECONDS: u64 = 600;
 const STATE_VERSION: u8 = 1;
@@ -25,7 +25,7 @@ pub struct SteamAuthService {
     auth: AuthService,
     passwords: PasswordService,
     state: SteamStateStore,
-    client: SteamOpenIdClient,
+    client: SteamRelayClient,
 }
 
 #[derive(Clone)]
@@ -38,6 +38,15 @@ struct SteamStateStore {
 pub enum SteamAuthMode {
     Login,
     Bind,
+}
+
+impl SteamAuthMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Login => "login",
+            Self::Bind => "bind",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -85,7 +94,7 @@ impl SteamAuthService {
         auth: AuthService,
         password_hash_concurrency: usize,
         redis: ConnectionManager,
-        client: SteamOpenIdClient,
+        client: SteamRelayClient,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             repository,
@@ -122,22 +131,13 @@ impl SteamAuthService {
     ) -> Result<SteamCallbackResult, SteamAuthError> {
         let state_token = params.get("state").ok_or(SteamAuthError::InvalidState)?;
         let transaction = self.state.consume(state_token).await?;
-        let steam_id = self
-            .client
-            .verify_callback(params, state_token)
-            .await
-            .map_err(|error| {
-                tracing::warn!(%error, "Steam OpenID assertion rejected");
-                SteamAuthError::AuthenticationFailed
-            })?;
-        let profile = self
-            .client
-            .fetch_profile(&steam_id)
-            .await
-            .map_err(|error| {
-                tracing::warn!(%error, "Steam profile request failed");
-                SteamAuthError::AuthenticationFailed
-            })?;
+        // 一次性 token 换取 SteamID：token 由中继（Worker）生成并单次消费，
+        // 无法被伪造为任意 SteamID。
+        let token = params.get("token").ok_or(SteamAuthError::InvalidState)?;
+        let profile = self.client.verify_token(token).await.map_err(|error| {
+            tracing::warn!(%error, "Steam relay token exchange rejected");
+            SteamAuthError::AuthenticationFailed
+        })?;
 
         match transaction.mode {
             SteamAuthMode::Login => {
@@ -250,10 +250,10 @@ impl SteamAuthService {
         let state = self.state.create(mode, user_id).await?;
         let authorization_url = self
             .client
-            .authorization_url(&state)
+            .authorization_url(mode.as_str(), &state)
             .map_err(SteamAuthError::Internal)?;
         Ok(SteamAuthorization {
-            authorization_url,
+            authorization_url: authorization_url.to_string(),
             state,
         })
     }

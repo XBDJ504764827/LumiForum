@@ -1072,6 +1072,7 @@ impl AdminRepository {
             WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.slug ILIKE '%' || $1 || '%')
               AND ($2::text IS NULL OR t.status = $2)
               AND ($3::uuid IS NULL OR t.category_id = $3)
+              AND t.status <> 'deleted'
             ORDER BY {order_by}
             LIMIT $4 OFFSET $5
             "#,
@@ -1095,6 +1096,7 @@ impl AdminRepository {
                 WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.slug ILIKE '%' || $1 || '%')
                   AND ($2::text IS NULL OR t.status = $2)
                   AND ($3::uuid IS NULL OR t.category_id = $3)
+                  AND t.status <> 'deleted'
                 "#,
             )
             .bind(q)
@@ -1110,6 +1112,7 @@ impl AdminRepository {
                 WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.slug ILIKE '%' || $1 || '%')
                   AND ($2::text IS NULL OR t.status = $2)
                   AND ($3::uuid IS NULL OR t.category_id = $3)
+                  AND t.status <> 'deleted'
                 "#,
             )
             .bind(q)

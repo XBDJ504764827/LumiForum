@@ -45,8 +45,9 @@ pub use moderation::{
     PendingReviewItem, PendingReviewQuery, PendingReviewRow, ReportItemV2, ReportPriority,
     ReportReason, ResolveReportRequestV2, ReviewAppealRequest, ReviewRequest,
     RevokeSanctionRequest, RuleAction, RuleHitItem, RuleItem, RuleListQuery, RuleRequest, RuleType,
-    SanctionItem, SanctionListQuery, SanctionStatus, SanctionType, ViolationSummary,
-    RESTRICTION_NO_COMMENTS, RESTRICTION_NO_REPORTS, RESTRICTION_NO_TOPICS, RESTRICTION_NO_UPLOADS,
+    RuleUpdateRequest, SanctionItem, SanctionListQuery, SanctionStatus, SanctionType,
+    ViolationSummary, RESTRICTION_NO_COMMENTS, RESTRICTION_NO_REPORTS, RESTRICTION_NO_TOPICS,
+    RESTRICTION_NO_UPLOADS,
 };
 pub use notification::{
     NotificationActor, NotificationQuery, NotificationResponse, NotificationTargetType,

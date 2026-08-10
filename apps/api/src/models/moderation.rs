@@ -662,6 +662,21 @@ pub struct RuleRequest {
     pub config: Option<serde_json::Value>,
 }
 
+/// Partial update for a moderation rule — every field is optional so the
+/// admin UI can toggle `enabled` (or change a single field) via PATCH
+/// without resending the whole rule.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct RuleUpdateRequest {
+    pub name: Option<String>,
+    pub rule_type: Option<RuleType>,
+    pub target_type: Option<String>,
+    pub priority: Option<i32>,
+    pub enabled: Option<bool>,
+    pub risk_score: Option<i32>,
+    pub action: Option<RuleAction>,
+    pub config: Option<serde_json::Value>,
+}
+
 fn default_target_all() -> String {
     "all".into()
 }
