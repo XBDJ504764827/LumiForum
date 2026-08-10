@@ -15,7 +15,7 @@ use crate::repositories::{
 use crate::services::{
     AdminService, AuthService, AuthServiceConfig, AuthorizationService, CategoryService,
     CommentService, MetricsRegistry, ModerationService, NotificationService, PollService,
-    ReactionService, SearchService, SteamAuthService, SteamOpenIdClient, TopicService,
+    ReactionService, SearchService, SteamAuthService, SteamRelayClient, TopicService,
     UploadService, UserService,
 };
 use crate::storage::{LocalStorage, S3Storage, S3StorageConfig, StorageProvider};
@@ -70,22 +70,15 @@ impl AppState {
             },
         )?;
         let steam_auth = match (
-            config.steam_api_key.clone(),
-            config.steam_openid_realm.clone(),
-            config.steam_return_url.clone(),
+            config.steam_relay_url.clone(),
+            config.steam_callback_url.clone(),
         ) {
-            (Some(api_key), Some(realm), Some(return_url)) => Some(SteamAuthService::new(
+            (Some(relay_url), Some(callback_url)) => Some(SteamAuthService::new(
                 SteamAuthRepository::new(db.clone()),
                 auth.clone(),
                 config.password_hash_concurrency,
                 redis.clone(),
-                SteamOpenIdClient::new(
-                    api_key,
-                    realm,
-                    return_url,
-                    config.steam_proxy_url.clone(),
-                    config.steam_http_timeout_seconds,
-                )?,
+                SteamRelayClient::new(relay_url, callback_url, config.steam_http_timeout_seconds)?,
             )?),
             _ => None,
         };

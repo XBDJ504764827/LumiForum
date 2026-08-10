@@ -3264,10 +3264,7 @@ impl ModerationService {
             ));
         }
         let target_type = request.target_type.unwrap_or(existing.target_type.clone());
-        if !matches!(
-            target_type.as_str(),
-            "topic" | "comment" | "user" | "all"
-        ) {
+        if !matches!(target_type.as_str(), "topic" | "comment" | "user" | "all") {
             return Err(ModerationError::Validation("invalid target type"));
         }
         let rule_type = request.rule_type.unwrap_or(existing.rule_type);

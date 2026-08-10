@@ -1,9 +1,15 @@
 # Steam Authentication Architecture
 
-**Status:** Accepted  
+**Status:** Accepted
 **Scope:** Steam OpenID 2.0 login, bind/unbind, and profile sync alongside password authentication
 
 This design extends the session model in [Web authentication architecture](./authentication-web.md). Access tokens remain in browser memory and refresh tokens remain in the API's host-only HttpOnly cookie.
+
+**2026 revision:** the API server cannot reach Steam's network directly, so all Steam
+interactions go through a Cloudflare Worker relay (`scripts/deploy/steam-auth-worker.js`).
+The worker performs the OpenID handshake with Steam and returns a **one-time token**
+which the API exchanges for the SteamID64 — a forged `?steamid=xxx` callback can no
+longer bypass authentication.
 
 ## Goals
 
@@ -39,12 +45,15 @@ The unbind request body is:
 
 ```text
 Browser -> GET /auth/steam/login
-API -> create one-time login state (CSRF protection, short TTL)
-API -> 302 Steam OpenID
-Steam -> GET /auth/steam/callback?...OpenID assertion...
-API -> validate state and consume it exactly once
-API -> verify the assertion with Steam check_authentication
-API -> parse SteamID64 and fetch GetPlayerSummaries
+API -> create one-time login state (CSRF protection, short TTL) and set the state cookie
+API -> 302 {STEAM_RELAY_URL}/login?mode=login&state=<state>&return_to={STEAM_CALLBACK_URL}
+Worker -> 302 Steam OpenID (realm = worker origin)
+Steam -> GET {worker}/callback?...OpenID assertion...
+Worker -> verify the assertion with Steam check_authentication
+Worker -> mint a one-time token (KV, TTL 300s, single-use) keyed to the SteamID64
+Worker -> 302 {STEAM_CALLBACK_URL}?token=<one-time>&state=<state>
+API -> validate the state cookie and consume the server-side state exactly once
+API -> GET {STEAM_RELAY_URL}/verify?token=<one-time> -> { steamid, profile } (token burned)
 API -> find the user by steam_id or provision a Steam-only user
 API -> issue the normal session and set/rotate the HttpOnly refresh cookie
 API -> 302 {STEAM_WEB_ORIGIN}/auth/steam/complete
@@ -53,17 +62,22 @@ Completion page -> GET /auth/me with the new in-memory access token
 Completion page -> replace navigation to /
 ```
 
-The callback never includes an access token or refresh token in the path, query, or fragment. The completion page defensively removes an unexpected URL fragment without parsing or storing it.
+The callback never includes an access token or refresh token in the path, query, or
+fragment. The one-time token is only meaningful to the relay's `/verify` endpoint and
+is consumed exactly once, so replaying the callback URL yields nothing. The completion
+page defensively removes an unexpected URL fragment without parsing or storing it.
 
 ### Bind
 
 ```text
 Authenticated browser -> POST /auth/steam/bind with Bearer access token
 API -> create one-time bind state associated with the current user
-API -> 200 { data: { authorization_url } }
+API -> 200 { data: { authorization_url } }  (authorization_url points at the relay)
 Browser -> navigate to authorization_url
-Steam -> GET /auth/steam/callback?...OpenID assertion...
-API -> validate and consume bind state, then verify the assertion
+Worker -> 302 Steam OpenID
+Steam -> GET {worker}/callback?...OpenID assertion...
+Worker -> verify, mint one-time token, 302 {STEAM_CALLBACK_URL}?token=..&state=..
+API -> validate and consume bind state, exchange the token for the SteamID64
 API -> bind SteamID64 unless it belongs to another user
 API -> 302 {STEAM_WEB_ORIGIN}/auth/steam/complete?mode=bind
 Completion page -> restore the existing session through /auth/refresh and /auth/me
@@ -89,7 +103,7 @@ The profile UI does not offer unbind when `User.has_password` is false and tells
 
 ```text
 Authenticated browser -> POST /auth/steam/sync
-API -> fetch the bound Steam profile
+API -> GET {STEAM_RELAY_URL}/profile?steamid=<bound steam id>  (worker fetches GetPlayerSummaries)
 API -> update cached Steam profile fields
 API -> return the updated User
 Browser -> replace the AuthProvider user with the returned User
@@ -142,13 +156,15 @@ Steam-only accounts are provisioned automatically without a registration form. T
 
 ## Security constraints
 
-- Require exact configured HTTPS `return_to` and `realm` values outside local development.
-- Accept only `openid.mode=id_res` and always verify the assertion through Steam `check_authentication` over TLS.
-- Require the claimed identity to exactly match `https://steamcommunity.com/openid/id/<17-digit SteamID64>`.
-- Generate state with a cryptographically secure random source, store only server-side flow data, apply a short TTL, and consume state atomically once.
-- Bind state must include the authenticated user identity and flow type; callback query values cannot select the target user or switch modes.
+- The API never talks to Steam directly; every Steam interaction is proxied by the relay.
+- The worker requires `openid.mode=id_res` and verifies the assertion through Steam `check_authentication` over TLS; the claimed identity must match `https://steamcommunity.com/openid/id/<17-digit SteamID64>`.
+- The relay's `openid.realm` and `openid.return_to` both live on the worker origin; the forum callback is never passed to Steam.
+- The worker redirects only to hosts listed in `ALLOWED_CALLBACK_HOSTS` (default `chatapi.cngokz.com`), preventing open-redirect abuse of `/login?return_to=`.
+- The one-time token is a `crypto.randomUUID()` stored in KV with a 300s TTL and deleted on first `/verify` (single use). Without a valid token, the API cannot learn a SteamID, so a crafted `?steamid=xxx` callback is rejected as `steam_invalid_state`/`steam_auth_failed`.
+- The API still generates its own login/bind state with a cryptographically secure random source, stores it server-side (Redis) with a short TTL, consumes it atomically once, and matches it against the HttpOnly state cookie. The callback query cannot select the target user or switch modes.
+- Bind state must include the authenticated user identity and flow type; the mode is taken only from the consumed server-side state, never from callback query values.
 - Enforce uniqueness of `steam_id` in the database and translate uniqueness conflicts to `steam_account_conflict` without leaking another user's identity.
-- Validate `authorization_url` server-side as a Steam HTTPS OpenID endpoint before returning it. The frontend uses it only for top-level navigation and never handles it as an authentication token.
+- Validate `authorization_url` server-side as a relay HTTPS URL before returning it. The frontend uses it only for top-level navigation and never handles it as an authentication token.
 - Reuse normal access-token issuance, refresh-token hashing/rotation, cookie attributes, revocation, and `auth_version` checks.
 - Set the refresh cookie before redirecting to the frontend. Use `HttpOnly`, `Secure` in production, the narrowest practical `Path`, and the existing `SameSite` policy.
 - Apply existing rate limits to login/bind starts and callback verification. Do not log Steam API keys, OpenID assertions, one-time state values, session tokens, or unbind passwords.
@@ -166,18 +182,25 @@ Steam login only seeds the normal refresh-cookie session. Startup and completion
 
 ## Configuration
 
-| Environment variable         | Purpose                                                                |
-| ---------------------------- | ---------------------------------------------------------------------- |
-| `STEAM_API_KEY`              | Server-only Steam Web API key for player summaries                     |
-| `STEAM_OPENID_REALM`         | Exact OpenID realm, normally the public site origin                    |
-| `STEAM_RETURN_URL`           | Absolute API callback URL                                              |
-| `STEAM_WEB_ORIGIN`           | Allowed frontend origin for completion redirects                       |
-| `STEAM_WEB_API_KEY`          | Alias for `STEAM_API_KEY`; values must match if both are set           |
-| `STEAM_PROXY_URL`            | Optional outbound HTTP(S) proxy used only for Steam requests           |
-| `STEAM_HTTP_TIMEOUT_SECONDS` | Steam request timeout in seconds; defaults to 15 (allowed range 1–120) |
-| `COOKIE_DOMAIN`              | Optional refresh-cookie domain; empty keeps it host-only               |
+| Environment variable         | Purpose                                                                                 |
+| ---------------------------- | --------------------------------------------------------------------------------------- |
+| `STEAM_RELAY_URL`            | Cloudflare Worker relay origin (e.g. `https://cngokz-steam-auth.iquankz.cn`)             |
+| `STEAM_CALLBACK_URL`         | Absolute API callback URL the relay redirects back to after verification                 |
+| `STEAM_WEB_ORIGIN`           | Allowed frontend origin for completion redirects                                        |
+| `STEAM_HTTP_TIMEOUT_SECONDS` | Relay request timeout in seconds; defaults to 15 (allowed range 1–120)                   |
+| `COOKIE_DOMAIN`              | Optional refresh-cookie domain; empty keeps it host-only                                 |
 
-These values are server configuration. None should use a `NEXT_PUBLIC_` prefix or be added to the web application's environment. For the current production topology use `STEAM_OPENID_REALM=https://chatapi.cngokz.com`, `STEAM_RETURN_URL=https://chatapi.cngokz.com/auth/steam/callback`, and `STEAM_WEB_ORIGIN=https://chat.cngokz.com`. If the production host cannot connect to Steam directly, configure `STEAM_PROXY_URL` with an outbound HTTP(S) proxy reachable by the API process; do not point it at the site's reverse proxy.
+These values are server configuration. None should use a `NEXT_PUBLIC_` prefix or be
+added to the web application's environment. Steam login is enabled only when
+`STEAM_RELAY_URL`, `STEAM_CALLBACK_URL`, and `STEAM_WEB_ORIGIN` are all set.
+
+Relay side (see `scripts/deploy/steam-auth-worker.js`):
+
+| Worker variable        | Purpose                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `STEAM_TOKENS` (KV)    | KV namespace binding for one-time tokens (TTL 300s, single use)                         |
+| `STEAM_API_KEY`        | Optional Steam Web API key for persona/avatar fields in `/verify` and `/profile`       |
+| `ALLOWED_CALLBACK_HOSTS` | Comma-separated callback host whitelist; default `chatapi.cngokz.com`                   |
 
 ## Out of scope
 
