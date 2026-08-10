@@ -182,13 +182,13 @@ Steam login only seeds the normal refresh-cookie session. Startup and completion
 
 ## Configuration
 
-| Environment variable         | Purpose                                                                                 |
-| ---------------------------- | --------------------------------------------------------------------------------------- |
-| `STEAM_RELAY_URL`            | Cloudflare Worker relay origin (e.g. `https://cngokz-steam-auth.iquankz.cn`)             |
-| `STEAM_CALLBACK_URL`         | Absolute API callback URL the relay redirects back to after verification                 |
-| `STEAM_WEB_ORIGIN`           | Allowed frontend origin for completion redirects                                        |
-| `STEAM_HTTP_TIMEOUT_SECONDS` | Relay request timeout in seconds; defaults to 15 (allowed range 1–120)                   |
-| `COOKIE_DOMAIN`              | Optional refresh-cookie domain; empty keeps it host-only                                 |
+| Environment variable         | Purpose                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| `STEAM_RELAY_URL`            | Cloudflare Worker relay origin (e.g. `https://cngokz-steam-auth.iquankz.cn`) |
+| `STEAM_CALLBACK_URL`         | Absolute API callback URL the relay redirects back to after verification     |
+| `STEAM_WEB_ORIGIN`           | Allowed frontend origin for completion redirects                             |
+| `STEAM_HTTP_TIMEOUT_SECONDS` | Relay request timeout in seconds; defaults to 15 (allowed range 1–120)       |
+| `COOKIE_DOMAIN`              | Optional refresh-cookie domain; empty keeps it host-only                     |
 
 These values are server configuration. None should use a `NEXT_PUBLIC_` prefix or be
 added to the web application's environment. Steam login is enabled only when
@@ -196,11 +196,11 @@ added to the web application's environment. Steam login is enabled only when
 
 Relay side (see `scripts/deploy/steam-auth-worker.js`):
 
-| Worker variable        | Purpose                                                                                |
-| ---------------------- | -------------------------------------------------------------------------------------- |
-| `STEAM_TOKENS` (KV)    | KV namespace binding for one-time tokens (TTL 300s, single use)                         |
-| `STEAM_API_KEY`        | Optional Steam Web API key for persona/avatar fields in `/verify` and `/profile`       |
-| `ALLOWED_CALLBACK_HOSTS` | Comma-separated callback host whitelist; default `chatapi.cngokz.com`                   |
+| Worker variable          | Purpose                                                                          |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `STEAM_TOKENS` (KV)      | KV namespace binding for one-time tokens (TTL 300s, single use)                  |
+| `STEAM_API_KEY`          | Optional Steam Web API key for persona/avatar fields in `/verify` and `/profile` |
+| `ALLOWED_CALLBACK_HOSTS` | Comma-separated callback host whitelist; default `chatapi.cngokz.com`            |
 
 ## Out of scope
 

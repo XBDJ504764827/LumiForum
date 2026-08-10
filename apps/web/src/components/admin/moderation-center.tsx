@@ -516,9 +516,7 @@ function RulesTab() {
             <option value="reject">拒绝发布</option>
           </Select>
         </div>
-        {keywordError ? (
-          <p className="mt-2 text-sm text-destructive">{keywordError}</p>
-        ) : null}
+        {keywordError ? <p className="mt-2 text-sm text-destructive">{keywordError}</p> : null}
         <Button
           type="button"
           size="sm"
@@ -632,9 +630,7 @@ function RuleEditRow({
   // Legacy rules may contain several words; editing them is not allowed —
   // new banned words can only be added by creating a new rule.
   const hasMultipleKeywords = existingKeywords.length > 1;
-  const [keywords, setKeywords] = useState(
-    hasMultipleKeywords ? "" : (existingKeywords[0] ?? ""),
-  );
+  const [keywords, setKeywords] = useState(hasMultipleKeywords ? "" : (existingKeywords[0] ?? ""));
   const singleKeyword = keywords.trim();
   const keywordHasComma = /[,，]/.test(keywords);
   const keywordError = keywordHasComma
@@ -726,9 +722,7 @@ function RuleEditRow({
         </label>
       </div>
       {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
-      {keywordError ? (
-        <p className="mt-2 text-sm text-destructive">{keywordError}</p>
-      ) : null}
+      {keywordError ? <p className="mt-2 text-sm text-destructive">{keywordError}</p> : null}
       <div className="mt-3 flex gap-2">
         <Button
           size="sm"
