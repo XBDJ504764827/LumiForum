@@ -166,3 +166,11 @@ export function updateModerationRule(id: string, input: Partial<RuleRequest>): P
     true,
   );
 }
+
+export function deleteModerationRule(id: string): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>(
+    `/admin/moderation/rules/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    true,
+  );
+}

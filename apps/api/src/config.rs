@@ -35,11 +35,9 @@ pub struct Config {
     pub ws_idle_timeout_secs: u64,
     pub presence_ttl_secs: u64,
     pub ws_connect_rate_limit: u64,
-    pub steam_api_key: Option<String>,
-    pub steam_openid_realm: Option<String>,
-    pub steam_return_url: Option<String>,
+    pub steam_relay_url: Option<String>,
+    pub steam_callback_url: Option<String>,
     pub steam_web_origin: Option<String>,
-    pub steam_proxy_url: Option<String>,
     pub steam_http_timeout_seconds: u64,
 }
 
@@ -90,17 +88,14 @@ impl Config {
         let ws_idle_timeout_secs = env_parse("WS_IDLE_TIMEOUT_SECS", 90_u64)?;
         let presence_ttl_secs = env_parse("PRESENCE_TTL_SECS", 60_u64)?;
         let ws_connect_rate_limit = env_parse("WS_CONNECT_RATE_LIMIT", 30_u64)?;
-        let steam_api_key = aliased_optional_env("STEAM_API_KEY", "STEAM_WEB_API_KEY")?;
-        let steam_openid_realm = optional_env("STEAM_OPENID_REALM");
-        let steam_return_url = optional_env("STEAM_RETURN_URL");
+        let steam_relay_url = optional_env("STEAM_RELAY_URL");
+        let steam_callback_url = optional_env("STEAM_CALLBACK_URL");
         let steam_web_origin = optional_env("STEAM_WEB_ORIGIN");
-        let steam_proxy_url = optional_env("STEAM_PROXY_URL");
         let steam_http_timeout_seconds = env_parse("STEAM_HTTP_TIMEOUT_SECONDS", 15_u64)?;
         validate_steam_config(
             &app_env,
-            steam_api_key.as_ref(),
-            steam_openid_realm.as_ref(),
-            steam_return_url.as_ref(),
+            steam_relay_url.as_ref(),
+            steam_callback_url.as_ref(),
             steam_web_origin.as_ref(),
         )?;
 
@@ -161,11 +156,9 @@ impl Config {
             ws_idle_timeout_secs,
             presence_ttl_secs,
             ws_connect_rate_limit,
-            steam_api_key,
-            steam_openid_realm,
-            steam_return_url,
+            steam_relay_url,
+            steam_callback_url,
             steam_web_origin,
-            steam_proxy_url,
             steam_http_timeout_seconds,
         })
     }
@@ -173,51 +166,42 @@ impl Config {
 
 fn validate_steam_config(
     app_env: &str,
-    api_key: Option<&String>,
-    realm: Option<&String>,
-    return_url: Option<&String>,
+    relay_url: Option<&String>,
+    callback_url: Option<&String>,
     web_origin: Option<&String>,
 ) -> anyhow::Result<()> {
     let configured = [
-        api_key.is_some(),
-        realm.is_some(),
-        return_url.is_some(),
+        relay_url.is_some(),
+        callback_url.is_some(),
         web_origin.is_some(),
     ];
     if configured.iter().any(|value| *value) && !configured.iter().all(|value| *value) {
-        bail!("STEAM_API_KEY, STEAM_OPENID_REALM, STEAM_RETURN_URL, and STEAM_WEB_ORIGIN must be configured together");
+        bail!(
+            "STEAM_RELAY_URL, STEAM_CALLBACK_URL, and STEAM_WEB_ORIGIN must be configured together"
+        );
     }
-    let (Some(realm), Some(return_url), Some(web_origin)) = (realm, return_url, web_origin) else {
+    let (Some(relay_url), Some(callback_url), Some(web_origin)) =
+        (relay_url, callback_url, web_origin)
+    else {
         return Ok(());
     };
-    let realm = crate::services::parse_origin(realm, "STEAM_OPENID_REALM")?;
+    let relay = crate::services::parse_origin(relay_url, "STEAM_RELAY_URL")?;
     let web_origin = crate::services::parse_origin(web_origin, "STEAM_WEB_ORIGIN")?;
-    let return_url = url::Url::parse(return_url).context("invalid STEAM_RETURN_URL")?;
-    if return_url.host_str().is_none()
-        || return_url.query().is_some()
-        || return_url.fragment().is_some()
+    let callback_url = url::Url::parse(callback_url).context("invalid STEAM_CALLBACK_URL")?;
+    if callback_url.host_str().is_none()
+        || callback_url.query().is_some()
+        || callback_url.fragment().is_some()
     {
-        bail!("STEAM_RETURN_URL must be an absolute URL without query or fragment");
+        bail!("STEAM_CALLBACK_URL must be an absolute URL without query or fragment");
     }
     if app_env == "production"
-        && (realm.scheme() != "https"
+        && (relay.scheme() != "https"
             || web_origin.scheme() != "https"
-            || return_url.scheme() != "https")
+            || callback_url.scheme() != "https")
     {
-        bail!("Steam URLs must use HTTPS in production");
+        bail!("Steam relay URLs must use HTTPS in production");
     }
     Ok(())
-}
-
-fn aliased_optional_env(primary: &str, alias: &str) -> anyhow::Result<Option<String>> {
-    let primary_value = optional_env(primary);
-    let alias_value = optional_env(alias);
-    if let (Some(left), Some(right)) = (&primary_value, &alias_value) {
-        if left != right {
-            bail!("{primary} and {alias} must match when both are set");
-        }
-    }
-    Ok(primary_value.or(alias_value))
 }
 
 fn optional_env(name: &str) -> Option<String> {

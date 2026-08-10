@@ -1,13 +1,16 @@
+use std::net::SocketAddr;
+
 use axum::{
     extract::{
         rejection::{JsonRejection, PathRejection, QueryRejection},
-        State,
+        ConnectInfo, State,
     },
     http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     middleware,
     routing::{get, patch, post},
     Extension, Json, Router,
 };
+use ipnetwork::IpNetwork;
 use uuid::Uuid;
 
 use crate::error::AppResult;
@@ -16,6 +19,7 @@ use crate::models::{
     AuthenticatedPrincipal, CreateTopicRequest, ModerateTopicRequest, Paginated, TopicDetail,
     TopicListQuery, TopicSummary, UpdateTopicRequest, PERMISSION_TOPIC_CREATE,
 };
+use crate::services::AdminAuditContext;
 use crate::state::AppState;
 
 use super::response::{parse_json, parse_path, parse_query, ApiResponse, MessageResponse};
@@ -130,11 +134,27 @@ async fn moderate(
 async fn delete_topic(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthenticatedPrincipal>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     path: Result<axum::extract::Path<Uuid>, PathRejection>,
 ) -> AppResult<Json<ApiResponse<MessageResponse>>> {
     let topic_id = parse_path(path)?;
-    state.topics().delete(&principal, topic_id).await?;
+    state
+        .topics()
+        .delete(&principal, topic_id, &audit_context(addr, &headers))
+        .await?;
     Ok(Json(ApiResponse::new(MessageResponse {
         message: "topic deleted",
     })))
+}
+
+fn audit_context(addr: SocketAddr, headers: &HeaderMap) -> AdminAuditContext {
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.chars().take(512).collect::<String>());
+    AdminAuditContext {
+        ip: Some(IpNetwork::from(addr.ip())),
+        user_agent,
+    }
 }

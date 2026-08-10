@@ -11,7 +11,7 @@ mod poll;
 mod reaction;
 mod search;
 mod steam_auth;
-mod steam_openid;
+mod steam_relay;
 mod token;
 mod topic;
 mod upload;
@@ -35,7 +35,7 @@ pub use search::{SearchError, SearchService};
 pub use steam_auth::{
     SteamAuthError, SteamAuthMode, SteamAuthService, SteamAuthorization, SteamCallbackResult,
 };
-pub use steam_openid::{parse_origin, SteamOpenIdClient, SteamProfile};
+pub use steam_relay::{parse_origin, SteamProfile, SteamRelayClient};
 pub use token::TokenService;
 pub use topic::{TopicError, TopicService};
 pub use upload::{UploadError, UploadInput, UploadService};

@@ -99,8 +99,13 @@ async fn callback(
     if query_state.is_none() || query_state != cookie_state.as_deref() {
         return (jar, callback_redirect(&state, "steam_invalid_state")).into_response();
     }
-    if params.get("openid.mode").map(String::as_str) == Some("cancel") {
-        return (jar, callback_redirect(&state, "steam_access_denied")).into_response();
+    // 中继（Worker）回跳时可能直接携带错误（如用户取消 Steam 授权）。
+    if let Some(code) = params.get("error") {
+        let code = match code.as_str() {
+            "steam_access_denied" | "steam_auth_failed" | "steam_unavailable" => code.as_str(),
+            _ => "steam_auth_failed",
+        };
+        return (jar, callback_redirect(&state, code)).into_response();
     }
     let Some(service) = state.steam_auth() else {
         return (jar, callback_redirect(&state, "steam_unavailable")).into_response();

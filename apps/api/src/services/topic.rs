@@ -1,3 +1,4 @@
+use serde_json::json;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -9,11 +10,11 @@ use crate::models::{
     PERMISSION_TOPIC_UPDATE_ANY, PERMISSION_TOPIC_UPDATE_SELF,
 };
 use crate::repositories::{
-    repository_topic_to_detail, repository_topic_to_summary, CategoryRepository, NewTopic,
-    RepositoryTopic, TopicListOptions, TopicModeration, TopicRepository, TopicUpdate,
+    repository_topic_to_detail, repository_topic_to_summary, AdminRepository, CategoryRepository,
+    NewTopic, RepositoryTopic, TopicListOptions, TopicModeration, TopicRepository, TopicUpdate,
 };
 
-use crate::services::{ModerationService, PollError, PollService};
+use crate::services::{AdminAuditContext, ModerationService, PollError, PollService};
 
 use super::category::{generated_slug, normalize_slug};
 
@@ -27,6 +28,7 @@ pub struct TopicService {
     categories: CategoryRepository,
     moderation: ModerationService,
     polls: PollService,
+    admin_logs: AdminRepository,
 }
 
 #[derive(Debug, Error)]
@@ -51,12 +53,14 @@ impl TopicService {
         categories: CategoryRepository,
         moderation: ModerationService,
         polls: PollService,
+        admin_logs: AdminRepository,
     ) -> Self {
         Self {
             topics,
             categories,
             moderation,
             polls,
+            admin_logs,
         }
     }
 
@@ -317,6 +321,7 @@ impl TopicService {
         &self,
         principal: &AuthenticatedPrincipal,
         topic_id: Uuid,
+        audit: &AdminAuditContext,
     ) -> Result<(), TopicError> {
         let existing = self.find_editable(topic_id).await?;
         require_owner_or_any(
@@ -326,6 +331,22 @@ impl TopicService {
             PERMISSION_TOPIC_DELETE_ANY,
         )?;
         if self.topics.soft_delete(topic_id).await.map_err(internal)? {
+            // Author deletions are only recorded in the audit log — deleted
+            // topics are no longer surfaced anywhere in the admin console.
+            self.admin_logs
+                .insert_log(
+                    None,
+                    principal.user_id,
+                    "topic.delete",
+                    "topic",
+                    Some(topic_id),
+                    &format!("发帖人删除了帖子「{}」", existing.title),
+                    json!({ "deleted_by_author": true, "role": principal.role }),
+                    audit.ip,
+                    audit.user_agent.as_deref(),
+                )
+                .await
+                .map_err(internal)?;
             Ok(())
         } else {
             Err(TopicError::NotFound)
