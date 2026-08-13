@@ -104,6 +104,7 @@ impl AuthService {
                 &input.email,
                 &password_hash,
                 input.nickname.as_deref(),
+                &input.contact,
             )
             .await
             .map_err(map_create_user_error)?;
@@ -267,6 +268,7 @@ struct RegistrationInput {
     email: String,
     password: String,
     nickname: Option<String>,
+    contact: String,
 }
 
 impl TryFrom<RegisterRequest> for RegistrationInput {
@@ -301,11 +303,20 @@ impl TryFrom<RegisterRequest> for RegistrationInput {
             return Err(AuthError::Validation("nickname is too long"));
         }
 
+        let contact = request.contact.trim().to_owned();
+        let contact_length = contact.chars().count();
+        if !(1..=128).contains(&contact_length) {
+            return Err(AuthError::Validation(
+                "contact must contain between 1 and 128 characters",
+            ));
+        }
+
         Ok(Self {
             username,
             email,
             password: request.password,
             nickname,
+            contact,
         })
     }
 }
@@ -360,12 +371,14 @@ mod tests {
             email: "  USER@Example.COM ".into(),
             password: "strong-password".into(),
             nickname: Some("  Lumi  ".into()),
+            contact: "  QQ: 123456  ".into(),
         })
         .expect("input is valid");
 
         assert_eq!(input.username, "Lumi_User");
         assert_eq!(input.email, "user@example.com");
         assert_eq!(input.nickname.as_deref(), Some("Lumi"));
+        assert_eq!(input.contact, "QQ: 123456");
     }
 
     #[test]
@@ -375,8 +388,24 @@ mod tests {
             email: "not-an-email".into(),
             password: "short".into(),
             nickname: None,
+            contact: "QQ: 123456".into(),
         });
 
         assert!(matches!(result, Err(AuthError::Validation(_))));
+    }
+
+    #[test]
+    fn rejects_missing_or_blank_contact() {
+        let base = RegisterRequest {
+            username: "valid_user".into(),
+            email: "user@example.com".into(),
+            password: "strong-password".into(),
+            nickname: None,
+            contact: String::new(),
+        };
+        assert!(matches!(
+            RegistrationInput::try_from(base),
+            Err(AuthError::Validation(_))
+        ));
     }
 }

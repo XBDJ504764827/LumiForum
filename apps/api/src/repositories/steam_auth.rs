@@ -59,6 +59,7 @@ impl SteamAuthRepository {
                 inserted.steam_id, inserted.steam_persona_name, inserted.steam_avatar,
                 inserted.steam_avatar_medium, inserted.steam_avatar_full,
                 inserted.steam_profile_url, inserted.steam_country_code,
+                inserted.contact,
                 inserted.created_at, inserted.updated_at
             FROM inserted
             JOIN roles ON roles.id = inserted.role_id
@@ -110,6 +111,7 @@ impl SteamAuthRepository {
                 updated.steam_id, updated.steam_persona_name, updated.steam_avatar,
                 updated.steam_avatar_medium, updated.steam_avatar_full,
                 updated.steam_profile_url, updated.steam_country_code,
+                updated.contact,
                 updated.created_at, updated.updated_at
             FROM updated
             JOIN roles ON roles.id = updated.role_id
@@ -156,6 +158,7 @@ impl SteamAuthRepository {
                 updated.steam_id, updated.steam_persona_name, updated.steam_avatar,
                 updated.steam_avatar_medium, updated.steam_avatar_full,
                 updated.steam_profile_url, updated.steam_country_code,
+                updated.contact,
                 updated.created_at, updated.updated_at
             FROM updated
             JOIN roles ON roles.id = updated.role_id
@@ -197,12 +200,48 @@ impl SteamAuthRepository {
                 updated.steam_id, updated.steam_persona_name, updated.steam_avatar,
                 updated.steam_avatar_medium, updated.steam_avatar_full,
                 updated.steam_profile_url, updated.steam_country_code,
+                updated.contact,
                 updated.created_at, updated.updated_at
             FROM updated
             JOIN roles ON roles.id = updated.role_id
             "#,
         )
         .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+    }
+
+    /// 保存（或更新）用户的联系方式，用于管理员追溯。
+    pub async fn update_contact(
+        &self,
+        user_id: Uuid,
+        contact: &str,
+    ) -> Result<Option<RepositoryUser>, sqlx::Error> {
+        sqlx::query_as::<_, RepositoryUser>(
+            r#"
+            WITH updated AS (
+                UPDATE users
+                SET contact = $2
+                WHERE id = $1
+                RETURNING *
+            )
+            SELECT
+                updated.id, updated.username, updated.email, updated.password_hash,
+                updated.avatar_url AS avatar, updated.nickname,
+                roles.code AS role_code, roles.name AS role_name,
+                updated.status, updated.email_verified, updated.auth_version,
+                updated.followers_count, updated.following_count,
+                updated.steam_id, updated.steam_persona_name, updated.steam_avatar,
+                updated.steam_avatar_medium, updated.steam_avatar_full,
+                updated.steam_profile_url, updated.steam_country_code,
+                updated.contact,
+                updated.created_at, updated.updated_at
+            FROM updated
+            JOIN roles ON roles.id = updated.role_id
+            "#,
+        )
+        .bind(user_id)
+        .bind(contact)
         .fetch_optional(&self.pool)
         .await
     }
@@ -224,6 +263,7 @@ fn user_query(predicate: &str) -> String {
             users.steam_id, users.steam_persona_name, users.steam_avatar,
             users.steam_avatar_medium, users.steam_avatar_full,
             users.steam_profile_url, users.steam_country_code,
+            users.contact,
             users.created_at, users.updated_at
         FROM users
         JOIN roles ON roles.id = users.role_id

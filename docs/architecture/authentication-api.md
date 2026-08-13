@@ -30,7 +30,7 @@ errors.
 
 | Method | Path             | Body                                         | Result                                  |
 | ------ | ---------------- | -------------------------------------------- | --------------------------------------- |
-| `POST` | `/auth/register` | username, email, password, optional nickname | access token, user, refresh cookie      |
+| `POST` | `/auth/register` | username, email, password, contact, optional nickname | access token, user, refresh cookie      |
 | `POST` | `/auth/login`    | username/email identifier, password          | access token, user, refresh cookie      |
 | `POST` | `/auth/refresh`  | none                                         | rotated access token and refresh cookie |
 | `POST` | `/auth/logout`   | none                                         | revokes and removes refresh cookie      |
@@ -41,6 +41,7 @@ errors.
 | ------- | ---------------- | ------------------------------------- | ------------ |
 | `GET`   | `/auth/me`       | none                                  | current user |
 | `PATCH` | `/users/profile` | optional avatar/nickname patch fields | updated user |
+| `POST`  | `/auth/steam/contact` | contact                       | updated user (contact bound to the Steam account) |
 
 Protected handlers consume an `AuthenticatedPrincipal` inserted only after JWT,
 account-state, `auth_version`, role, and permission checks pass.

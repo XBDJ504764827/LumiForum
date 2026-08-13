@@ -56,6 +56,7 @@ pub struct UserRecord {
     pub email_verified_at: Option<DateTime<Utc>>,
     pub auth_version: i32,
     pub steam_id: Option<String>,
+    pub contact: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -79,6 +80,7 @@ pub struct UserResponse {
     pub steam_avatar_full: Option<String>,
     pub steam_profile_url: Option<String>,
     pub steam_country_code: Option<String>,
+    pub contact: Option<String>,
     pub has_password: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

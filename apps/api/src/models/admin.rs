@@ -409,6 +409,7 @@ pub struct AdminUserDetail {
     pub user: AdminUserItem,
     pub steam_id: Option<String>,
     pub steam_persona_name: Option<String>,
+    pub contact: Option<String>,
     pub login_count: i64,
     pub topics_count: i64,
     pub comments_count: i64,

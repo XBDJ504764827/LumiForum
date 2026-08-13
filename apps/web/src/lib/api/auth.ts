@@ -5,6 +5,7 @@ import type {
   ProfileUpdateRequest,
   RegisterRequest,
   SteamAuthorizationResponse,
+  SteamContactRequest,
   SteamUnbindRequest,
   User,
 } from "@lumiforum/types";
@@ -53,6 +54,14 @@ export function unbindSteam(input: SteamUnbindRequest): Promise<User> {
 
 export function syncSteam(): Promise<User> {
   return apiRequest<User>("/auth/steam/sync", { method: "POST" }, true);
+}
+
+export function setSteamContact(input: SteamContactRequest): Promise<User> {
+  return apiRequest<User>(
+    "/auth/steam/contact",
+    { method: "POST", body: JSON.stringify(input) },
+    true,
+  );
 }
 
 export async function logout(): Promise<void> {

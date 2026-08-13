@@ -13,6 +13,7 @@
     "dev": "node scripts/dev-env.mjs turbo run dev --filter=@lumiforum/web",
     "dev:web": "node scripts/dev-env.mjs pnpm --filter @lumiforum/web dev",
     "dev:api": "node scripts/dev-env.mjs cargo run -p lumiforum-api --bin lumiforum-api",
+    "dev:steam-relay": "node scripts/dev-steam-relay.mjs",
     "db:migrate": "node scripts/dev-env.mjs cargo run -p lumiforum-api --bin migrate",
     "build": "turbo run build",
     "build:web": "turbo run build --filter=@lumiforum/web",

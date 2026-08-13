@@ -59,12 +59,13 @@ impl AuthRepository {
         email: &str,
         password_hash: &str,
         nickname: Option<&str>,
+        contact: &str,
     ) -> Result<RepositoryUser, sqlx::Error> {
         sqlx::query_as::<_, RepositoryUser>(
             r#"
             WITH inserted AS (
-                INSERT INTO users (username, email, password_hash, nickname, role_id)
-                SELECT $1, $2, $3, $4, id
+                INSERT INTO users (username, email, password_hash, nickname, contact, role_id)
+                SELECT $1, $2, $3, $4, $5, id
                 FROM roles
                 WHERE code = 'user'
                 RETURNING *
@@ -90,6 +91,7 @@ impl AuthRepository {
                 inserted.steam_avatar_full,
                 inserted.steam_profile_url,
                 inserted.steam_country_code,
+                inserted.contact,
                 inserted.created_at,
                 inserted.updated_at
             FROM inserted
@@ -100,6 +102,7 @@ impl AuthRepository {
         .bind(email)
         .bind(password_hash)
         .bind(nickname)
+        .bind(contact)
         .fetch_one(&self.pool)
         .await
     }
@@ -131,6 +134,7 @@ impl AuthRepository {
                 users.steam_avatar_full,
                 users.steam_profile_url,
                 users.steam_country_code,
+                users.contact,
                 users.created_at,
                 users.updated_at
             FROM users
@@ -318,6 +322,7 @@ async fn find_user_by_id_for_update(
             users.steam_avatar_full,
             users.steam_profile_url,
             users.steam_country_code,
+            users.contact,
             users.created_at,
             users.updated_at
         FROM users

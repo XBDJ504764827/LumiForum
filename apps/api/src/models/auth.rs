@@ -23,6 +23,14 @@ pub struct RegisterRequest {
     pub email: String,
     pub password: String,
     pub nickname: Option<String>,
+    /// 联系方式：用于管理员追溯（QQ、手机号、微信号等）。
+    pub contact: String,
+}
+
+/// 联系方式补充（Steam 登录后填写并绑定到 Steam 账户）。
+#[derive(Deserialize)]
+pub struct SteamContactRequest {
+    pub contact: String,
 }
 
 /// `identifier` accepts either a username or an email address.

@@ -97,7 +97,7 @@ export function LoginForm() {
         使用 Steam 登录
       </Button>
       <p className="mt-2 text-center text-xs text-muted-foreground">
-        无需注册，首次登录会自动创建论坛账户
+        无需注册，首次登录会自动创建论坛账户，并需填写联系方式
       </p>
 
       <p className="mt-7 text-center text-sm text-muted-foreground">

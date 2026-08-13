@@ -641,12 +641,13 @@ impl AdminRepository {
             Some(user) => user,
             None => return Ok(None),
         };
-        let (steam_id, steam_persona_name) = sqlx::query_as::<_, (Option<String>, Option<String>)>(
-            "SELECT steam_id, steam_persona_name FROM users WHERE id = $1",
-        )
-        .bind(user_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let (steam_id, steam_persona_name, contact) =
+            sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
+                "SELECT steam_id, steam_persona_name, contact FROM users WHERE id = $1",
+            )
+            .bind(user_id)
+            .fetch_one(&self.pool)
+            .await?;
         let login_count =
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM refresh_tokens WHERE user_id = $1")
                 .bind(user_id)
@@ -685,6 +686,7 @@ impl AdminRepository {
             user,
             steam_id,
             steam_persona_name,
+            contact,
             login_count,
             topics_count,
             comments_count,

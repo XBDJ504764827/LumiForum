@@ -82,6 +82,8 @@ pub enum SteamAuthError {
     InvalidPassword,
     #[error("Steam is the only login method")]
     SoleLoginMethod,
+    #[error("invalid contact")]
+    InvalidContact,
     #[error("account is unavailable")]
     AccountUnavailable,
     #[error(transparent)]
@@ -240,6 +242,26 @@ impl SteamAuthService {
             .map_err(internal)?
             .ok_or(SteamAuthError::NotLinked)?;
         to_response(updated)
+    }
+
+    /// 保存（或更新）联系方式，将其与 Steam 登录的账户绑定，供管理员追溯。
+    pub async fn set_contact(
+        &self,
+        user_id: Uuid,
+        contact: String,
+    ) -> Result<UserResponse, SteamAuthError> {
+        let contact = contact.trim().to_owned();
+        let length = contact.chars().count();
+        if !(1..=128).contains(&length) {
+            return Err(SteamAuthError::InvalidContact);
+        }
+        let user = self
+            .repository
+            .update_contact(user_id, &contact)
+            .await
+            .map_err(internal)?
+            .ok_or(SteamAuthError::AccountUnavailable)?;
+        to_response(user)
     }
 
     async fn start(

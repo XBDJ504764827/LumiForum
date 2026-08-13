@@ -21,6 +21,7 @@ export function RegisterForm() {
       username: "",
       email: "",
       nickname: "",
+      contact: "",
       password: "",
       confirmPassword: "",
     },
@@ -36,6 +37,7 @@ export function RegisterForm() {
       email: values.email,
       password: values.password,
       nickname: values.nickname || undefined,
+      contact: values.contact,
     });
   });
 
@@ -73,6 +75,19 @@ export function RegisterForm() {
 
         <Field id="nickname" label="昵称（可选）" error={form.formState.errors.nickname?.message}>
           <Input id="nickname" autoComplete="nickname" {...form.register("nickname")} />
+        </Field>
+
+        <Field id="contact" label="联系方式" error={form.formState.errors.contact?.message}>
+          <Input
+            id="contact"
+            autoComplete="off"
+            placeholder="QQ、手机号或微信号等"
+            aria-invalid={Boolean(form.formState.errors.contact)}
+            {...form.register("contact")}
+          />
+          <p className="text-xs text-muted-foreground">
+            用于管理员必要时联系与追溯，仅管理员可见。
+          </p>
         </Field>
 
         <Field id="register-password" label="密码" error={form.formState.errors.password?.message}>

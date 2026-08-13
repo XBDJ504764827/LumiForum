@@ -49,6 +49,7 @@ export interface User {
   steam_avatar_full: string | null;
   steam_profile_url: string | null;
   steam_country_code: string | null;
+  contact: string | null;
   has_password: boolean;
   created_at: string;
   updated_at: string;
@@ -59,6 +60,13 @@ export interface RegisterRequest {
   email: string;
   password: string;
   nickname?: string;
+  /** 联系方式：用于管理员追溯（QQ、手机号、微信号等）。 */
+  contact: string;
+}
+
+/** Steam 登录后补填的联系方式，与 Steam 账户绑定。 */
+export interface SteamContactRequest {
+  contact: string;
 }
 
 export interface LoginRequest {
@@ -647,6 +655,7 @@ export interface AdminUserDetail {
   user: AdminUserItem;
   steam_id: string | null;
   steam_persona_name: string | null;
+  contact: string | null;
   login_count: number;
   topics_count: number;
   comments_count: number;

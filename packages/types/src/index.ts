@@ -62,6 +62,7 @@ export type {
   SearchSuggestionsResponse,
   SearchType,
   SteamAuthorizationResponse,
+  SteamContactRequest,
   SteamUnbindRequest,
   TokenRefreshResponse,
   TopicAuthor,

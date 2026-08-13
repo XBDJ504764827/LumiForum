@@ -27,7 +27,8 @@ pub use admin::{
     SystemStats, UpdateRolePermissionsRequest, UpdateSettingsRequest,
 };
 pub use auth::{
-    AccessTokenClaims, AuthResponse, LoginRequest, RegisterRequest, TokenRefreshResponse,
+    AccessTokenClaims, AuthResponse, LoginRequest, RegisterRequest, SteamContactRequest,
+    TokenRefreshResponse,
 };
 pub use category::{
     CategoryRecord, CategoryResponse, CategorySummary, CreateCategoryRequest, UpdateCategoryRequest,

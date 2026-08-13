@@ -1,6 +1,7 @@
 use std::{collections::HashMap, net::SocketAddr};
 
 use axum::{
+    extract::rejection::JsonRejection,
     extract::{ConnectInfo, Query, State},
     http::{header::USER_AGENT, HeaderMap},
     middleware,
@@ -14,13 +15,16 @@ use ipnetwork::IpNetwork;
 use crate::error::{AppError, AppResult};
 use crate::middleware::{enforce_origin, require_permission, AuthorizationLayer, CsrfLayer};
 use crate::models::{
-    AuthenticatedPrincipal, SteamAuthorizationResponse, SteamUnbindRequest, UserResponse,
-    PERMISSION_PROFILE_UPDATE_SELF,
+    AuthenticatedPrincipal, SteamAuthorizationResponse, SteamContactRequest, SteamUnbindRequest,
+    UserResponse, PERMISSION_PROFILE_UPDATE_SELF,
 };
 use crate::services::{SteamAuthError, SteamCallbackResult};
 use crate::state::AppState;
 
-use super::{auth::refresh_cookie, response::ApiResponse};
+use super::{
+    auth::refresh_cookie,
+    response::{parse_json, ApiResponse},
+};
 
 pub fn public_router(state: AppState) -> Router<AppState> {
     let start = Router::new()
@@ -37,6 +41,7 @@ pub fn protected_router(state: AppState) -> Router<AppState> {
         .route("/auth/steam/bind", post(bind_start))
         .route("/auth/steam/unbind", delete(unbind))
         .route("/auth/steam/sync", post(sync))
+        .route("/auth/steam/contact", post(set_contact))
         .route_layer(middleware::from_fn_with_state(
             CsrfLayer::new(state.config().cors_origin.clone()),
             enforce_origin,
@@ -120,7 +125,13 @@ async fn callback(
     {
         Ok(SteamCallbackResult::Login(session)) => {
             let jar = jar.add(refresh_cookie(&state, session.refresh_token));
-            (jar, Redirect::to(&completion_url(&state, "login"))).into_response()
+            // 首次（或尚未填写联系方式的）Steam 用户需要补全联系方式，
+            // 与 Steam 账户绑定，方便管理员追溯。
+            let mut url = completion_url(&state, "login");
+            if session.response.user.contact.is_none() {
+                url.push_str("&contact=required");
+            }
+            (jar, Redirect::to(&url)).into_response()
         }
         Ok(SteamCallbackResult::Bound(_)) => {
             (jar, Redirect::to(&completion_url(&state, "bind"))).into_response()
@@ -148,6 +159,18 @@ async fn sync(
     Extension(principal): Extension<AuthenticatedPrincipal>,
 ) -> AppResult<Json<ApiResponse<UserResponse>>> {
     let user = steam_service(&state)?.sync(principal.user_id).await?;
+    Ok(Json(ApiResponse::new(user)))
+}
+
+async fn set_contact(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthenticatedPrincipal>,
+    payload: Result<Json<SteamContactRequest>, JsonRejection>,
+) -> AppResult<Json<ApiResponse<UserResponse>>> {
+    let request = parse_json(payload)?;
+    let user = steam_service(&state)?
+        .set_contact(principal.user_id, request.contact)
+        .await?;
     Ok(Json(ApiResponse::new(user)))
 }
 
@@ -219,6 +242,7 @@ impl From<SteamAuthError> for AppError {
             SteamAuthError::NotLinked => Self::NotFound,
             SteamAuthError::InvalidPassword => Self::InvalidCredentials,
             SteamAuthError::SoleLoginMethod => Self::SoleLoginMethod,
+            SteamAuthError::InvalidContact => Self::Validation("invalid contact"),
             SteamAuthError::AccountUnavailable => Self::AccountUnavailable,
             SteamAuthError::Internal(error) => Self::Internal(error),
         }

@@ -28,6 +28,7 @@ pub struct RepositoryUser {
     pub steam_avatar_full: Option<String>,
     pub steam_profile_url: Option<String>,
     pub steam_country_code: Option<String>,
+    pub contact: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -84,6 +85,7 @@ impl UserRepository {
                 updated.steam_avatar_full,
                 updated.steam_profile_url,
                 updated.steam_country_code,
+                updated.contact,
                 updated.created_at,
                 updated.updated_at
             FROM updated
@@ -122,6 +124,7 @@ pub fn repository_user_to_response(user: RepositoryUser) -> Result<UserResponse,
         steam_avatar_full: user.steam_avatar_full,
         steam_profile_url: user.steam_profile_url,
         steam_country_code: user.steam_country_code,
+        contact: user.contact,
         has_password,
         created_at: user.created_at,
         updated_at: user.updated_at,
@@ -150,6 +153,7 @@ const USER_WITH_ROLE_QUERY: &str = r#"
         users.steam_avatar_full,
         users.steam_profile_url,
         users.steam_country_code,
+        users.contact,
         users.created_at,
         users.updated_at
     FROM users

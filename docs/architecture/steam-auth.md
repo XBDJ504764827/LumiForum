@@ -114,11 +114,12 @@ Browser -> replace the AuthProvider user with the returned User
 The API redirects only to the configured frontend origin and completion path:
 
 - Login success: `/auth/steam/complete`
+- Login success with missing contact: `/auth/steam/complete?mode=login&contact=required`
 - Bind success: `/auth/steam/complete?mode=bind`
 - Login failure: `/auth/steam/complete?error=<code>`
 - Bind failure: `/auth/steam/complete?mode=bind&error=<code>`
 
-Only `mode` and a stable, non-sensitive `error` code belong in the query. OpenID assertions, one-time state, access tokens, refresh tokens, and internal error details must not be copied into the frontend redirect.
+Only `mode`, the `contact` flag, and a stable, non-sensitive `error` code belong in the query. OpenID assertions, one-time state, access tokens, refresh tokens, and internal error details must not be copied into the frontend redirect.
 
 Stable Steam error codes are:
 
@@ -153,6 +154,8 @@ Unknown completion error codes receive a generic message. Logs may retain diagno
 Steam authorization uses a dedicated response DTO containing only `authorization_url`. Bind state and Steam credentials are never included in a frontend DTO.
 
 Steam-only accounts are provisioned automatically without a registration form. They use SteamID64 as the forum `username`, the current Steam persona name as `nickname`, the medium Steam avatar (falling back to the small avatar) as the forum `avatar`, a nullable password hash, and an internal unique placeholder email. On each Steam login these forum identity fields are refreshed for Steam-only accounts. Binding Steam to an existing password account does not overwrite that account's username, nickname, or forum avatar. Placeholder email values are implementation details and must not be treated as Steam-verified email data.
+
+When a Steam login completes for a user without a contact (`users.contact IS NULL`), the completion redirect carries `contact=required`. The web completion page then prompts for a contact method (QQ, phone number, WeChat, etc.); on submit the authenticated `POST /auth/steam/contact` stores it on the user row, binding the contact to the Steam account. Admins see the stored contact in the user detail view for traceability.
 
 ## Security constraints
 
@@ -193,6 +196,22 @@ Steam login only seeds the normal refresh-cookie session. Startup and completion
 These values are server configuration. None should use a `NEXT_PUBLIC_` prefix or be
 added to the web application's environment. Steam login is enabled only when
 `STEAM_RELAY_URL`, `STEAM_CALLBACK_URL`, and `STEAM_WEB_ORIGIN` are all set.
+
+## Local development relay
+
+Development must not redirect players to the production relay. Run the local dev
+relay instead (`pnpm dev:steam-relay`, see `scripts/dev-steam-relay.mjs`) and point
+`.env.development` at it, e.g. `STEAM_RELAY_URL=http://192.168.0.138:8787`.
+
+The dev relay implements the same endpoint contract as the worker. It has two
+modes (`STEAM_DEV_RELAY_MODE`):
+
+- `mock` (default): a local fake Steam login page accepts any 17-digit SteamID64,
+  minting the one-time token locally — no real Steam account or network access is
+  needed, which is the fastest way to exercise login/bind/contact flows.
+- `real`: performs the genuine Steam OpenID handshake with the relay origin as the
+  realm, and calls `check_authentication` against Steam. Set `STEAM_API_KEY` to
+  receive real persona/avatar profiles in `/verify` and `/profile`.
 
 Relay side (see `scripts/deploy/steam-auth-worker.js`):
 

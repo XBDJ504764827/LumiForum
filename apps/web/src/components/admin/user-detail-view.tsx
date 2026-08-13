@@ -104,6 +104,8 @@ export function AdminUserDetailView({ userId }: { userId: string }) {
             <dd className="break-all font-mono text-xs">{user.id}</dd>
             <dt className="text-muted-foreground">邮箱</dt>
             <dd>{user.email}</dd>
+            <dt className="text-muted-foreground">联系方式</dt>
+            <dd>{detail.data.contact ?? "未填写"}</dd>
             <dt className="text-muted-foreground">Steam ID</dt>
             <dd>{detail.data.steam_id ?? "未绑定"}</dd>
             <dt className="text-muted-foreground">Steam 昵称</dt>
