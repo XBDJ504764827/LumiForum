@@ -1,21 +1,30 @@
 /**
  * CNGOKZ Steam Auth Relay — Cloudflare Worker
  * ============================================
- * 论坛服务器无法直连 Steam 网络，所有 Steam 交互经本 Worker 中继。
+ * 论坛（LumiForum）+ 管理后台（LumiAdmin）共用。
+ * 服务器无法直连 Steam 网络，所有 Steam 交互经本 Worker 中继。
  *
  * 部署：
  *   1) 在 Cloudflare 创建 KV namespace（如 STEAM_TOKENS），并在 Worker 设置
  *      中绑定变量名 STEAM_TOKENS（用于一次性 token 存储，TTL 5 分钟）。
- *   2) 可选变量：
- *        - STEAM_API_KEY            Steam Web API Key（用于同步昵称/头像；
+ *   2) 环境变量：
+ *        - STEAM_API_KEY            Steam Web API Key（资料/等级/vanity 查询必需；
  *                                    不配置时仅返回 steamid）
- *        - ALLOWED_CALLBACK_HOSTS   允许回跳的论坛回调域名白名单，逗号分隔，
- *                                    默认 "chatapi.cngokz.com"
+ *        - ALLOWED_CALLBACK_HOSTS   允许回跳的回调域名白名单，逗号分隔，
+ *                                   默认 "chatapi.cngokz.com,zzzxbdjbans.cngokz.com"
+ *
+ * 端点：
+ *   GET /login?mode=&state=&return_to=  发起 Steam OpenID 登录（302 → Steam）
+ *   GET /callback                       Steam 回调：验证 OpenID → 一次性 token → 跳回 return_to
+ *   GET /verify?token=                  一次性 token 换 SteamID + 资料 + 等级（用后即焚）
+ *   GET /profile?steamid=               按 SteamID 查资料 + 等级
+ *   GET /profiles?steamids=a,b,c        批量查资料（最多 100 个）
+ *   GET /vanity?vanityurl=xxx           解析自定义 URL → steamid
  *
  * 登录流程（防伪造）：
  *   Steam → Worker /callback（验证 OpenID）→ 生成一次性 token（KV 单次消费）
- *   → 302 回论坛 /auth/steam/callback?token=xxx&state=yyy
- *   → 论坛后端 GET Worker /verify?token=xxx 换取 SteamID（token 用后即焚），
+ *   → 302 回 return_to?token=xxx&state=yyy
+ *   → 调用方后端 GET Worker /verify?token=xxx 换取 SteamID（token 用后即焚），
  *     无法通过伪造 ?steamid=xxx 绕过登录。
  */
 export default {
@@ -41,7 +50,7 @@ export default {
 
     /*
      * 开始 Steam 登录：
-     *   /login?mode=login|bind&state=<论坛 state>&return_to=<论坛回调地址>
+     *   /login?mode=login|bind&state=<调用方 state>&return_to=<调用方回调地址>
      */
     if (url.pathname === "/login") {
       const state = url.searchParams.get("state") || "";
@@ -69,7 +78,7 @@ export default {
     }
 
     /*
-     * Steam 回调：验证 OpenID 断言 → 生成一次性 token → 跳回论坛
+     * Steam 回调：验证 OpenID 断言 → 生成一次性 token → 跳回调用方
      */
     if (url.pathname === "/callback") {
       const params = new URLSearchParams(url.search);
@@ -99,13 +108,21 @@ export default {
         return redirectWith(returnTo, { error: "steam_auth_failed", state });
       }
 
+      // 并行拉取资料 + 等级（均失败时降级，仅返回 steamid）
+      const [profile, steamLevel] = await Promise.all([
+        env.STEAM_API_KEY
+          ? fetchSteamProfile(env.STEAM_API_KEY, steamid).catch(() => null)
+          : Promise.resolve(null),
+        env.STEAM_API_KEY
+          ? fetchSteamLevel(env.STEAM_API_KEY, steamid).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
       // 生成一次性 token（KV 存储、TTL 5 分钟，/verify 取用后即焚）
       const token = crypto.randomUUID().replaceAll("-", "");
       const record = { steamid };
-      if (env.STEAM_API_KEY) {
-        const profile = await fetchSteamProfile(env.STEAM_API_KEY, steamid);
-        if (profile) Object.assign(record, profile);
-      }
+      if (profile) Object.assign(record, profile);
+      if (steamLevel !== null && steamLevel !== undefined) record.steam_level = steamLevel;
       await env.STEAM_TOKENS.put(token, JSON.stringify(record), {
         expirationTtl: TOKEN_TTL_SECONDS,
       });
@@ -114,7 +131,7 @@ export default {
     }
 
     /*
-     * 一次性 token 换取 SteamID（论坛后端调用，单次有效）
+     * 一次性 token 换取 SteamID（调用方后端调用，单次有效）
      *   GET /verify?token=xxx
      */
     if (url.pathname === "/verify") {
@@ -127,7 +144,7 @@ export default {
     }
 
     /*
-     * 按 SteamID 同步资料（登录后刷新昵称/头像）
+     * 按 SteamID 同步资料 + 等级（登录后刷新昵称/头像/等级）
      *   GET /profile?steamid=xxx
      */
     if (url.pathname === "/profile") {
@@ -138,11 +155,65 @@ export default {
       if (!env.STEAM_API_KEY) {
         return json({ success: false, error: "STEAM_API_KEY not configured" }, 501);
       }
-      const profile = await fetchSteamProfile(env.STEAM_API_KEY, steamid);
+      const [profile, steamLevel] = await Promise.all([
+        fetchSteamProfile(env.STEAM_API_KEY, steamid),
+        fetchSteamLevel(env.STEAM_API_KEY, steamid),
+      ]);
       if (!profile) {
         return json({ success: false, error: "steam profile not found" }, 404);
       }
-      return json({ success: true, steamid, ...profile });
+      return json({ success: true, steamid, ...profile, steam_level: steamLevel });
+    }
+
+    /*
+     * 批量查资料（Steam 名称刷新等，最多 100 个）
+     *   GET /profiles?steamids=a,b,c
+     */
+    if (url.pathname === "/profiles") {
+      const steamids = (url.searchParams.get("steamids") || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (steamids.length === 0 || steamids.length > 100) {
+        return json({ success: false, error: "steamids must contain 1-100 ids" }, 400);
+      }
+      if (steamids.some((id) => !/^\d{17}$/.test(id))) {
+        return json({ success: false, error: "invalid steamid format" }, 400);
+      }
+      if (!env.STEAM_API_KEY) {
+        return json({ success: false, error: "STEAM_API_KEY not configured" }, 501);
+      }
+      const players = await fetchSteamProfiles(env.STEAM_API_KEY, steamids);
+      return json({ success: true, players });
+    }
+
+    /*
+     * 解析自定义 URL（vanity）→ steamid
+     *   GET /vanity?vanityurl=xxx
+     */
+    if (url.pathname === "/vanity") {
+      const vanityurl = (url.searchParams.get("vanityurl") || "").trim();
+      if (!vanityurl || vanityurl.length > 64) {
+        return json({ success: false, error: "invalid vanityurl" }, 400);
+      }
+      if (!env.STEAM_API_KEY) {
+        return json({ success: false, error: "STEAM_API_KEY not configured" }, 501);
+      }
+      try {
+        const response = await fetch(
+          `https://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=${encodeURIComponent(env.STEAM_API_KEY)}&vanityurl=${encodeURIComponent(vanityurl)}`,
+        );
+        if (!response.ok) return json({ success: false, error: "steam api error" }, 502);
+        const data = await response.json();
+        const success = data?.response?.success === 1;
+        const steamid = data?.response?.steamid || null;
+        if (!success || !steamid || !/^\d{17}$/.test(String(steamid))) {
+          return json({ success: false, error: "vanity not found" }, 404);
+        }
+        return json({ success: true, steamid: String(steamid), vanityurl });
+      } catch {
+        return json({ success: false, error: "steam api unreachable" }, 502);
+      }
     }
 
     return new Response("Not Found", { status: 404 });
@@ -151,7 +222,7 @@ export default {
 
 /** 校验 return_to 是否在回调域名白名单内，防止被用作开放重定向。 */
 function resolveCallback(returnTo, env) {
-  const allowed = (env.ALLOWED_CALLBACK_HOSTS || "chatapi.cngokz.com")
+  const allowed = (env.ALLOWED_CALLBACK_HOSTS || "chatapi.cngokz.com,zzzxbdjbans.cngokz.com")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
@@ -166,7 +237,7 @@ function resolveCallback(returnTo, env) {
   return "https://chatapi.cngokz.com/auth/steam/callback";
 }
 
-/** 302 跳转到论坛回调地址并附带查询参数。 */
+/** 302 跳转到调用方回调地址并附带查询参数。 */
 function redirectWith(base, query) {
   const target = new URL(base);
   for (const [key, value] of Object.entries(query)) {
@@ -195,5 +266,41 @@ async function fetchSteamProfile(apiKey, steamid) {
     };
   } catch {
     return null;
+  }
+}
+
+/** 通过 Steam Web API 获取玩家等级（需要 STEAM_API_KEY）。 */
+async function fetchSteamLevel(apiKey, steamid) {
+  try {
+    const response = await fetch(
+      `https://api.steampowered.com/IPlayerService/GetSteamLevel/v0001/?key=${encodeURIComponent(apiKey)}&steamid=${steamid}`,
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data?.response?.player_level ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 批量获取玩家资料（GetPlayerSummaries 支持一次查询最多 100 个）。 */
+async function fetchSteamProfiles(apiKey, steamids) {
+  try {
+    const response = await fetch(
+      `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${encodeURIComponent(apiKey)}&steamids=${steamids.join(",")}`,
+    );
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data?.response?.players || []).map((player) => ({
+      steamid: player.steamid,
+      persona_name: player.personaname || null,
+      avatar: player.avatar || null,
+      avatar_medium: player.avatarmedium || null,
+      avatar_full: player.avatarfull || null,
+      profile_url: player.profileurl || null,
+      country_code: player.loccountrycode || null,
+    }));
+  } catch {
+    return [];
   }
 }
