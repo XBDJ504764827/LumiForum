@@ -507,7 +507,9 @@ function CommentComposer({
                 insertAttachment(upload.url, upload.original_filename)
               }
             />
-            <p className="text-xs text-muted-foreground">图片 ≤ 8MB，附件 ≤ 50MB，上传后将插入 Markdown 链接</p>
+            <p className="text-xs text-muted-foreground">
+              图片 ≤ 8MB，附件 ≤ 50MB，上传后将插入 Markdown 链接
+            </p>
           </div>
         ) : null}
         <p className="min-h-5 text-sm text-destructive">{form.formState.errors.content?.message}</p>
