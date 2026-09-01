@@ -14,9 +14,11 @@ interface Props {
   accept: string;
   maxBytes: number;
   onUploaded: (upload: Upload) => void;
+  /** Compact button style for inline editors (e.g. comment composer). */
+  compact?: boolean;
 }
 
-export function FileUpload({ category, accept, maxBytes, onUploaded }: Props) {
+export function FileUpload({ category, accept, maxBytes, onUploaded, compact = false }: Props) {
   const inputId = useId();
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
@@ -49,41 +51,59 @@ export function FileUpload({ category, accept, maxBytes, onUploaded }: Props) {
   };
 
   return (
-    <div className="space-y-2">
-      <div
-        className="flex min-h-24 items-center justify-center border border-dashed border-border bg-muted/30 px-4 py-3 transition-colors hover:border-primary/60"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          const file = event.dataTransfer.files[0];
-          if (file) void startUpload(file);
-        }}
-      >
-        <input
-          id={inputId}
-          type="file"
-          className="sr-only"
-          accept={accept}
+    <div className={compact ? "space-y-1.5" : "space-y-2"}>
+      {compact ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
           disabled={uploading}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void startUpload(file);
-            event.currentTarget.value = "";
-          }}
-        />
-        <label
-          htmlFor={inputId}
-          className="flex cursor-pointer items-center gap-3 text-sm text-muted-foreground"
+          onClick={() => document.getElementById(inputId)?.click()}
         >
           {category === "attachment" ? (
-            <UploadCloud className="size-5 text-primary" aria-hidden="true" />
+            <UploadCloud className="size-4" aria-hidden="true" />
           ) : (
-            <ImagePlus className="size-5 text-primary" aria-hidden="true" />
+            <ImagePlus className="size-4" aria-hidden="true" />
           )}
-          <span>{uploading ? `正在上传 ${progress}%` : "拖入文件或点击选择"}</span>
-        </label>
-      </div>
-      {category === "attachment" ? (
+          {uploading ? `上传中 ${progress}%` : category === "attachment" ? "上传附件" : "上传图片"}
+        </Button>
+      ) : (
+        <div
+          className="flex min-h-24 items-center justify-center border border-dashed border-border bg-muted/30 px-4 py-3 transition-colors hover:border-primary/60"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            const file = event.dataTransfer.files[0];
+            if (file) void startUpload(file);
+          }}
+        >
+          <label
+            htmlFor={inputId}
+            className="flex cursor-pointer items-center gap-3 text-sm text-muted-foreground"
+          >
+            {category === "attachment" ? (
+              <UploadCloud className="size-5 text-primary" aria-hidden="true" />
+            ) : (
+              <ImagePlus className="size-5 text-primary" aria-hidden="true" />
+            )}
+            <span>{uploading ? `正在上传 ${progress}%` : "拖入文件或点击选择"}</span>
+          </label>
+        </div>
+      )}
+      <input
+        id={inputId}
+        type="file"
+        className="sr-only"
+        accept={accept}
+        disabled={uploading}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void startUpload(file);
+          event.currentTarget.value = "";
+        }}
+      />
+      {compact ? null : category === "attachment" ? (
         <p className="text-xs text-muted-foreground">{ATTACHMENT_HINT}</p>
       ) : null}
       {uploading ? (
