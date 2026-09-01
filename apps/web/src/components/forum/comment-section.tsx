@@ -1,13 +1,13 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { CommentNode, Paginated, User } from "@lumiforum/types";
+import type { CommentNode, Paginated, Upload, User } from "@lumiforum/types";
 import { Alert, Avatar, AvatarFallback, AvatarImage, Button, Textarea } from "@lumiforum/ui";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { InfiniteData } from "@tanstack/react-query";
 import { ChevronDown, Heart, MessageSquare, Pencil, Reply, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -15,6 +15,8 @@ import { ReportButton } from "@/components/forum/report-button";
 import { MarkdownContent } from "@/components/forum/markdown-content";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
+import { ATTACHMENT_ACCEPT, IMAGE_ACCEPT } from "@/components/uploads/accept";
+import { FileUpload } from "@/components/uploads/file-upload";
 import { errorMessage } from "@/lib/api/errors";
 import {
   createComment,
@@ -400,6 +402,7 @@ function CommentComposer({
   onCancel?: () => void;
 }) {
   const [preview, setPreview] = useState(false);
+  const contentRef = useRef<HTMLTextAreaElement | null>(null);
   const form = useForm<CommentEditorValues>({
     resolver: zodResolver(commentEditorSchema),
     defaultValues: { content: defaultValue },
@@ -413,6 +416,33 @@ function CommentComposer({
       setPreview(false);
     },
   });
+  const contentField = form.register("content");
+
+  const insertMarkdown = (markdown: string) => {
+    const current = form.getValues("content");
+    const cursor = contentRef.current?.selectionStart ?? current.length;
+    const prefix = cursor > 0 && current[cursor - 1] !== "\n" ? "\n" : "";
+    const suffix = cursor < current.length && current[cursor] !== "\n" ? "\n" : "";
+    const insertion = `${prefix}${markdown}${suffix}`;
+    form.setValue("content", `${current.slice(0, cursor)}${insertion}${current.slice(cursor)}`, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    requestAnimationFrame(() => {
+      const nextCursor = cursor + insertion.length;
+      contentRef.current?.focus();
+      contentRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const insertImage = (url: string, originalFilename: string) => {
+    const alt = originalFilename.replace(/[\[\]]/g, "");
+    insertMarkdown(`![${alt || "image"}](${url})`);
+  };
+
+  const insertAttachment = (url: string, originalFilename: string) => {
+    insertMarkdown(`[${originalFilename}](${url})`);
+  };
 
   return (
     <div className="mb-8 rounded-md border border-border p-4">
@@ -452,9 +482,34 @@ function CommentComposer({
             className="min-h-28 font-mono"
             placeholder="支持 Markdown：列表、引用、代码块、链接"
             aria-invalid={Boolean(form.formState.errors.content)}
-            {...form.register("content")}
+            {...contentField}
+            ref={(element) => {
+              contentRef.current = element;
+              contentField.ref(element);
+            }}
           />
         )}
+        {!preview ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <FileUpload
+              compact
+              category="comment_image"
+              accept={IMAGE_ACCEPT}
+              maxBytes={8 * 1024 * 1024}
+              onUploaded={(upload: Upload) => insertImage(upload.url, upload.original_filename)}
+            />
+            <FileUpload
+              compact
+              category="attachment"
+              accept={ATTACHMENT_ACCEPT}
+              maxBytes={50 * 1024 * 1024}
+              onUploaded={(upload: Upload) =>
+                insertAttachment(upload.url, upload.original_filename)
+              }
+            />
+            <p className="text-xs text-muted-foreground">图片 ≤ 8MB，附件 ≤ 50MB，上传后将插入 Markdown 链接</p>
+          </div>
+        ) : null}
         <p className="min-h-5 text-sm text-destructive">{form.formState.errors.content?.message}</p>
         <div className="flex flex-wrap gap-2">
           <Button type="submit" size="sm" className="gap-2" disabled={mutation.isPending}>
