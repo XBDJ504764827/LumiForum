@@ -207,6 +207,7 @@ impl From<AuthError> for AppError {
             AuthError::RegistrationDisabled => Self::Validation("注册当前已关闭，请联系管理员"),
             AuthError::InvalidRefreshToken => Self::InvalidRefreshToken,
             AuthError::RefreshTokenReused => Self::RefreshTokenReused,
+            AuthError::RateLimited => Self::RateLimited,
             AuthError::Internal(error) => Self::Internal(error),
         }
     }

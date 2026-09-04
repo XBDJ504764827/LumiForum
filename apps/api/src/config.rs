@@ -35,6 +35,11 @@ pub struct Config {
     pub ws_idle_timeout_secs: u64,
     pub presence_ttl_secs: u64,
     pub ws_connect_rate_limit: u64,
+    /// When true, the API trusts the reverse proxy to forward the real client
+    /// IP via `X-Forwarded-For` and uses it for rate limiting / audit trails.
+    /// Only enable behind a proxy you control that strips client-supplied
+    /// headers.
+    pub trust_proxy: bool,
     pub steam_relay_url: Option<String>,
     pub steam_callback_url: Option<String>,
     pub steam_web_origin: Option<String>,
@@ -88,6 +93,7 @@ impl Config {
         let ws_idle_timeout_secs = env_parse("WS_IDLE_TIMEOUT_SECS", 90_u64)?;
         let presence_ttl_secs = env_parse("PRESENCE_TTL_SECS", 60_u64)?;
         let ws_connect_rate_limit = env_parse("WS_CONNECT_RATE_LIMIT", 30_u64)?;
+        let trust_proxy = env_parse("TRUST_PROXY", false)?;
         let steam_relay_url = optional_env("STEAM_RELAY_URL");
         let steam_callback_url = optional_env("STEAM_CALLBACK_URL");
         let steam_web_origin = optional_env("STEAM_WEB_ORIGIN");
@@ -156,6 +162,7 @@ impl Config {
             ws_idle_timeout_secs,
             presence_ttl_secs,
             ws_connect_rate_limit,
+            trust_proxy,
             steam_relay_url,
             steam_callback_url,
             steam_web_origin,

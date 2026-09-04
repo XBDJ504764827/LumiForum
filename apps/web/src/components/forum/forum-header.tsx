@@ -1,6 +1,7 @@
 "use client";
 
 import type { Route } from "next";
+import { isAdminRole } from "@lumiforum/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, Bookmark, LogIn, PenLine, Search, UserRound } from "lucide-react";
 import Link from "next/link";
@@ -57,7 +58,7 @@ export function ForumHeader() {
               <Link href="/notifications" className="text-muted-foreground hover:text-foreground">
                 通知
               </Link>
-              {user?.role.code === "administrator" || user?.role.code === "super_administrator" ? (
+              {isAdminRole(user?.role.code) ? (
                 <Link href="/admin" className="text-muted-foreground hover:text-foreground">
                   后台
                 </Link>

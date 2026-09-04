@@ -327,7 +327,3 @@ export function listAdminPolls(
     true,
   );
 }
-
-export function isAdminRole(roleCode: string | undefined): boolean {
-  return roleCode === "administrator" || roleCode === "super_administrator";
-}

@@ -1,6 +1,7 @@
 use chrono::{Duration, Utc};
 use email_address::EmailAddress;
 use ipnetwork::IpNetwork;
+use redis::{aio::ConnectionManager, AsyncCommands};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -13,11 +14,21 @@ use crate::repositories::{
 
 use super::{PasswordService, TokenService};
 
+/// Authentication rate-limit budgets, keyed by client IP / account identifier.
+/// The window is a fixed 60s sliding-integer counter (same pattern as search
+/// and comment rate limits).
+const RATE_LIMIT_WINDOW_SECS: u64 = 60;
+const LOGIN_MAX_PER_IP: u64 = 10;
+const LOGIN_MAX_PER_IDENTIFIER: u64 = 5;
+const REGISTER_MAX_PER_IP: u64 = 5;
+const REFRESH_MAX_PER_IP: u64 = 30;
+
 #[derive(Clone)]
 pub struct AuthService {
     repository: AuthRepository,
     passwords: PasswordService,
     tokens: TokenService,
+    redis: ConnectionManager,
     refresh_token_ttl: Duration,
 }
 
@@ -56,12 +67,18 @@ pub enum AuthError {
     InvalidRefreshToken,
     #[error("refresh token reuse detected")]
     RefreshTokenReused,
+    #[error("too many authentication attempts")]
+    RateLimited,
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
 
 impl AuthService {
-    pub fn new(repository: AuthRepository, config: AuthServiceConfig) -> anyhow::Result<Self> {
+    pub fn new(
+        repository: AuthRepository,
+        redis: ConnectionManager,
+        config: AuthServiceConfig,
+    ) -> anyhow::Result<Self> {
         let refresh_token_ttl = config.refresh_token_ttl_seconds;
         if !(3_600..=60 * 60 * 24 * 90).contains(&refresh_token_ttl) {
             anyhow::bail!("refresh token TTL must be between 1 hour and 90 days");
@@ -76,6 +93,7 @@ impl AuthService {
                 config.jwt_audience,
                 config.access_token_ttl_seconds,
             )?,
+            redis,
             refresh_token_ttl: Duration::seconds(refresh_token_ttl),
         })
     }
@@ -86,6 +104,11 @@ impl AuthService {
         client_ip: Option<IpNetwork>,
         user_agent: Option<&str>,
     ) -> Result<IssuedSession, AuthError> {
+        // Throttle registration by client IP before doing any work.
+        if let Some(ip) = client_ip {
+            self.enforce_rate_limit("register:ip", &ip.ip().to_string(), REGISTER_MAX_PER_IP)
+                .await?;
+        }
         // Registration can be switched off from the admin system settings.
         let registration_enabled = self
             .repository
@@ -120,6 +143,22 @@ impl AuthService {
         let identifier = request.identifier.trim().to_owned();
         if identifier.is_empty() || request.password.is_empty() {
             return Err(AuthError::InvalidCredentials);
+        }
+
+        // Throttle before doing Argon2 work: brute-force protection is per
+        // identifier (stops password guessing) and per IP (stops credential
+        // stuffing across many accounts). Keys are bounded so user-controlled
+        // identifier length cannot blow up the Redis key.
+        let identifier_key = identifier.chars().take(128).collect::<String>();
+        self.enforce_rate_limit(
+            "login:id",
+            &identifier_key.to_lowercase(),
+            LOGIN_MAX_PER_IDENTIFIER,
+        )
+        .await?;
+        if let Some(ip) = client_ip {
+            self.enforce_rate_limit("login:ip", &ip.ip().to_string(), LOGIN_MAX_PER_IP)
+                .await?;
         }
 
         let user = self
@@ -161,6 +200,13 @@ impl AuthService {
     ) -> Result<RefreshedSession, AuthError> {
         if refresh_token.is_empty() || refresh_token.len() > 128 {
             return Err(AuthError::InvalidRefreshToken);
+        }
+
+        // Automatic token refreshes happen on a timer, so the budget is
+        // generous; still cap per-IP abuse.
+        if let Some(ip) = client_ip {
+            self.enforce_rate_limit("refresh:ip", &ip.ip().to_string(), REFRESH_MAX_PER_IP)
+                .await?;
         }
 
         let successor = TokenService::generate_refresh_token();
@@ -219,6 +265,35 @@ impl AuthService {
 
     pub fn refresh_token_ttl_seconds(&self) -> i64 {
         self.refresh_token_ttl.num_seconds()
+    }
+
+    /// Fixed-window integer counter in Redis (same pattern as search and
+    /// comment rate limits). Failures open the session rather than block
+    /// legitimate users when Redis is unavailable.
+    async fn enforce_rate_limit(
+        &self,
+        action: &str,
+        client_key: &str,
+        max: u64,
+    ) -> Result<(), AuthError> {
+        let key = format!("rate:auth:{action}:{client_key}");
+        let mut redis = self.redis.clone();
+        match redis.incr::<_, u64, u64>(&key, 1_u64).await {
+            Ok(count) => {
+                if count == 1 {
+                    let _: Result<(), _> = redis.expire(&key, RATE_LIMIT_WINDOW_SECS as i64).await;
+                }
+                if count > max {
+                    tracing::warn!(%action, %client_key, "authentication rate limit exceeded");
+                    return Err(AuthError::RateLimited);
+                }
+                Ok(())
+            }
+            Err(error) => {
+                tracing::warn!(%error, %action, "auth rate limit unavailable; allowing request");
+                Ok(())
+            }
+        }
     }
 
     pub(crate) async fn issue_session(

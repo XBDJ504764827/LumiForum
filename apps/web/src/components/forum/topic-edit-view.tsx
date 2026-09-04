@@ -1,6 +1,7 @@
 "use client";
 
 import { Alert } from "@lumiforum/ui";
+import { isElevatedRole } from "@lumiforum/shared";
 import { useQuery } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
@@ -9,8 +10,6 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { TopicEditor } from "@/components/forum/topic-editor";
 import { forumKeys, getTopic } from "@/lib/api/forum";
-
-const elevatedRoles = new Set(["moderator", "administrator", "super_administrator"]);
 
 export function TopicEditView({ slug }: { slug: string }) {
   const { user } = useAuth();
@@ -25,7 +24,7 @@ export function TopicEditView({ slug }: { slug: string }) {
   if (topic.isError || !topic.data) return <QueryError message="帖子不存在或已被删除" />;
 
   const canEdit = Boolean(
-    user && (user.id === topic.data.author.id || elevatedRoles.has(user.role.code)),
+    user && (user.id === topic.data.author.id || isElevatedRole(user.role.code)),
   );
   if (!canEdit) {
     return (

@@ -230,7 +230,7 @@ impl UploadService {
         {
             return Err(UploadError::UnsupportedMediaType);
         }
-        let prepared = prepare(input.category, input.data, detected_mime)?;
+        let prepared = prepare(input.category, input.data, detected_mime).await?;
         if prepared.data.len() > input.category.max_bytes() {
             return Err(UploadError::TooLarge);
         }
@@ -458,13 +458,21 @@ impl UploadService {
     }
 }
 
-fn prepare(
+async fn prepare(
     category: UploadCategory,
     data: Bytes,
     mime_type: &'static str,
 ) -> Result<PreparedUpload, UploadError> {
     if category.is_image() {
-        let image = process_image(category, data, mime_type)
+        // Image decode / resize / encode is CPU-bound and can take hundreds of
+        // milliseconds for large uploads; keep it off the async runtime threads
+        // (same pattern as PasswordService's spawn_blocking).
+        let image = tokio::task::spawn_blocking(move || process_image(category, data, mime_type))
+            .await
+            .map_err(|error| {
+                tracing::warn!(%error, "image processing task panicked");
+                UploadError::UnsupportedMediaType
+            })?
             .map_err(|_| UploadError::UnsupportedMediaType)?;
         return Ok(PreparedUpload {
             data: image.data,
@@ -667,10 +675,12 @@ mod tests {
         assert!(!claimed_mime_matches("text/html", "application/zip"));
     }
 
-    #[test]
-    fn maps_verified_mime_to_server_owned_extension() {
+    #[tokio::test]
+    async fn maps_verified_mime_to_server_owned_extension() {
         let zip = Bytes::from_static(b"PK\x03\x04\x14\x00\x00\x00");
-        let prepared = prepare(UploadCategory::Attachment, zip, "application/zip").unwrap();
+        let prepared = prepare(UploadCategory::Attachment, zip, "application/zip")
+            .await
+            .unwrap();
         assert_eq!(prepared.extension, "zip");
         assert_eq!(prepared.mime_type, "application/zip");
         assert_eq!(prepared.content_disposition, "attachment");
@@ -682,7 +692,8 @@ mod tests {
             UploadCategory::Attachment,
             exe,
             "application/vnd.microsoft.portable-executable",
-        );
+        )
+        .await;
         assert!(matches!(
             rejected,
             Err(super::UploadError::UnsupportedMediaType)

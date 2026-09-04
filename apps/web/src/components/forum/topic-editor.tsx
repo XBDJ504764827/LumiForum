@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { CreateTopicRequest, TopicDetail, UpdateTopicRequest } from "@lumiforum/types";
+import { isElevatedRole } from "@lumiforum/shared";
 import { Alert, Button, Input, Label, Select, Textarea } from "@lumiforum/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, Eye, FilePenLine, PenLine, Send } from "lucide-react";
@@ -32,12 +33,7 @@ type Props = { mode: "create"; topic?: never } | { mode: "edit"; topic: TopicDet
 export function TopicEditor(props: Props) {
   const router = useRouter();
   const { user } = useAuth();
-  const isStaff = Boolean(
-    user &&
-    ["moderator", "senior_moderator", "administrator", "super_administrator"].includes(
-      user.role.code,
-    ),
-  );
+  const isStaff = isElevatedRole(user?.role.code);
   const queryClient = useQueryClient();
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
   const [view, setView] = useState<"write" | "preview">("write");

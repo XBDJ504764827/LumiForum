@@ -76,6 +76,7 @@ CORS URLs must be explicit deployment values.
 | `STORAGE_*` / `S3_*`              | API           | Object storage                         |
 | `STEAM_*`                         | API           | Steam OpenID login (optional)          |
 | `WS_*` / `PRESENCE_TTL_SECS`      | API           | Realtime limits                        |
+| `TRUST_PROXY`                     | API           | Trust `X-Forwarded-For` for client IP  |
 
 ## Production layout
 
