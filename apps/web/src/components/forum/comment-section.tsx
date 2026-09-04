@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { CommentNode, Paginated, Upload, User } from "@lumiforum/types";
+import { isElevatedRole } from "@lumiforum/shared";
 import { Alert, Avatar, AvatarFallback, AvatarImage, Button, Textarea } from "@lumiforum/ui";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { InfiniteData } from "@tanstack/react-query";
@@ -30,7 +31,6 @@ import {
 } from "@/lib/api/forum";
 import { commentEditorSchema, type CommentEditorValues } from "@/lib/forum/comment-schemas";
 
-const elevatedRoles = new Set(["moderator", "administrator", "super_administrator"]);
 const PAGE_SIZE = 20;
 
 export function CommentSection({ topicId }: { topicId: string }) {
@@ -144,7 +144,7 @@ function CommentItem({
   const [mode, setMode] = useState<"view" | "reply" | "edit">("view");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const canEdit = Boolean(
-    user && (user.id === comment.author.id || elevatedRoles.has(user.role.code)),
+    user && (user.id === comment.author.id || isElevatedRole(user.role.code)),
   );
   const canReply = Boolean(user) && !isChild;
   const canLike = Boolean(user);

@@ -1,5 +1,6 @@
 "use client";
 
+import { isAdminRole } from "@lumiforum/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
@@ -42,7 +43,7 @@ export function GuestOnly({ children }: { children: ReactNode }) {
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { status, user } = useAuth();
-  const allowed = user?.role.code === "administrator" || user?.role.code === "super_administrator";
+  const allowed = isAdminRole(user?.role.code);
 
   useEffect(() => {
     if (status === "unauthenticated") {

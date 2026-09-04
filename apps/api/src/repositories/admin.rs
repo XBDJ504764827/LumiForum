@@ -440,13 +440,13 @@ impl AdminRepository {
     pub async fn role_permissions(
         &self,
         role_code: &str,
-    ) -> Result<Option<(String, Vec<String>)>, sqlx::Error> {
+    ) -> Result<Option<(String, String, Vec<String>)>, sqlx::Error> {
         let row =
             sqlx::query_as::<_, (String, String)>("SELECT code, name FROM roles WHERE code = $1")
                 .bind(role_code)
                 .fetch_optional(&self.pool)
                 .await?;
-        let Some((code, _name)) = row else {
+        let Some((code, name)) = row else {
             return Ok(None);
         };
         let permissions = sqlx::query_scalar::<_, String>(
@@ -461,7 +461,7 @@ impl AdminRepository {
         .bind(role_code)
         .fetch_all(&self.pool)
         .await?;
-        Ok(Some((code, permissions)))
+        Ok(Some((code, name, permissions)))
     }
 
     /// Replace the permission set of a role atomically.

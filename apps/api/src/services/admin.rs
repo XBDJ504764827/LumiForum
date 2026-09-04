@@ -220,15 +220,15 @@ impl AdminService {
         if role_code.is_empty() {
             return Err(AdminError::Validation("role is required"));
         }
-        let (code, permissions) = self
+        let (code, name, permissions) = self
             .repository
             .role_permissions(&role_code)
             .await
             .map_err(internal)?
             .ok_or(AdminError::NotFound)?;
         Ok(RolePermissionView {
-            role_code: code.clone(),
-            role_name: code,
+            role_code: code,
+            role_name: name,
             permissions,
         })
     }
@@ -303,7 +303,7 @@ impl AdminService {
             self.authorization.invalidate(user_id).await;
         }
 
-        let (code, permissions) = self
+        let (code, name, permissions) = self
             .repository
             .role_permissions(&role_code)
             .await
@@ -320,8 +320,8 @@ impl AdminService {
         )
         .await?;
         Ok(RolePermissionView {
-            role_code: code.clone(),
-            role_name: code,
+            role_code: code,
+            role_name: name,
             permissions,
         })
     }

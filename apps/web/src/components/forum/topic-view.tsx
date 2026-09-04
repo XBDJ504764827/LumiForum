@@ -2,6 +2,7 @@
 
 import type { Route } from "next";
 import type { TopicDetail } from "@lumiforum/types";
+import { isElevatedRole } from "@lumiforum/shared";
 import { Alert, Avatar, AvatarFallback, AvatarImage, Badge, Button } from "@lumiforum/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -43,8 +44,6 @@ import {
 import { getTopicPoll, pollKeys } from "@/lib/api/polls";
 import { useEffect } from "react";
 
-const elevatedRoles = new Set(["moderator", "administrator", "super_administrator"]);
-
 export function TopicView({ slug }: { slug: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -73,7 +72,7 @@ export function TopicView({ slug }: { slug: string }) {
   const data = topic.data;
   const canEdit =
     status === "authenticated" &&
-    Boolean(user && (user.id === data.author.id || elevatedRoles.has(user.role.code)));
+    Boolean(user && (user.id === data.author.id || isElevatedRole(user.role.code)));
   const canReact = status === "authenticated";
   const canFollow = status === "authenticated" && Boolean(user && user.id !== data.author.id);
 

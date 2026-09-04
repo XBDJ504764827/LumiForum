@@ -82,6 +82,13 @@ pub fn create_router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024 + 64 * 1024))
         .layer(cors)
+        // Outermost layer: resolve the real client IP (X-Forwarded-For) before
+        // any handler or rate limiter reads ConnectInfo. Must stay last so it
+        // runs first.
+        .layer(middleware::from_fn_with_state(
+            state.config().trust_proxy,
+            crate::middleware::resolve_client_ip,
+        ))
         .with_state(state)
 }
 

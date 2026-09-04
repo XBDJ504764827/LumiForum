@@ -1,6 +1,7 @@
 "use client";
 
 import type { Poll } from "@lumiforum/types";
+import { isAdminRole } from "@lumiforum/shared";
 import { Badge, Button } from "@lumiforum/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -270,9 +271,7 @@ export function PollCard({ poll }: { poll: Poll }) {
                 结束投票
               </Button>
             ) : null}
-            {authStatus === "authenticated" &&
-            user?.role.code !== "moderator" &&
-            (user?.role.code === "administrator" || user?.role.code === "super_administrator") ? (
+            {authStatus === "authenticated" && isAdminRole(user?.role.code) ? (
               <Button
                 type="button"
                 size="sm"

@@ -60,6 +60,7 @@ impl AppState {
         let redis = ConnectionManager::new(redis_client).await?;
         let auth = AuthService::new(
             AuthRepository::new(db.clone()),
+            redis.clone(),
             AuthServiceConfig {
                 jwt_secret: config.jwt_secret.clone(),
                 jwt_issuer: config.jwt_issuer.clone(),
