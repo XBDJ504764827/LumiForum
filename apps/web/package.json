@@ -18,7 +18,7 @@
     "@lumiforum/types": "workspace:*",
     "@lumiforum/ui": "workspace:*",
     "@tanstack/react-query": "^5.62.8",
-    "lucide-react": "^1.27.0",
+    "lucide-react": "^1.39.0",
     "next": "^16.2.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
