@@ -219,6 +219,7 @@ impl From<UserError> for AppError {
             UserError::EmptyUpdate => Self::Validation("profile update contains no fields"),
             UserError::Validation(message) => Self::Validation(message),
             UserError::NotFound => Self::NotFound,
+            UserError::CurrentPasswordInvalid => Self::Validation("current password is incorrect"),
             UserError::Internal(error) => Self::Internal(error),
         }
     }

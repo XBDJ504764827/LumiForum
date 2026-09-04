@@ -87,6 +87,12 @@ export interface SteamUnbindRequest {
   password: string;
 }
 
+export interface ChangePasswordRequest {
+  /** Required only when the account already has a password. */
+  current_password?: string;
+  new_password: string;
+}
+
 export interface ProfileUpdateRequest {
   nickname?: string | null;
 }

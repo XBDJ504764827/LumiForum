@@ -28,6 +28,7 @@ import { PollCard } from "@/components/forum/poll-card";
 import { ReportButton } from "@/components/forum/report-button";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { LoadingIndicator } from "@/components/loading-indicator";
+import { errorMessage } from "@/lib/api/errors";
 import { CommentSection } from "@/components/forum/comment-section";
 import { useRealtime } from "@/components/realtime/realtime-provider";
 import {
@@ -44,7 +45,7 @@ import {
 import { getTopicPoll, pollKeys } from "@/lib/api/polls";
 import { useEffect } from "react";
 
-export function TopicView({ slug }: { slug: string }) {
+export function TopicView({ slug, initialTopic }: { slug: string; initialTopic?: TopicDetail }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
@@ -54,6 +55,7 @@ export function TopicView({ slug }: { slug: string }) {
     queryFn: () => getTopic(slug),
     staleTime: 5 * 60_000,
     retry: false,
+    initialData: initialTopic,
   });
   const deletion = useMutation({
     mutationFn: (topicId: string) => deleteTopic(topicId),
@@ -67,7 +69,16 @@ export function TopicView({ slug }: { slug: string }) {
   });
 
   if (topic.isPending) return <QueryLoading label="正在加载帖子" />;
-  if (topic.isError || !topic.data) return <QueryError message="帖子不存在或已被删除" />;
+  if (topic.isError || !topic.data) {
+    // 401 with a failed refresh surfaces as "authentication_required"; show an
+    // accurate message instead of the misleading "帖子不存在".
+    const message = errorMessage(topic.error);
+    return (
+      <QueryError
+        message={message === "请先登录" ? "登录已过期，请重新登录" : "帖子不存在或已被删除"}
+      />
+    );
+  }
 
   const data = topic.data;
   const canEdit =

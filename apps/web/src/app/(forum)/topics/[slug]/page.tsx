@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 import { TopicView } from "@/components/forum/topic-view";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -34,11 +35,14 @@ export default async function TopicPage({ params }: Props) {
   const { slug: raw } = await params;
   const slug = decodeURIComponent(raw);
   const topic = await fetchTopic(slug);
+  // A missing topic must return a real 404 (not a 200 with an error shell),
+  // so crawlers do not index nonexistent slugs.
+  if (!topic) notFound();
 
   return (
     <>
-      {topic ? <JsonLd data={[topicJsonLd(topic), topicBreadcrumbs(topic)]} /> : null}
-      <TopicView slug={slug} />
+      <JsonLd data={[topicJsonLd(topic), topicBreadcrumbs(topic)]} />
+      <TopicView slug={slug} initialTopic={topic} />
     </>
   );
 }

@@ -31,6 +31,18 @@ export const profileSchema = z.object({
   nickname: z.string().trim().max(64, "昵称不能超过 64 个字符"),
 });
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().max(128, "当前密码过长").optional().or(z.literal("")),
+    newPassword: z.string().min(8, "新密码至少需要 8 个字符").max(128, "新密码不能超过 128 个字符"),
+    confirmNewPassword: z.string(),
+  })
+  .refine((values) => values.newPassword === values.confirmNewPassword, {
+    message: "两次输入的新密码不一致",
+    path: ["confirmNewPassword"],
+  });
+
 export type LoginFormValues = z.infer<typeof loginSchema>;
 export type RegisterFormValues = z.infer<typeof registerSchema>;
 export type ProfileFormValues = z.infer<typeof profileSchema>;
+export type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;

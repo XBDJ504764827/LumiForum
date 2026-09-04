@@ -82,6 +82,14 @@ pub fn create_router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024 + 64 * 1024))
         .layer(cors)
+        // Global CSRF defense-in-depth for every non-GET route: mutating
+        // requests carrying an Origin must match the configured origin.
+        // Requests without Origin (curl / server-side clients) pass, matching
+        // the per-route layers on /auth and /moderation.
+        .layer(middleware::from_fn_with_state(
+            crate::middleware::CsrfLayer::new(state.config().cors_origin.clone()),
+            crate::middleware::enforce_mutation_origin,
+        ))
         // Outermost layer: resolve the real client IP (X-Forwarded-For) before
         // any handler or rate limiter reads ConnectInfo. Must stay last so it
         // runs first.

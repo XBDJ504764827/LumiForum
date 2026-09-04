@@ -43,6 +43,7 @@ export type {
   PaginationMeta,
   PresenceStatus,
   ProfileUpdateRequest,
+  ChangePasswordRequest,
   ReactionListParams,
   ReadyResponse,
   RegisterRequest,

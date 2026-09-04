@@ -101,4 +101,6 @@ pub use topic::{
     TopicListSort, TopicRecord, TopicStats, TopicStatus, TopicSummary, UpdateTopicRequest,
 };
 pub use upload::{UploadCategory, UploadListQuery, UploadResponse, UploadStatus};
-pub use user::{PatchField, ProfileUpdateRequest, UserRecord, UserResponse, UserStatus};
+pub use user::{
+    ChangePasswordRequest, PatchField, ProfileUpdateRequest, UserRecord, UserResponse, UserStatus,
+};

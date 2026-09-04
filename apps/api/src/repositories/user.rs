@@ -96,6 +96,55 @@ impl UserRepository {
         .fetch_optional(&self.pool)
         .await
     }
+
+    /// Set a new password hash for the user. Keeps `auth_version` unchanged
+    /// (increasing it would invalidate the current session, which is
+    /// undesirable for an in-session password change).
+    pub async fn update_password(
+        &self,
+        user_id: Uuid,
+        password_hash: &str,
+    ) -> Result<Option<RepositoryUser>, sqlx::Error> {
+        sqlx::query_as::<_, RepositoryUser>(
+            r#"
+            WITH updated AS (
+                UPDATE users
+                SET password_hash = $2
+                WHERE id = $1
+                RETURNING *
+            )
+            SELECT
+                updated.id,
+                updated.username,
+                updated.email,
+                updated.password_hash,
+                updated.avatar_url AS avatar,
+                updated.nickname,
+                roles.code AS role_code,
+                roles.name AS role_name,
+                updated.status,
+                updated.email_verified,
+                updated.auth_version,
+                updated.followers_count,
+                updated.following_count,
+                updated.steam_id,
+                updated.steam_persona_name,
+                updated.steam_avatar,
+                updated.steam_avatar_medium,
+                updated.steam_avatar_full,
+                updated.steam_profile_url,
+                updated.steam_country_code,
+                updated.created_at,
+                updated.updated_at
+            FROM updated
+            JOIN roles ON roles.id = updated.role_id
+            "#,
+        )
+        .bind(user_id)
+        .bind(password_hash)
+        .fetch_optional(&self.pool)
+        .await
+    }
 }
 
 pub fn repository_user_to_response(user: RepositoryUser) -> Result<UserResponse, &'static str> {

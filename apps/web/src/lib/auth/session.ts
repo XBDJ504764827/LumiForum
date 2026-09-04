@@ -5,11 +5,27 @@ import { ApiClientError, apiError, parseJson } from "@/lib/api/errors";
 
 type SessionListener = (hasAccessToken: boolean) => void;
 
+export type SessionExpiredHandler = () => void;
+
 let accessToken: string | null = null;
 let expiresAt = 0;
 let refreshPromise: Promise<string> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<SessionListener>();
+const expiredHandlers = new Set<SessionExpiredHandler>();
+
+/** Broadcast that the session expired (refresh failed), distinct from an
+ * explicit sign-out. UI can use this to show "登录已过期" and redirect. */
+export function subscribeSessionExpired(handler: SessionExpiredHandler): () => void {
+  expiredHandlers.add(handler);
+  return () => expiredHandlers.delete(handler);
+}
+
+function emitSessionExpired(): void {
+  for (const handler of expiredHandlers) {
+    handler();
+  }
+}
 
 export function setAccessToken(token: string, expiresIn: number): void {
   accessToken = token;
@@ -70,6 +86,7 @@ async function performRefresh(): Promise<string> {
     return body.data.access_token;
   } catch (error) {
     clearAccessToken();
+    emitSessionExpired();
     throw error;
   }
 }

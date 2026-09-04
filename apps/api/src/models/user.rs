@@ -112,3 +112,14 @@ pub struct ProfileUpdateRequest {
     #[serde(default)]
     pub nickname: PatchField<String>,
 }
+
+/// In-session password change (no email recovery flow; requires the current
+/// password for accounts that have one — Steam-created accounts may set one
+/// eagerly).
+#[derive(Deserialize)]
+pub struct ChangePasswordRequest {
+    /// Optional: required only when the account already has a password.
+    #[serde(default)]
+    pub current_password: Option<String>,
+    pub new_password: String,
+}

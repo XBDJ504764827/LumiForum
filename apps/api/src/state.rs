@@ -83,7 +83,10 @@ impl AppState {
             )?),
             _ => None,
         };
-        let users = UserService::new(UserRepository::new(db.clone()));
+        let users = UserService::new(
+            UserRepository::new(db.clone()),
+            config.password_hash_concurrency,
+        )?;
         let authorization = AuthorizationService::new(
             AuthorizationRepository::new(db.clone()),
             redis.clone(),

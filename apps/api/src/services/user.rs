@@ -1,12 +1,15 @@
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::models::{PatchField, ProfileUpdateRequest, UserResponse};
+use crate::models::{ChangePasswordRequest, PatchField, ProfileUpdateRequest, UserResponse};
 use crate::repositories::{repository_user_to_response, UserRepository};
+
+use super::PasswordService;
 
 #[derive(Clone)]
 pub struct UserService {
     repository: UserRepository,
+    passwords: PasswordService,
 }
 
 #[derive(Debug, Error)]
@@ -17,13 +20,21 @@ pub enum UserError {
     Validation(&'static str),
     #[error("user not found")]
     NotFound,
+    #[error("current password is invalid")]
+    CurrentPasswordInvalid,
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
 
 impl UserService {
-    pub fn new(repository: UserRepository) -> Self {
-        Self { repository }
+    pub fn new(
+        repository: UserRepository,
+        password_hash_concurrency: usize,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            repository,
+            passwords: PasswordService::new(password_hash_concurrency)?,
+        })
     }
 
     pub async fn get_profile(&self, user_id: Uuid) -> Result<UserResponse, UserError> {
@@ -49,6 +60,63 @@ impl UserService {
         let user = self
             .repository
             .update_profile(user_id, nickname_changed, nickname.as_deref())
+            .await
+            .map_err(internal)?
+            .ok_or(UserError::NotFound)?;
+        to_response(user)
+    }
+
+    /// Change the in-session password. For accounts that already have a
+    /// password, the current one must be verified (Argon2, off the runtime
+    /// threads). Steam-only accounts may set a password with no current one.
+    pub async fn set_password(
+        &self,
+        user_id: Uuid,
+        request: ChangePasswordRequest,
+    ) -> Result<UserResponse, UserError> {
+        let new_password = request.new_password.trim();
+        if new_password.chars().count() < 8 {
+            return Err(UserError::Validation("new password is too short"));
+        }
+        if new_password.len() > 128 {
+            return Err(UserError::Validation("new password is too long"));
+        }
+
+        let user = self
+            .repository
+            .find_by_id(user_id)
+            .await
+            .map_err(internal)?
+            .ok_or(UserError::NotFound)?;
+
+        // Verify the current password when one exists (nit: timing — a wrong
+        // current password should be indistinguishable from Steam-only set
+        // for a nonexistent user; the Argon2 dummy work keeps cost similar).
+        if let Some(current_hash) = &user.password_hash {
+            let Some(current) = &request.current_password else {
+                return Err(UserError::CurrentPasswordInvalid);
+            };
+            if current.is_empty() {
+                return Err(UserError::CurrentPasswordInvalid);
+            }
+            let valid = self
+                .passwords
+                .verify(current.clone(), current_hash.clone())
+                .await
+                .map_err(internal)?;
+            if !valid {
+                return Err(UserError::CurrentPasswordInvalid);
+            }
+        }
+
+        let new_hash = self
+            .passwords
+            .hash(new_password.to_owned())
+            .await
+            .map_err(internal)?;
+        let user = self
+            .repository
+            .update_password(user_id, &new_hash)
             .await
             .map_err(internal)?
             .ok_or(UserError::NotFound)?;

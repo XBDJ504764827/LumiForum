@@ -10,6 +10,7 @@ import {
   sessionAccessToken,
   setAccessToken,
   subscribeSession,
+  subscribeSessionExpired,
 } from "@/lib/auth/session";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -17,6 +18,10 @@ type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 interface AuthContextValue {
   status: AuthStatus;
   user: User | null;
+  /** True when a silent refresh failed (token expired); UI may show a
+   * "session expired" notice. Cleared on next successful login. */
+  sessionExpired: boolean;
+  dismissSessionExpired: () => void;
   signIn: (input: LoginRequest) => Promise<void>;
   signUp: (input: RegisterRequest) => Promise<void>;
   signOut: () => Promise<void>;
@@ -30,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<User | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -38,6 +44,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setStatus("unauthenticated");
         queryClient.removeQueries({ queryKey: ["auth"] });
+      }
+    });
+    const unsubscribeExpired = subscribeSessionExpired(() => {
+      if (active) {
+        setSessionExpired(true);
       }
     });
 
@@ -59,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
       unsubscribe();
+      unsubscribeExpired();
     };
   }, [queryClient]);
 
@@ -70,12 +82,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (input: LoginRequest) => {
     const response = await login(input);
+    setSessionExpired(false);
     setAccessToken(response.access_token, response.expires_in);
     commitUser(response.user);
   };
 
   const signUp = async (input: RegisterRequest) => {
     const response = await register(input);
+    setSessionExpired(false);
     setAccessToken(response.access_token, response.expires_in);
     commitUser(response.user);
   };
@@ -100,7 +114,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ status, user, signIn, signUp, signOut, restoreSession, setCurrentUser: commitUser }}
+      value={{
+        status,
+        user,
+        sessionExpired,
+        dismissSessionExpired: () => setSessionExpired(false),
+        signIn,
+        signUp,
+        signOut,
+        restoreSession,
+        setCurrentUser: commitUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

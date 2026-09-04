@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { ProfileUpdateRequest, User } from "@lumiforum/types";
+import type { ChangePasswordRequest, ProfileUpdateRequest, User } from "@lumiforum/types";
 import { Alert, Avatar, AvatarFallback, AvatarImage, Button, Input, Label } from "@lumiforum/ui";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
@@ -12,8 +12,20 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Brand } from "@/components/brand";
 import { LoadingIndicator } from "@/components/loading-indicator";
 import { AvatarUpload } from "@/components/uploads/avatar-upload";
-import { bindSteam, errorMessage, syncSteam, unbindSteam, updateProfile } from "@/lib/api/auth";
-import { profileSchema, type ProfileFormValues } from "@/lib/auth/schemas";
+import {
+  bindSteam,
+  changePassword,
+  errorMessage,
+  syncSteam,
+  unbindSteam,
+  updateProfile,
+} from "@/lib/api/auth";
+import {
+  changePasswordSchema,
+  profileSchema,
+  type ChangePasswordFormValues,
+  type ProfileFormValues,
+} from "@/lib/auth/schemas";
 
 export function ProfileView() {
   const { user, signOut, setCurrentUser } = useAuth();
@@ -130,6 +142,7 @@ function ProfileContent({ user, onUpdated }: { user: User; onUpdated: (user: Use
             <AccountRow label="关注" value={String(user.following_count)} />
             <AccountRow label="加入时间" value={formatDate(user.created_at)} />
           </dl>
+          <ChangePassword user={user} onUpdated={onUpdated} />
           <SteamAccount user={user} onUpdated={onUpdated} />
         </aside>
       </div>
@@ -191,6 +204,110 @@ function ProfileEditor({ user, onUpdated }: { user: User; onUpdated: (user: User
         </Button>
       </form>
     </div>
+  );
+}
+
+function ChangePassword({ user, onUpdated }: { user: User; onUpdated: (user: User) => void }) {
+  const [success, setSuccess] = useState(false);
+  const form = useForm<ChangePasswordFormValues>({
+    resolver: zodResolver(changePasswordSchema),
+    defaultValues: { currentPassword: "", newPassword: "", confirmNewPassword: "" },
+  });
+  const mutation = useMutation({
+    mutationFn: (values: ChangePasswordFormValues): Promise<User> => {
+      const payload: ChangePasswordRequest = { new_password: values.newPassword };
+      // Steam-only accounts (no password yet) must not send a current password;
+      // accounts with a password must verify it.
+      if (user.has_password) {
+        payload.current_password = values.currentPassword;
+      }
+      return changePassword(payload);
+    },
+    onSuccess: (updated) => {
+      onUpdated(updated);
+      form.reset();
+      setSuccess(true);
+    },
+    onError: (cause) => {
+      setSuccess(false);
+      const message = errorMessage(cause);
+      // The API returns validation_error with an English detail; surface a
+      // friendly message for the common cases.
+      form.setError("root", {
+        message: message.includes("current password")
+          ? "当前密码不正确"
+          : message.includes("too short")
+            ? "新密码过短"
+            : message.includes("too long")
+              ? "新密码过长"
+              : message,
+      });
+    },
+  });
+
+  const submit = form.handleSubmit((values) => mutation.mutate(values));
+
+  return (
+    <section className="mt-8" aria-labelledby="change-password-title">
+      <h3 id="change-password-title" className="font-semibold">
+        账户密码
+      </h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {user.has_password ? "修改登录密码（需验证当前密码）。" : "为 Steam 账户设置登录密码。"}
+      </p>
+      <form className="mt-4 space-y-4" onSubmit={submit}>
+        {user.has_password ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="current-password">当前密码</Label>
+            <Input
+              id="current-password"
+              type="password"
+              autoComplete="current-password"
+              {...form.register("currentPassword")}
+            />
+            {form.formState.errors.currentPassword?.message ? (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.currentPassword.message}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="space-y-1.5">
+          <Label htmlFor="new-password">新密码</Label>
+          <Input
+            id="new-password"
+            type="password"
+            autoComplete="new-password"
+            {...form.register("newPassword")}
+          />
+          {form.formState.errors.newPassword?.message ? (
+            <p className="text-xs text-destructive">{form.formState.errors.newPassword.message}</p>
+          ) : null}
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="confirm-new-password">确认新密码</Label>
+          <Input
+            id="confirm-new-password"
+            type="password"
+            autoComplete="new-password"
+            {...form.register("confirmNewPassword")}
+          />
+          {form.formState.errors.confirmNewPassword?.message ? (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.confirmNewPassword.message}
+            </p>
+          ) : null}
+        </div>
+        {form.formState.errors.root?.message ? (
+          <Alert>{form.formState.errors.root.message}</Alert>
+        ) : null}
+        {success ? <Alert>密码已更新。</Alert> : null}
+        <Button type="submit" className="gap-2" disabled={mutation.isPending}>
+          {mutation.isPending ? <LoadingIndicator /> : null}
+          {user.has_password ? "更新密码" : "设置密码"}
+        </Button>
+      </form>
+    </section>
   );
 }
 
