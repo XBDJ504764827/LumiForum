@@ -28,10 +28,14 @@ export function getDmUnreadCount(): Promise<{ count: number }> {
 }
 
 export function startConversation(username: string): Promise<ConversationDetail> {
-  return apiRequest<ConversationDetail>("/messages/conversations", {
-    method: "POST",
-    body: JSON.stringify({ username } satisfies { username: string }),
-  }, true);
+  return apiRequest<ConversationDetail>(
+    "/messages/conversations",
+    {
+      method: "POST",
+      body: JSON.stringify({ username } satisfies { username: string }),
+    },
+    true,
+  );
 }
 
 export function getConversation(conversationId: string): Promise<ConversationDetail> {
@@ -58,10 +62,7 @@ export function listMessages(
   );
 }
 
-export function sendMessage(
-  conversationId: string,
-  input: SendMessageRequest,
-): Promise<DmMessage> {
+export function sendMessage(conversationId: string, input: SendMessageRequest): Promise<DmMessage> {
   return apiRequest<DmMessage>(
     `/messages/conversations/${encodeURIComponent(conversationId)}/messages`,
     { method: "POST", body: JSON.stringify(input) },

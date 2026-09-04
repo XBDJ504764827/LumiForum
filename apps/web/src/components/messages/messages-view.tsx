@@ -265,9 +265,7 @@ function MessageThread(props: {
               >
                 {header.data.other_user.nickname || header.data.other_user.username}
               </Link>
-              <p className="text-xs text-muted-foreground">
-                @{header.data.other_user.username}
-              </p>
+              <p className="text-xs text-muted-foreground">@{header.data.other_user.username}</p>
             </div>
           </>
         ) : (
@@ -348,7 +346,9 @@ function MessageBubble({ message, mine }: { message: DmMessage; mine: boolean })
           }`}
         >
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
-          <p className={`mt-1 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+          <p
+            className={`mt-1 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+          >
             {formatTime(message.created_at)}
           </p>
         </div>

@@ -77,9 +77,7 @@ export function TopicEditor(props: Props) {
             allow_cancel: true,
             max_choices: draft.poll.max_choices || 2,
             options:
-              draft.poll.options.length > 0
-                ? draft.poll.options
-                : [{ value: "" }, { value: "" }],
+              draft.poll.options.length > 0 ? draft.poll.options : [{ value: "" }, { value: "" }],
           },
         };
       }
@@ -323,11 +321,7 @@ export function TopicEditor(props: Props) {
                 />
               </Field>
 
-              <Field
-                label="标签"
-                error={form.formState.errors.tags?.message}
-                htmlFor="topic-tags"
-              >
+              <Field label="标签" error={form.formState.errors.tags?.message} htmlFor="topic-tags">
                 <Input
                   id="topic-tags"
                   placeholder="cs2 攻略 赛事（空格分隔，最多 5 个）"

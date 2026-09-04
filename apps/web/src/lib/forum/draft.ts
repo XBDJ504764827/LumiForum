@@ -62,9 +62,6 @@ export function clearDraft(key: string): void {
 
 export function draftIsEmpty(draft: Omit<TopicDraft, "savedAt">): boolean {
   return (
-    !draft.title.trim() &&
-    !draft.content.trim() &&
-    !draft.summary.trim() &&
-    !draft.poll.enabled
+    !draft.title.trim() && !draft.content.trim() && !draft.summary.trim() && !draft.poll.enabled
   );
 }
