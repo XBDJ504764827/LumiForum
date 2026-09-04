@@ -414,7 +414,7 @@ function UserHit({ item }: { item: UserSearchHit & { kind: "user" } }) {
         </div>
       </div>
       <Link
-        href={`/users/${item.id}/followers`}
+        href={`/users/${item.id}`}
         className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm hover:bg-muted"
       >
         <UserRound className="size-4" />

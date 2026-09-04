@@ -87,6 +87,30 @@ impl AppState {
             UserRepository::new(db.clone()),
             config.password_hash_concurrency,
         )?;
+
+        // Daily cleanup of expired refresh tokens: every rotation inserts a
+        // new row, so without this job the table grows without bound.
+        {
+            let auth_repository = AuthRepository::new(db.clone());
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+                interval.tick().await; // first tick completes immediately; skip
+                loop {
+                    interval.tick().await;
+                    match auth_repository.cleanup_expired().await {
+                        Ok(deleted) => {
+                            if deleted > 0 {
+                                tracing::info!(deleted, "expired refresh tokens cleaned");
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "refresh token cleanup failed");
+                        }
+                    }
+                }
+            });
+        }
         let authorization = AuthorizationService::new(
             AuthorizationRepository::new(db.clone()),
             redis.clone(),

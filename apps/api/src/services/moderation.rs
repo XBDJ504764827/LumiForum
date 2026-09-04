@@ -3815,7 +3815,8 @@ impl ModerationService {
         self.metrics_snapshot().await
     }
 
-    /// Unauthorized snapshot used by the /metrics scrape endpoint (network-restricted).
+    /// Snapshot used by the /metrics scrape endpoint (protected by the
+    /// `moderation.metrics.read` permission on the route layer).
     pub async fn metrics_snapshot(&self) -> Result<GovernanceMetrics, ModerationError> {
         self.repository.governance_metrics().await.map_err(internal)
     }

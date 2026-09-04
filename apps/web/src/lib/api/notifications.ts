@@ -57,7 +57,7 @@ export function notificationHref(notification: Notification): string {
       : `/topics/${meta.topic_slug}`;
   }
   if (notification.target_type === "user" && notification.target_id) {
-    return `/users/${notification.target_id}/followers`;
+    return `/users/${notification.target_id}`;
   }
   return "/notifications";
 }

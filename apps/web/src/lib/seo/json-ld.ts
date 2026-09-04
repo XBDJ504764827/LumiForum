@@ -71,7 +71,7 @@ export function topicJsonLd(topic: TopicDetail | (TopicSummary & { content?: str
     author: {
       "@type": "Person",
       name: authorName,
-      url: absoluteUrl(`/users/${topic.author.id}/followers`),
+      url: absoluteUrl(`/users/${topic.author.id}`),
     },
     interactionStatistic: [
       {

@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 8
+    groups:
+      nextjs:
+        patterns: ["next", "react", "react-dom", "eslint-config-next"]
+      tooling:
+        patterns: ["prettier", "eslint", "typescript", "turbo", "dotenv-cli"]
+
+  - package-ecosystem: "cargo"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:30"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 8
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 4

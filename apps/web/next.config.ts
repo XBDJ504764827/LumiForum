@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
+    // The browser talks to a separate API origin (NEXT_PUBLIC_API_URL) plus a
+    // WebSocket on the same host; allow both in connect-src. Falls back to
+    // 'self' so localhost dev works without extra config.
+    const apiOrigin = process.env.NEXT_PUBLIC_API_URL;
+    const connectSrc = apiOrigin
+      ? ["'self'", apiOrigin, apiOrigin.replace(/^http/, "ws")].join(" ")
+      : "'self'";
     return [
       {
         source: "/(.*)",
@@ -21,6 +28,25 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          {
+            // Baseline CSP. Next.js needs 'unsafe-inline' for its bootstrap
+            // scripts (no nonce in standalone mode); images may come from
+            // user uploads / Steam avatars (http/https/blob). Strengthen at
+            // the reverse proxy with nonces for a stricter policy.
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https: http:",
+              "font-src 'self' data:",
+              `connect-src ${connectSrc}`,
+              "frame-ancestors 'self'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join("; "),
+          },
         ],
       },
       {
