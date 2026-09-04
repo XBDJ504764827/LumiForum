@@ -22,7 +22,9 @@
   `API_HOST=0.0.0.0` and firewall the port to the panel's network only.
 - Web binds `127.0.0.1:<WEB_PORT>` (default 3000); the panel reverse-proxies it.
 - Panel should forward real client IPs (X-Forwarded-For) so the API's rate
-  limits and peer-IP handling work as intended.
+  limits and peer-IP handling work as intended. The API only trusts the header
+  when `TRUST_PROXY=true` is set in the API env; make sure the proxy strips any
+  client-supplied `X-Forwarded-For` so the leftmost address is authentic.
 
 ## Secrets
 
