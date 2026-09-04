@@ -18,7 +18,6 @@ const MAX_PAGE_SIZE: u32 = 50;
 const MAX_PAGE: u32 = 1_000_000;
 const RATE_LIMIT_WINDOW_SECS: u64 = 60;
 const RATE_LIMIT_MAX: u64 = 60;
-const STATS_CACHE_TTL_SECS: u64 = 30;
 
 #[derive(Clone)]
 pub struct ReactionService {
@@ -70,7 +69,6 @@ impl ReactionService {
             .like_topic(principal.user_id, topic_id)
             .await
             .map_err(internal)?;
-        self.cache_topic_likes(topic_id, like_count).await;
         if created {
             self.emit_topic_liked(principal.user_id, topic_id).await;
         }
@@ -93,7 +91,6 @@ impl ReactionService {
             .unlike_topic(principal.user_id, topic_id)
             .await
             .map_err(internal)?;
-        self.cache_topic_likes(topic_id, like_count).await;
         Ok(TopicLikeState {
             liked: false,
             like_count,
@@ -113,7 +110,6 @@ impl ReactionService {
             .like_comment(principal.user_id, comment_id)
             .await
             .map_err(internal)?;
-        self.cache_comment_likes(comment_id, like_count).await;
         if created {
             self.emit_comment_liked(principal.user_id, comment_id).await;
         }
@@ -136,7 +132,6 @@ impl ReactionService {
             .unlike_comment(principal.user_id, comment_id)
             .await
             .map_err(internal)?;
-        self.cache_comment_likes(comment_id, like_count).await;
         Ok(CommentLikeState {
             liked: false,
             like_count,
@@ -214,8 +209,6 @@ impl ReactionService {
             .follow_user(principal.user_id, user_id)
             .await
             .map_err(internal)?;
-        self.cache_follow_stats(user_id, counters.followers_count, counters.following_count)
-            .await;
         if created {
             self.emit_event(NotificationEvent::UserFollowed(UserFollowedEvent {
                 actor_id: principal.user_id,
@@ -246,13 +239,23 @@ impl ReactionService {
             .unfollow_user(principal.user_id, user_id)
             .await
             .map_err(internal)?;
-        self.cache_follow_stats(user_id, counters.followers_count, counters.following_count)
-            .await;
         Ok(FollowState {
             following: false,
             followers_count: counters.followers_count,
             following_count: counters.following_count,
         })
+    }
+
+    pub async fn get_public_user(
+        &self,
+        user_id: Uuid,
+        viewer_id: Option<Uuid>,
+    ) -> Result<UserPublicSummary, ReactionError> {
+        self.reactions
+            .get_public_user(user_id, viewer_id)
+            .await
+            .map_err(internal)?
+            .ok_or(ReactionError::NotFound)
     }
 
     pub async fn list_followers(
@@ -463,46 +466,6 @@ impl ReactionService {
                 tracing::warn!(%error, %user_id, "reaction rate limit unavailable; allowing request");
                 Ok(())
             }
-        }
-    }
-
-    async fn cache_topic_likes(&self, topic_id: Uuid, like_count: i64) {
-        let key = format!("stats:topic:{topic_id}:likes");
-        let mut redis = self.redis.clone();
-        if let Err(error) = redis
-            .set_ex::<_, _, ()>(key, like_count, STATS_CACHE_TTL_SECS)
-            .await
-        {
-            tracing::warn!(%error, %topic_id, "failed to cache topic like stats");
-        }
-    }
-
-    async fn cache_comment_likes(&self, comment_id: Uuid, like_count: i64) {
-        let key = format!("stats:comment:{comment_id}:likes");
-        let mut redis = self.redis.clone();
-        if let Err(error) = redis
-            .set_ex::<_, _, ()>(key, like_count, STATS_CACHE_TTL_SECS)
-            .await
-        {
-            tracing::warn!(%error, %comment_id, "failed to cache comment like stats");
-        }
-    }
-
-    async fn cache_follow_stats(&self, user_id: Uuid, followers_count: i64, following_count: i64) {
-        let mut redis = self.redis.clone();
-        let followers_key = format!("stats:user:{user_id}:followers");
-        let following_key = format!("stats:user:{user_id}:following");
-        if let Err(error) = redis
-            .set_ex::<_, _, ()>(followers_key, followers_count, STATS_CACHE_TTL_SECS)
-            .await
-        {
-            tracing::warn!(%error, %user_id, "failed to cache followers stats");
-        }
-        if let Err(error) = redis
-            .set_ex::<_, _, ()>(following_key, following_count, STATS_CACHE_TTL_SECS)
-            .await
-        {
-            tracing::warn!(%error, %user_id, "failed to cache following stats");
         }
     }
 }

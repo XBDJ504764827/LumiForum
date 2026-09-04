@@ -56,7 +56,7 @@ export function AdminQueueView() {
           <Link
             key={card.label}
             href={card.href}
-            className="flex items-center justify-between border border-border bg-white px-4 py-4 hover:border-primary/40"
+            className="flex items-center justify-between border border-border bg-background px-4 py-4 hover:border-primary/40"
           >
             <span className="flex items-center gap-2 text-sm text-muted-foreground">
               <card.icon className="size-4" aria-hidden="true" />
@@ -68,7 +68,7 @@ export function AdminQueueView() {
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <section className="border border-border bg-white p-5">
+        <section className="border border-border bg-background p-5">
           <h2 className="mb-3 font-semibold">最新举报</h2>
           {data.latest_reports.length === 0 ? (
             <p className="text-sm text-muted-foreground">队列为空</p>
@@ -93,7 +93,7 @@ export function AdminQueueView() {
             </ul>
           )}
         </section>
-        <section className="border border-border bg-white p-5">
+        <section className="border border-border bg-background p-5">
           <h2 className="mb-3 font-semibold">未结案件</h2>
           {data.latest_cases.length === 0 ? (
             <p className="text-sm text-muted-foreground">队列为空</p>

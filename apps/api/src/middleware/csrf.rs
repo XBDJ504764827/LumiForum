@@ -23,23 +23,36 @@ pub async fn enforce_origin(
     request: Request,
     next: Next,
 ) -> AppResult<Response> {
-    if !origin_matches(&request, &layer.allowed_origin) {
+    // A missing Origin means a non-browser client (curl, server-side script);
+    // browsers always send Origin on cross-site requests. Requiring an exact
+    // match only when the header is present keeps JSON API access usable.
+    if request
+        .headers()
+        .get(ORIGIN)
+        .is_some_and(|_| !origin_matches(&request, &layer.allowed_origin))
+    {
         return Err(AppError::CsrfValidationFailed);
     }
     Ok(next.run(request).await)
 }
 
-/// Require an exact Origin only for state-changing methods. This protects
-/// bearer-token admin APIs while keeping GET requests usable by server-side clients.
+/// Require an exact Origin only for state-changing methods when the Origin
+/// header is present. This protects bearer-token admin APIs while keeping
+/// GET requests and non-browser clients usable.
 pub async fn enforce_mutation_origin(
     State(layer): State<CsrfLayer>,
     request: Request,
     next: Next,
 ) -> AppResult<Response> {
-    if !matches!(
+    let is_mutation = !matches!(
         request.method(),
         &Method::GET | &Method::HEAD | &Method::OPTIONS
-    ) && !origin_matches(&request, &layer.allowed_origin)
+    );
+    if is_mutation
+        && request
+            .headers()
+            .get(ORIGIN)
+            .is_some_and(|_| !origin_matches(&request, &layer.allowed_origin))
     {
         return Err(AppError::CsrfValidationFailed);
     }
@@ -72,7 +85,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_missing_origin() {
+    fn missing_origin_is_treated_as_non_browser_client() {
+        // Non-browser clients (curl, server-side scripts) do not send Origin;
+        // browsers always send it on cross-site requests.
         let request = Request::new(Body::empty());
         assert!(!origin_matches(&request, "http://192.168.0.138:3000"));
     }

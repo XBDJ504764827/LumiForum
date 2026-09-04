@@ -14,7 +14,9 @@ use crate::repositories::{
     NewTopic, RepositoryTopic, TopicListOptions, TopicModeration, TopicRepository, TopicUpdate,
 };
 
-use crate::services::{AdminAuditContext, ModerationService, PollError, PollService};
+use crate::services::{
+    AdminAuditContext, ModerationService, NotificationService, PollError, PollService,
+};
 
 use super::category::{generated_slug, normalize_slug};
 
@@ -29,6 +31,7 @@ pub struct TopicService {
     moderation: ModerationService,
     polls: PollService,
     admin_logs: AdminRepository,
+    notifications: NotificationService,
 }
 
 #[derive(Debug, Error)]
@@ -54,6 +57,7 @@ impl TopicService {
         moderation: ModerationService,
         polls: PollService,
         admin_logs: AdminRepository,
+        notifications: NotificationService,
     ) -> Self {
         Self {
             topics,
@@ -61,6 +65,7 @@ impl TopicService {
             moderation,
             polls,
             admin_logs,
+            notifications,
         }
     }
 
@@ -115,7 +120,7 @@ impl TopicService {
             .await
             .map_err(internal)?
             .ok_or(TopicError::NotFound)?;
-        to_detail(topic)
+        to_detail(self, topic).await
     }
 
     pub async fn create(
@@ -212,6 +217,19 @@ impl TopicService {
                             return Err(map_poll_error(error));
                         }
                     }
+                    // Attach tags (best-effort; a tag failure must not block
+                    // publishing the topic itself).
+                    if let Some(tags) = normalize_tags(request.tags.clone()) {
+                        if let Err(error) = self.topics.set_topic_tags(topic.id, &tags).await {
+                            tracing::warn!(%error, topic_id = %topic.id, "failed to attach topic tags");
+                        }
+                    }
+                    // Deliver @mentions in the body; only for actually published
+                    // topics. Best-effort, never blocks publishing.
+                    if status == "published" {
+                        self.emit_mentions(&content, principal.user_id, topic.id, &slug)
+                            .await;
+                    }
                     // Refetch so the response carries has_poll (poll attached above).
                     let topic = self
                         .topics
@@ -231,7 +249,7 @@ impl TopicService {
                             )
                             .await;
                     }
-                    return to_detail(topic);
+                    return to_detail(self, topic).await;
                 }
                 Err(error) if is_database_code(&error, "23505") => continue,
                 Err(error) if is_database_code(&error, "23503") => {
@@ -262,7 +280,15 @@ impl TopicService {
         let title = request.title.map(normalize_title).transpose()?;
         let content = request.content.map(normalize_content).transpose()?;
         let (summary_changed, summary) = normalize_summary_patch(request.summary)?;
-        if request.category_id.is_none() && title.is_none() && content.is_none() && !summary_changed
+        let tags = request
+            .tags
+            .as_ref()
+            .and_then(|tags| normalize_tags(tags.clone()));
+        if request.category_id.is_none()
+            && title.is_none()
+            && content.is_none()
+            && !summary_changed
+            && request.tags.is_none()
         {
             return Err(TopicError::Validation("topic update contains no fields"));
         }
@@ -282,7 +308,15 @@ impl TopicService {
             .await
             .map_err(internal)?
             .ok_or(TopicError::NotFound)?;
-        to_detail(topic)
+
+        // Replace tags when explicitly provided (even with an empty list the
+        // caller clears them). Tag failures are non-fatal.
+        if let Some(tags) = tags {
+            if let Err(error) = self.topics.set_topic_tags(topic_id, &tags).await {
+                tracing::warn!(%error, %topic_id, "failed to replace topic tags");
+            }
+        }
+        to_detail(self, topic).await
     }
 
     pub async fn moderate(
@@ -314,7 +348,7 @@ impl TopicService {
             .await
             .map_err(internal)?
             .ok_or(TopicError::NotFound)?;
-        to_detail(topic)
+        to_detail(self, topic).await
     }
 
     pub async fn delete(
@@ -401,6 +435,26 @@ impl TopicService {
             Err(TopicError::CategoryUnavailable)
         }
     }
+
+    /// Deliver `@mentions` found in a topic body as notifications.
+    /// Best-effort: failures are logged, never block publishing.
+    async fn emit_mentions(&self, content: &str, actor_id: Uuid, topic_id: Uuid, slug: &str) {
+        let href = format!("/topics/{slug}");
+        if let Err(error) = self
+            .notifications
+            .send_mentions(
+                content,
+                actor_id,
+                crate::models::NotificationTargetType::Topic,
+                topic_id,
+                &href,
+                "帖子",
+            )
+            .await
+        {
+            tracing::warn!(%error, "failed to deliver topic @mention notifications");
+        }
+    }
 }
 
 fn normalize_title(value: String) -> Result<String, TopicError> {
@@ -421,6 +475,42 @@ fn normalize_content(value: String) -> Result<String, TopicError> {
         ));
     }
     Ok(value)
+}
+
+/// Normalize a tag list: lowercase, trim, dedupe, and cap at 5 tags of ≤32
+/// chars each. Returns `None` for an empty list (caller treats it as "no
+/// tags"), or a validation error for invalid input.
+fn normalize_tags(tags: Vec<String>) -> Option<Vec<String>> {
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+    for raw in tags {
+        let name = raw.trim().to_lowercase();
+        if name.is_empty() || name.chars().count() > 32 {
+            continue;
+        }
+        // Same grammar as the DB CHECK constraint.
+        if !name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric())
+            || !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            continue;
+        }
+        if seen.insert(name.clone()) {
+            result.push(name);
+            if result.len() >= 5 {
+                break;
+            }
+        }
+    }
+    if result.is_empty() {
+        None
+    } else {
+        Some(result)
+    }
 }
 
 fn normalize_summary(value: Option<String>) -> Result<Option<String>, TopicError> {
@@ -520,9 +610,18 @@ fn is_database_code(error: &sqlx::Error, expected: &str) -> bool {
         .is_some_and(|error| error.code().as_deref() == Some(expected))
 }
 
-fn to_detail(topic: RepositoryTopic) -> Result<TopicDetail, TopicError> {
-    repository_topic_to_detail(topic)
-        .map_err(|_| internal(anyhow::anyhow!("topic detail content was not selected")))
+async fn to_detail(
+    topic_service: &TopicService,
+    topic: RepositoryTopic,
+) -> Result<TopicDetail, TopicError> {
+    let mut detail = repository_topic_to_detail(topic)
+        .map_err(|_| internal(anyhow::anyhow!("topic detail content was not selected")))?;
+    // Best-effort tag lookup; a query failure must not hide the topic.
+    match topic_service.topics.topic_tags(detail.id).await {
+        Ok(tags) => detail.tags = tags,
+        Err(error) => tracing::warn!(%error, topic_id = %detail.id, "failed to load topic tags"),
+    }
+    Ok(detail)
 }
 
 fn internal(error: impl Into<anyhow::Error>) -> TopicError {

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Category, Paginated, TopicSummary } from "@lumiforum/types";
 import { useQuery } from "@tanstack/react-query";
 import { Flame, Pin } from "lucide-react";
 import Link from "next/link";
@@ -10,21 +11,33 @@ import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { TopicList } from "@/components/forum/topic-list";
 import { forumKeys, listCategories, listTopics } from "@/lib/api/forum";
 
-export function ForumHome() {
+const PINNED_PARAMS = { sort: "pinned" as const, page: 1, page_size: 5 };
+const LATEST_PARAMS = { sort: "latest" as const, page: 1, page_size: 20 };
+
+export function ForumHome({
+  initialCategories,
+  initialPinned,
+  initialLatest,
+}: {
+  initialCategories?: Category[];
+  initialPinned?: Paginated<TopicSummary>;
+  initialLatest?: Paginated<TopicSummary>;
+}) {
   const { status } = useAuth();
   const categories = useQuery({
     queryKey: forumKeys.categories,
     queryFn: listCategories,
+    initialData: initialCategories,
   });
-  const pinnedParams = { sort: "pinned" as const, page: 1, page_size: 5 };
-  const latestParams = { sort: "latest" as const, page: 1, page_size: 20 };
   const pinned = useQuery({
-    queryKey: forumKeys.topics(pinnedParams),
-    queryFn: () => listTopics(pinnedParams),
+    queryKey: forumKeys.topics(PINNED_PARAMS),
+    queryFn: () => listTopics(PINNED_PARAMS),
+    initialData: initialPinned,
   });
   const latest = useQuery({
-    queryKey: forumKeys.topics(latestParams),
-    queryFn: () => listTopics(latestParams),
+    queryKey: forumKeys.topics(LATEST_PARAMS),
+    queryFn: () => listTopics(LATEST_PARAMS),
+    initialData: initialLatest,
   });
 
   return (

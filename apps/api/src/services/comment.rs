@@ -161,6 +161,8 @@ impl CommentService {
         }
         self.emit_comment_created(principal.user_id, topic_id, comment.id)
             .await;
+        self.emit_mentions(&content, principal.user_id, topic_id, comment.id)
+            .await;
         Ok(repository_comment_to_node(comment, Vec::new()))
     }
 
@@ -238,6 +240,8 @@ impl CommentService {
             comment.id,
         )
         .await;
+        self.emit_mentions(&content, principal.user_id, parent_topic_id, comment.id)
+            .await;
         Ok(repository_comment_to_node(comment, Vec::new()))
     }
 
@@ -349,6 +353,30 @@ impl CommentService {
             .await
         {
             tracing::warn!(%error, "failed to persist comment created notification");
+        }
+    }
+
+    /// Deliver `@mentions` found in comment content as notifications.
+    /// Best-effort: failures are logged, never block commenting.
+    async fn emit_mentions(&self, content: &str, actor_id: Uuid, topic_id: Uuid, comment_id: Uuid) {
+        let slug = match self.notify_lookup.topic_notify_context(topic_id).await {
+            Ok(Some((_, slug, _))) => slug,
+            _ => return,
+        };
+        let href = format!("/topics/{slug}#comment-{comment_id}");
+        if let Err(error) = self
+            .notifications
+            .send_mentions(
+                content,
+                actor_id,
+                crate::models::NotificationTargetType::Comment,
+                comment_id,
+                &href,
+                "评论",
+            )
+            .await
+        {
+            tracing::warn!(%error, "failed to deliver @mention notifications");
         }
     }
 

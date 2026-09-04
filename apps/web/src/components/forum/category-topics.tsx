@@ -1,7 +1,7 @@
 "use client";
 
 import type { Route } from "next";
-import type { TopicSort } from "@lumiforum/types";
+import type { Category, Paginated, TopicSort, TopicSummary } from "@lumiforum/types";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -21,19 +21,25 @@ export function CategoryTopics({
   slug,
   sort,
   page,
+  initialCategory,
+  initialTopics,
 }: {
   slug: string;
   sort: TopicSort;
   page: number;
+  initialCategory?: Category;
+  initialTopics?: Paginated<TopicSummary>;
 }) {
   const category = useQuery({
     queryKey: forumKeys.category(slug),
     queryFn: () => getCategory(slug),
+    initialData: initialCategory,
   });
   const params = { category: slug, sort, page, page_size: 20 };
   const topics = useQuery({
     queryKey: forumKeys.topics(params),
     queryFn: () => listTopics(params),
+    initialData: initialTopics,
   });
 
   if (category.isPending) return <QueryLoading label="正在加载板块" />;

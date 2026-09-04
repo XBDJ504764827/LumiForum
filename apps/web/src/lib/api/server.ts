@@ -6,6 +6,7 @@ import type {
   TopicDetail,
   TopicListParams,
   TopicSummary,
+  UserPublicSummary,
 } from "@lumiforum/types";
 
 const DEFAULT_REVALIDATE_SECONDS = 60;
@@ -86,6 +87,17 @@ export function fetchTopic(
   return serverApiRequest<TopicDetail>(`/topics/${encodeURIComponent(slug)}`, {
     revalidate: 30,
     tags: ["topics", `topic:${slug}`],
+    ...options,
+  });
+}
+
+export function fetchPublicUser(
+  userId: string,
+  options?: ServerFetchOptions,
+): Promise<UserPublicSummary | null> {
+  return serverApiRequest<UserPublicSummary>(`/users/${encodeURIComponent(userId)}`, {
+    revalidate: 300,
+    tags: ["users", `user:${userId}`],
     ...options,
   });
 }

@@ -162,6 +162,68 @@ impl TopicRepository {
         self.find_by_id(id).await?.ok_or(sqlx::Error::RowNotFound)
     }
 
+    /// Replace a topic's tag set atomically. Tags are upserted (INSERT ... ON
+    /// CONFLICT) so shared tags reuse one row; the join table is rewritten.
+    pub async fn set_topic_tags(&self, topic_id: Uuid, tags: &[String]) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Remove joins that no longer apply, and the tag rows orphaned by them.
+        sqlx::query(
+            r#"
+            DELETE FROM topic_tags tt
+            USING tags t
+            WHERE tt.topic_id = $1 AND tt.tag_id = t.id
+              AND NOT (t.name = ANY($2))
+            "#,
+        )
+        .bind(topic_id)
+        .bind(tags.to_vec())
+        .execute(&mut *tx)
+        .await?;
+
+        for name in tags {
+            sqlx::query(
+                r#"
+                INSERT INTO tags (name) VALUES ($1)
+                ON CONFLICT (name) DO NOTHING
+                "#,
+            )
+            .bind(name)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(
+                r#"
+                INSERT INTO topic_tags (topic_id, tag_id)
+                SELECT $1, id FROM tags WHERE name = $2
+                ON CONFLICT DO NOTHING
+                "#,
+            )
+            .bind(topic_id)
+            .bind(name)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Names of a topic's tags, ordered by name for stable output.
+    pub async fn topic_tags(&self, topic_id: Uuid) -> Result<Vec<String>, sqlx::Error> {
+        sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT t.name
+            FROM tags t
+            JOIN topic_tags tt ON tt.tag_id = t.id
+            WHERE tt.topic_id = $1
+            ORDER BY t.name
+            "#,
+        )
+        .bind(topic_id)
+        .fetch_all(&self.pool)
+        .await
+    }
+
     pub async fn update(
         &self,
         topic_id: Uuid,
@@ -284,6 +346,8 @@ pub fn repository_topic_to_detail(topic: RepositoryTopic) -> Result<TopicDetail,
         liked_by_me: false,
         favorited_by_me: false,
         following_author: false,
+        // Filled by the service layer (needs an extra query for the join).
+        tags: Vec::new(),
     })
 }
 

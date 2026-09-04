@@ -180,6 +180,82 @@ impl NotificationService {
         }
     }
 
+    /// Parse `@username` mentions in content and notify each active account.
+    /// The actor is never notified of their own mention. Content that reaches
+    /// staff (topic author already gets a normal notification) is untouched.
+    pub async fn send_mentions(
+        &self,
+        content: &str,
+        actor_id: Uuid,
+        target_type: NotificationTargetType,
+        target_id: Uuid,
+        href: &str,
+        context_label: &str,
+    ) -> Result<(), NotificationError> {
+        let usernames = extract_mention_usernames(content);
+        if usernames.is_empty() {
+            return Ok(());
+        }
+        let mentions = self
+            .notifications
+            .find_active_user_ids_by_username(&usernames)
+            .await
+            .map_err(internal)?;
+        for (user_id, _username) in mentions {
+            if user_id == actor_id {
+                continue;
+            }
+            // Dedup: one mention per user per target.
+            self.send(NewNotification {
+                user_id,
+                actor_id: Some(actor_id),
+                notification_type: NotificationType::Mentioned,
+                title: "有人提到了你",
+                content: &format!("有人在{context_label}中提到了你"),
+                target_type: Some(target_type),
+                target_id: Some(target_id),
+                metadata: json!({
+                    "href": href,
+                    "dedup_key": format!("mention:{target_id}:{user_id}"),
+                }),
+                dedup_key: Some(&format!("mention:{target_id}:{user_id}")),
+            })
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Inbox notification for a newly delivered private message.
+    /// Best-effort: a duplicate is fine (each message id is unique).
+    pub async fn send_private_message_notification(
+        &self,
+        recipient_id: Uuid,
+        sender_id: Uuid,
+        message_id: Uuid,
+        preview: &str,
+    ) -> Result<(), NotificationError> {
+        if recipient_id == sender_id {
+            return Ok(());
+        }
+        self.send(NewNotification {
+            user_id: recipient_id,
+            actor_id: Some(sender_id),
+            notification_type: NotificationType::SystemMessage,
+            title: "收到新私信",
+            content: preview,
+            target_type: Some(NotificationTargetType::System),
+            target_id: Some(message_id),
+            metadata: json!({
+                "kind": "dm",
+                "message_id": message_id,
+                "href": "/messages",
+                "dedup_key": format!("dm:{message_id}:{recipient_id}"),
+            }),
+            dedup_key: Some(&format!("dm:{message_id}:{recipient_id}")),
+        })
+        .await
+    }
+
     async fn on_topic_liked(&self, event: TopicLikedEvent) -> Result<(), NotificationError> {
         if event.actor_id == event.recipient_id {
             return Ok(());
@@ -459,6 +535,41 @@ fn internal(error: impl Into<anyhow::Error>) -> NotificationError {
     NotificationError::Internal(error.into())
 }
 
+/// Extract case-preserved usernames from `@mention` tokens in markdown
+/// content. Matches the same username grammar as registration
+/// (`^[A-Za-z0-9][A-Za-z0-9_]*$`, 3–32 chars) and avoids emails/URLs by
+/// requiring a word boundary before the `@` — implemented with a hand-rolled
+/// scanner so no regex dependency is needed.
+fn extract_mention_usernames(content: &str) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+    let bytes = content.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        // Find the next '@' preceded by a non-alphanumeric boundary.
+        if bytes[i] == b'@'
+            && (i == 0 || !bytes[i - 1].is_ascii_alphanumeric() && bytes[i - 1] != b'_')
+        {
+            let start = i + 1;
+            let mut j = start;
+            while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
+                j += 1;
+            }
+            let username = &content[start..j];
+            if username.chars().count() >= 3 && username.chars().count() <= 32 {
+                let first = username.as_bytes()[0];
+                if first.is_ascii_alphanumeric() && seen.insert(username.to_lowercase()) {
+                    result.push(username.to_owned());
+                }
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    result
+}
+
 fn is_unique_violation(error: &anyhow::Error) -> bool {
     error
         .chain()
@@ -474,7 +585,7 @@ fn is_unique_violation(error: &anyhow::Error) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::require;
+    use super::{extract_mention_usernames, require};
     use crate::models::{AuthenticatedPrincipal, PERMISSION_NOTIFICATION_READ_SELF, ROLE_USER};
     use uuid::Uuid;
 
@@ -496,5 +607,25 @@ mod tests {
             [PERMISSION_NOTIFICATION_READ_SELF.into()],
         );
         assert!(require(&allowed, PERMISSION_NOTIFICATION_READ_SELF).is_ok());
+    }
+
+    #[test]
+    fn extracts_unique_mentions() {
+        assert_eq!(
+            extract_mention_usernames("嗨 @Alice 和 @bob_02 看这里"),
+            vec!["Alice", "bob_02"]
+        );
+        // Case-insensitive de-duplication.
+        assert_eq!(extract_mention_usernames("@Lumi @lumi @LUMI"), vec!["Lumi"]);
+    }
+
+    #[test]
+    fn ignores_emails_urls_and_short_names() {
+        // Email and URL must not be treated as mentions; <3 chars ignored.
+        assert!(extract_mention_usernames("邮箱 a@b.com 网站 https://x.com/@me").is_empty());
+        assert!(extract_mention_usernames("@ab").is_empty());
+        assert!(extract_mention_usernames("没有@在开头").is_empty());
+        // Username-like token preceded by a letter is not a mention.
+        assert!(extract_mention_usernames("foo@bar_user").is_empty());
     }
 }

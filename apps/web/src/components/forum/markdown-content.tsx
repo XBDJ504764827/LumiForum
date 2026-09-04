@@ -2,6 +2,20 @@ import { cn } from "@lumiforum/ui";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+/** Split plain text into segments, highlighting `@username` mentions. */
+function highlightMentions(text: string): React.ReactNode[] {
+  const parts = text.split(/(@[A-Za-z0-9][A-Za-z0-9_]{2,31})/g);
+  return parts.map((part, index) =>
+    /^@[A-Za-z0-9][A-Za-z0-9_]{2,31}$/.test(part) ? (
+      <span key={index} className="rounded-sm bg-primary/10 px-0.5 font-medium text-primary">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
+
 export function MarkdownContent({ content, className }: { content: string; className?: string }) {
   return (
     <div className={cn("min-w-0 text-[15px] leading-7 text-foreground", className)}>
@@ -9,6 +23,10 @@ export function MarkdownContent({ content, className }: { content: string; class
         remarkPlugins={[remarkGfm]}
         skipHtml
         components={{
+          text: ({ children }) => {
+            const value = typeof children === "string" ? children : String(children ?? "");
+            return <>{highlightMentions(value)}</>;
+          },
           h1: ({ children }) => <h1 className="mb-4 mt-8 text-3xl font-semibold">{children}</h1>,
           h2: ({ children }) => (
             <h2 className="mb-3 mt-8 border-b border-border pb-2 text-2xl font-semibold">

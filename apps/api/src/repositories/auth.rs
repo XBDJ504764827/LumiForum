@@ -45,6 +45,16 @@ impl AuthRepository {
         Self { pool }
     }
 
+    /// Delete refresh tokens that have expired and can never be used again
+    /// (unused ones, and rotated ones whose successor already rolled over).
+    /// Runs as a daily maintenance job so the table cannot grow unbounded.
+    pub async fn cleanup_expired(&self) -> Result<u64, sqlx::Error> {
+        let result = sqlx::query("DELETE FROM refresh_tokens WHERE expires_at < now()")
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected())
+    }
+
     pub async fn touch_last_login(&self, user_id: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE users SET last_login_at = now() WHERE id = $1")
             .bind(user_id)

@@ -74,7 +74,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-surface">
       <div className="mx-auto grid min-h-screen max-w-[1400px] lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="border-b border-border bg-white lg:border-b-0 lg:border-r">
+        <aside className="border-b border-border bg-background lg:border-b-0 lg:border-r">
           <div className="flex h-16 items-center px-5">
             <Brand />
           </div>
@@ -117,7 +117,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         </aside>
 
         <div className="min-w-0">
-          <header className="flex h-16 items-center justify-between gap-4 border-b border-border bg-white px-5 sm:px-8">
+          <header className="flex h-16 items-center justify-between gap-4 border-b border-border bg-background px-5 sm:px-8">
             <div>
               <p className="text-sm text-muted-foreground">管理后台</p>
               <p className="text-sm font-medium">{user?.nickname || user?.username}</p>

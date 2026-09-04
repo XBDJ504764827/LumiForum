@@ -44,6 +44,14 @@ export function getCategory(slug: string): Promise<Category> {
   return apiRequest<Category>(`/categories/${encodeURIComponent(slug)}`);
 }
 
+export async function getPublicUser(userId: string): Promise<UserPublicSummary> {
+  return apiRequest<UserPublicSummary>(
+    `/users/${encodeURIComponent(userId)}`,
+    { headers: await optionalAuthHeaders() },
+    false,
+  );
+}
+
 export function listTopics(params: TopicListParams = {}): Promise<Paginated<TopicSummary>> {
   const query = new URLSearchParams();
   if (params.category) query.set("category", params.category);

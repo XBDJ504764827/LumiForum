@@ -1,6 +1,7 @@
 import { getApiBaseUrl, joinUrl } from "@lumiforum/shared";
 import type {
   AuthResponse,
+  ChangePasswordRequest,
   LoginRequest,
   ProfileUpdateRequest,
   RegisterRequest,
@@ -33,6 +34,14 @@ export function getMe(): Promise<User> {
 
 export function updateProfile(input: ProfileUpdateRequest): Promise<User> {
   return apiRequest<User>("/users/profile", { method: "PATCH", body: JSON.stringify(input) }, true);
+}
+
+export function changePassword(input: ChangePasswordRequest): Promise<User> {
+  return apiRequest<User>(
+    "/users/profile/password",
+    { method: "POST", body: JSON.stringify(input) },
+    true,
+  );
 }
 
 export function steamLoginUrl(): string {

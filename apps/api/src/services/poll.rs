@@ -321,35 +321,31 @@ impl PollService {
             return Err(PollError::Validation("加上已选选项后超出最多可选数量"));
         }
 
-        // Each option is inserted under the poll row lock (serialized votes).
-        let mut total_votes = 0_i64;
-        let mut participants = 0_i64;
-        for option_id in &option_ids {
-            match self
-                .repository
-                .vote(poll_id, *option_id, principal.user_id)
-                .await
-            {
-                Ok(outcome) => {
-                    total_votes = outcome.total_votes;
-                    participants = outcome.participants;
-                }
-                Err(VoteError::AlreadyVoted) => {
+        // All options are inserted under one poll row lock (serialized votes,
+        // atomic commit — a multi-choice vote can never be half-persisted).
+        let outcome = match self
+            .repository
+            .vote_many(poll_id, &option_ids, principal.user_id)
+            .await
+        {
+            Ok(outcome) => outcome,
+            Err(VoteError::AlreadyVoted) => {
+                return Err(PollError::AlreadyVoted);
+            }
+            Err(VoteError::PollNotFound) => return Err(PollError::NotFound),
+            Err(VoteError::OptionNotFound) => {
+                return Err(PollError::Validation("选项不存在或不属于该投票"));
+            }
+            Err(VoteError::Database(error)) => {
+                // Unique constraint backstop: (poll_id, user_id, option_id).
+                if is_unique_violation(&error) {
                     return Err(PollError::AlreadyVoted);
                 }
-                Err(VoteError::PollNotFound) => return Err(PollError::NotFound),
-                Err(VoteError::OptionNotFound) => {
-                    return Err(PollError::Validation("选项不存在或不属于该投票"));
-                }
-                Err(VoteError::Database(error)) => {
-                    // Unique constraint backstop: (poll_id, user_id, option_id).
-                    if is_unique_violation(&error) {
-                        return Err(PollError::AlreadyVoted);
-                    }
-                    return Err(PollError::Internal(error.into()));
-                }
+                return Err(PollError::Internal(error.into()));
             }
-        }
+        };
+        let total_votes = outcome.total_votes;
+        let participants = outcome.participants;
 
         self.after_change(poll_id, poll.topic_id, "vote", total_votes, participants)
             .await;

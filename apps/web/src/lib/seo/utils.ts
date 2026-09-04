@@ -7,7 +7,7 @@ export function plainText(value: string, maxLength = 160): string {
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`[^`]*`/g, " ")
     .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
-    .replace(/\[[^\]]*]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)]\([^)]*\)/g, "$1")
     .replace(/[#>*_~\-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();

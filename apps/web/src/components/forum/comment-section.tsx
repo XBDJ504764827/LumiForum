@@ -470,7 +470,7 @@ function CommentComposer({
           <Alert>{form.formState.errors.root.message}</Alert>
         ) : null}
         {preview ? (
-          <div className="min-h-28 border border-border bg-white px-3 py-2">
+          <div className="min-h-28 border border-border bg-background px-3 py-2">
             {content ? (
               <MarkdownContent content={content} className="text-sm" />
             ) : (

@@ -167,7 +167,7 @@ function ChartCard({
   full?: boolean;
 }) {
   return (
-    <div className={`border border-border bg-white p-4 ${full ? "xl:col-span-2" : ""}`}>
+    <div className={`border border-border bg-background p-4 ${full ? "xl:col-span-2" : ""}`}>
       <h3 className="mb-3 text-sm font-medium">{title}</h3>
       {children}
     </div>

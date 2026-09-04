@@ -220,7 +220,7 @@ export function PollEditor({ existing }: { existing?: Poll }) {
                     onDrop={() => onDrop(index)}
                     onDragEnd={() => setDragIndex(null)}
                     className={cn(
-                      "flex items-center gap-2 rounded-md border border-border bg-white px-2 py-1.5",
+                      "flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5",
                       dragIndex === index ? "opacity-50" : "",
                     )}
                   >

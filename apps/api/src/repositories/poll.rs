@@ -225,13 +225,26 @@ impl PollRepository {
     // Vote (transactional, row-lock serialized)
     // ------------------------------------------------------------------
 
-    /// Vote for a single option.
-    /// Locks the poll row so concurrent votes on the same poll serialize; the
-    /// caller decides semantics (single vs multi) after reading poll state.
+    /// Vote for a single option (single-transaction wrapper for the multi
+    /// variant; keeps existing call sites simple).
     pub async fn vote(
         &self,
         poll_id: Uuid,
         option_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<VoteOutcome, VoteError> {
+        self.vote_many(poll_id, &[option_id], user_id).await
+    }
+
+    /// Vote for several options of one poll in a single transaction.
+    /// Locks the poll row once so concurrent votes on the same poll serialize;
+    /// all option inserts and counter updates commit atomically — a partial
+    /// vote can never persist. The unique constraint on
+    /// (poll_id, user_id, option_id) is the per-option backstop.
+    pub async fn vote_many(
+        &self,
+        poll_id: Uuid,
+        option_ids: &[Uuid],
         user_id: Uuid,
     ) -> Result<VoteOutcome, VoteError> {
         let mut tx = self.pool.begin().await?;
@@ -250,47 +263,52 @@ impl PollRepository {
         .await?
         .ok_or(VoteError::PollNotFound)?;
 
-        let option_belongs = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM poll_options WHERE id = $1 AND poll_id = $2)",
+        // Validate *all* options before inserting any, so a bad option id
+        // cannot leave a partial vote behind.
+        let option_count = sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM poll_options WHERE poll_id = $1 AND id = ANY($2)",
         )
-        .bind(option_id)
         .bind(poll_id)
+        .bind(option_ids)
         .fetch_one(&mut *tx)
         .await?;
-        if !option_belongs {
+        if option_count != option_ids.len() as i64 {
             return Err(VoteError::OptionNotFound);
         }
 
-        let already_voted = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM poll_votes WHERE poll_id = $1 AND user_id = $2 AND option_id = $3)",
-        )
-        .bind(poll_id)
-        .bind(user_id)
-        .bind(option_id)
-        .fetch_one(&mut *tx)
-        .await?;
-        if already_voted {
-            return Err(VoteError::AlreadyVoted);
-        }
-
-        // The unique constraint (poll_id, user_id, option_id) is the backstop;
-        // a violation surfaces as sqlx::Error::Database with code 23505.
-        sqlx::query(
-            r#"
-            INSERT INTO poll_votes (poll_id, option_id, user_id)
-            VALUES ($1, $2, $3)
-            "#,
-        )
-        .bind(poll_id)
-        .bind(option_id)
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query("UPDATE poll_options SET vote_count = vote_count + 1 WHERE id = $1")
+        for option_id in option_ids {
+            let already_voted = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM poll_votes WHERE poll_id = $1 AND user_id = $2 AND option_id = $3)",
+            )
+            .bind(poll_id)
+            .bind(user_id)
             .bind(option_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            if already_voted {
+                return Err(VoteError::AlreadyVoted);
+            }
+        }
+        // Atomically claim all options (check-then-insert kept inside one
+        // transaction; unique constraint remains the final backstop).
+        for option_id in option_ids {
+            sqlx::query(
+                r#"
+                INSERT INTO poll_votes (poll_id, option_id, user_id)
+                VALUES ($1, $2, $3)
+                "#,
+            )
+            .bind(poll_id)
+            .bind(option_id)
+            .bind(user_id)
             .execute(&mut *tx)
             .await?;
+
+            sqlx::query("UPDATE poll_options SET vote_count = vote_count + 1 WHERE id = $1")
+                .bind(option_id)
+                .execute(&mut *tx)
+                .await?;
+        }
 
         let (total_votes, participants) = poll_totals(&mut tx, poll_id).await?;
         tx.commit().await?;

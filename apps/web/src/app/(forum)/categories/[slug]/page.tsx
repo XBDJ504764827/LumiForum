@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import type { TopicSort } from "@lumiforum/types";
 
 import { CategoryTopics } from "@/components/forum/category-topics";
 import { JsonLd } from "@/components/seo/json-ld";
-import { fetchCategory } from "@/lib/api/server";
+import { fetchCategory, fetchTopics } from "@/lib/api/server";
 import { categoryBreadcrumbs, categoryJsonLd } from "@/lib/seo/json-ld";
 import { categoryMetadata, privatePageMetadata } from "@/lib/seo/metadata";
 
@@ -29,14 +30,25 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const slug = decodeURIComponent(raw);
   const sort = validSort(query.sort) ? query.sort : "latest";
   const page = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
-  const category = await fetchCategory(slug);
+  // Server-side fetch (ISR); hydrated into the client query cache via
+  // initialData so the browser does not re-request the same data.
+  const [category, topics] = await Promise.all([
+    fetchCategory(slug),
+    fetchTopics({ category: slug, sort, page, page_size: 20 }),
+  ]);
+  // A missing category must return a real 404 (not a 200 shell).
+  if (!category) notFound();
 
   return (
     <>
-      {category ? (
-        <JsonLd data={[categoryJsonLd(category), categoryBreadcrumbs(category)]} />
-      ) : null}
-      <CategoryTopics slug={slug} sort={sort} page={page} />
+      <JsonLd data={[categoryJsonLd(category), categoryBreadcrumbs(category)]} />
+      <CategoryTopics
+        slug={slug}
+        sort={sort}
+        page={page}
+        initialCategory={category}
+        initialTopics={topics ?? undefined}
+      />
     </>
   );
 }

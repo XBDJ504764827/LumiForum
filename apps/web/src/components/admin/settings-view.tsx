@@ -72,7 +72,7 @@ export function AdminSettingsView() {
       ) : null}
 
       <div className="max-w-2xl space-y-5">
-        <section className="border border-border bg-white p-5">
+        <section className="border border-border bg-background p-5">
           <h2 className="mb-4 font-semibold">论坛信息</h2>
           <div className="space-y-4">
             <div>
@@ -101,7 +101,7 @@ export function AdminSettingsView() {
           </div>
         </section>
 
-        <section className="border border-border bg-white p-5">
+        <section className="border border-border bg-background p-5">
           <h2 className="mb-4 font-semibold">功能开关</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <Toggle
@@ -131,7 +131,7 @@ export function AdminSettingsView() {
           </div>
         </section>
 
-        <section className="border border-border bg-white p-5">
+        <section className="border border-border bg-background p-5">
           <h2 className="mb-4 font-semibold">上传限制</h2>
           <div>
             <Label htmlFor="upload_max_bytes">单文件大小上限（字节）</Label>

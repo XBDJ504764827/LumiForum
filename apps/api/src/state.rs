@@ -8,14 +8,14 @@ use crate::config::Config;
 use crate::realtime::{PresenceService, RealtimeBus, RealtimeHub};
 use crate::repositories::{
     AdminRepository, AuthRepository, AuthorizationRepository, CategoryRepository,
-    CommentRepository, ModerationRepository, NotificationRepository, PollRepository,
-    ReactionRepository, SearchRepository, SteamAuthRepository, TopicRepository, UploadRepository,
-    UserRepository,
+    CommentRepository, ConversationRepository, ModerationRepository, NotificationRepository,
+    PollRepository, ReactionRepository, SearchRepository, SteamAuthRepository, TopicRepository,
+    UploadRepository, UserRepository,
 };
 use crate::services::{
     AdminService, AuthService, AuthServiceConfig, AuthorizationService, CategoryService,
-    CommentService, MetricsRegistry, ModerationService, NotificationService, PollService,
-    ReactionService, SearchService, SteamAuthService, SteamRelayClient, TopicService,
+    CommentService, DmService, MetricsRegistry, ModerationService, NotificationService,
+    PollService, ReactionService, SearchService, SteamAuthService, SteamRelayClient, TopicService,
     UploadService, UserService,
 };
 use crate::storage::{LocalStorage, S3Storage, S3StorageConfig, StorageProvider};
@@ -38,6 +38,7 @@ struct AppStateInner {
     pub polls: PollService,
     pub comments: CommentService,
     pub reactions: ReactionService,
+    pub dm: DmService,
     pub notifications: NotificationService,
     pub search: SearchService,
     pub uploads: UploadService,
@@ -83,7 +84,34 @@ impl AppState {
             )?),
             _ => None,
         };
-        let users = UserService::new(UserRepository::new(db.clone()));
+        let users = UserService::new(
+            UserRepository::new(db.clone()),
+            config.password_hash_concurrency,
+        )?;
+
+        // Daily cleanup of expired refresh tokens: every rotation inserts a
+        // new row, so without this job the table grows without bound.
+        {
+            let auth_repository = AuthRepository::new(db.clone());
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+                interval.tick().await; // first tick completes immediately; skip
+                loop {
+                    interval.tick().await;
+                    match auth_repository.cleanup_expired().await {
+                        Ok(deleted) => {
+                            if deleted > 0 {
+                                tracing::info!(deleted, "expired refresh tokens cleaned");
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "refresh token cleanup failed");
+                        }
+                    }
+                }
+            });
+        }
         let authorization = AuthorizationService::new(
             AuthorizationRepository::new(db.clone()),
             redis.clone(),
@@ -129,6 +157,7 @@ impl AppState {
             moderation.clone(),
             polls.clone(),
             admin_repository.clone(),
+            notifications.clone(),
         );
         let comments = CommentService::new(
             CommentRepository::new(db.clone()),
@@ -143,6 +172,11 @@ impl AppState {
             notifications.clone(),
             notification_repository,
             redis.clone(),
+        );
+        let dm = DmService::new(
+            ConversationRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            notifications.clone(),
         );
         let search = SearchService::new(SearchRepository::new(db.clone()), redis.clone());
         let storage: Arc<dyn StorageProvider> = match config.storage_provider.as_str() {
@@ -229,6 +263,7 @@ impl AppState {
                 polls,
                 comments,
                 reactions,
+                dm,
                 notifications,
                 search,
                 uploads,
@@ -287,6 +322,10 @@ impl AppState {
 
     pub fn reactions(&self) -> &ReactionService {
         &self.inner.reactions
+    }
+
+    pub fn dm(&self) -> &DmService {
+        &self.inner.dm
     }
 
     pub fn notifications(&self) -> &NotificationService {

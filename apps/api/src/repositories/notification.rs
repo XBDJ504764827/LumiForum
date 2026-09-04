@@ -240,6 +240,33 @@ impl NotificationRepository {
         .await
     }
 
+    /// Resolve a list of usernames (case-insensitive) to active user ids.
+    /// Used by @mention delivery; only active accounts can be mentioned.
+    pub async fn find_active_user_ids_by_username(
+        &self,
+        usernames: &[String],
+    ) -> Result<Vec<(Uuid, String)>, sqlx::Error> {
+        if usernames.is_empty() {
+            return Ok(Vec::new());
+        }
+        sqlx::query_as::<_, (Uuid, String)>(
+            r#"
+            SELECT id, username
+            FROM users
+            WHERE lower(username) = ANY($1)
+              AND status = 'active'
+            "#,
+        )
+        .bind(
+            usernames
+                .iter()
+                .map(|name| name.to_lowercase())
+                .collect::<Vec<_>>(),
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
     pub async fn comment_notify_context(
         &self,
         comment_id: Uuid,

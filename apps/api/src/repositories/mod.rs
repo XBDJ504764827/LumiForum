@@ -3,6 +3,7 @@ mod auth;
 mod authorization;
 mod category;
 mod comment;
+mod dm;
 mod moderation;
 mod notification;
 mod poll;
@@ -21,6 +22,7 @@ pub use category::{
     RepositoryCategory,
 };
 pub use comment::{repository_comment_to_node, CommentRepository, NewComment, RepositoryComment};
+pub use dm::{sorted_pair, ConversationRepository, ParticipantContext};
 pub use moderation::{ModCommentRow, ModTopicRow, ModUserRow, ModerationRepository};
 pub use notification::{NewNotification, NotificationListFilter, NotificationRepository};
 pub use poll::{option_item, NewPoll, NewPollOption, PollRepository, PollUpdateError, VoteError};

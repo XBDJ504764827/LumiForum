@@ -132,6 +132,8 @@ pub struct TopicDetail {
     pub liked_by_me: bool,
     pub favorited_by_me: bool,
     pub following_author: bool,
+    /// Normalized lowercase tags (max 5, max 32 chars each).
+    pub tags: Vec<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -156,6 +158,9 @@ pub struct CreateTopicRequest {
     /// Optional poll draft — attached atomically after topic creation.
     #[serde(default)]
     pub poll: Option<CreatePollDraft>,
+    /// Optional tags (normalized by the service; max 5).
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -165,6 +170,9 @@ pub struct UpdateTopicRequest {
     pub content: Option<String>,
     #[serde(default)]
     pub summary: PatchField<String>,
+    /// Optional tag replacement (empty = clear); normalized by the service.
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Default, Deserialize)]

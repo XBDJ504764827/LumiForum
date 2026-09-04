@@ -81,6 +81,7 @@ fn follow_router(state: AppState) -> Router<AppState> {
 
 fn public_lists_router(_state: AppState) -> Router<AppState> {
     Router::new()
+        .route("/users/{user_id}", get(get_public_user))
         .route("/users/{user_id}/followers", get(list_followers))
         .route("/users/{user_id}/following", get(list_following))
 }
@@ -187,6 +188,20 @@ async fn unfollow_user(
 ) -> AppResult<Json<ApiResponse<FollowState>>> {
     let user_id = parse_path(path)?;
     let result = state.reactions().unfollow_user(&principal, user_id).await?;
+    Ok(Json(ApiResponse::new(result)))
+}
+
+async fn get_public_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    path: Result<axum::extract::Path<Uuid>, PathRejection>,
+) -> AppResult<Json<ApiResponse<UserPublicSummary>>> {
+    let user_id = parse_path(path)?;
+    let viewer_id = optional_viewer(&state, &headers).await;
+    let result = state
+        .reactions()
+        .get_public_user(user_id, viewer_id)
+        .await?;
     Ok(Json(ApiResponse::new(result)))
 }
 

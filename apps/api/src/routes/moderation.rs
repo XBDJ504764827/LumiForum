@@ -129,6 +129,13 @@ pub fn admin_router(state: AppState) -> Router<AppState> {
 pub fn metrics_router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/metrics", get(metrics_text))
+        .route_layer(middleware::from_fn_with_state(
+            AuthorizationLayer::new(
+                state.clone(),
+                crate::models::PERMISSION_MODERATION_METRICS_READ,
+            ),
+            require_permission,
+        ))
         .with_state(state)
 }
 

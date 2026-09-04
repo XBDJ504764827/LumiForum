@@ -165,7 +165,7 @@ function MetricGroup({ title, children }: { title: string; children: React.React
 
 function MetricCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="border border-border bg-white px-4 py-4">
+    <div className="border border-border bg-background px-4 py-4">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
     </div>
@@ -174,7 +174,7 @@ function MetricCard({ label, value }: { label: string; value: string | number })
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="border border-border bg-white p-4">
+    <div className="border border-border bg-background p-4">
       <h3 className="mb-3 text-sm font-medium">{title}</h3>
       {children}
     </div>
