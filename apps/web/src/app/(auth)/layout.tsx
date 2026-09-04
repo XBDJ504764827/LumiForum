@@ -5,8 +5,8 @@ import { GuestOnly } from "@/components/auth/route-guards";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-surface">
-      <header className="border-b border-border bg-white">
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-16 max-w-6xl items-center px-5 sm:px-8">
           <Brand />
         </div>

@@ -43,10 +43,23 @@ impl UserRepository {
     }
 
     pub async fn find_by_id(&self, user_id: Uuid) -> Result<Option<RepositoryUser>, sqlx::Error> {
-        sqlx::query_as::<_, RepositoryUser>(USER_WITH_ROLE_QUERY)
+        sqlx::query_as::<_, RepositoryUser>(&user_with_role_query("WHERE users.id = $1"))
             .bind(user_id)
             .fetch_optional(&self.pool)
             .await
+    }
+
+    /// Case-insensitive username lookup used by private-message addressing.
+    pub async fn find_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<RepositoryUser>, sqlx::Error> {
+        sqlx::query_as::<_, RepositoryUser>(&user_with_role_query(
+            "WHERE lower(users.username) = lower($1)",
+        ))
+        .bind(username)
+        .fetch_optional(&self.pool)
+        .await
     }
 
     pub async fn update_profile(
@@ -177,7 +190,7 @@ pub fn repository_user_to_response(user: RepositoryUser) -> Result<UserResponse,
     })
 }
 
-const USER_WITH_ROLE_QUERY: &str = r#"
+const USER_WITH_ROLE_SELECT: &str = r#"
     SELECT
         users.id,
         users.username,
@@ -203,5 +216,8 @@ const USER_WITH_ROLE_QUERY: &str = r#"
         users.updated_at
     FROM users
     JOIN roles ON roles.id = users.role_id
-    WHERE users.id = $1
 "#;
+
+fn user_with_role_query(filter: &str) -> String {
+    format!("{USER_WITH_ROLE_SELECT} {filter}")
+}

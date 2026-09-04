@@ -29,7 +29,7 @@ export function AdminToolbar({ children }: { children: ReactNode }) {
 
 export function AdminTable({ headers, children }: { headers: string[]; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto border border-border bg-white">
+    <div className="overflow-x-auto border border-border bg-background">
       <table className="min-w-full text-left text-sm">
         <thead className="border-b border-border bg-surface text-muted-foreground">
           <tr>

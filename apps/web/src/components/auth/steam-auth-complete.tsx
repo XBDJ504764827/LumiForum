@@ -55,7 +55,7 @@ export function SteamAuthComplete() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface px-5 py-10">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-white p-8 text-center">
+      <div className="w-full max-w-sm rounded-lg border border-border bg-background p-8 text-center">
         <h1 className="text-2xl font-semibold">Steam 认证</h1>
         {error ? (
           <div className="mt-6 space-y-5">

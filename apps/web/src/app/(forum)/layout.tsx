@@ -7,7 +7,7 @@ import { getSiteName, getSiteUrl } from "@/lib/seo/site";
 export default function ForumLayout({ children }: { children: ReactNode }) {
   const siteName = getSiteName();
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-background">
       <ForumHeader />
       <SessionExpiredBanner />
       <div className="flex-1">{children}</div>

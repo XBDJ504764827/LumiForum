@@ -484,7 +484,7 @@ function RulesTab() {
   return (
     <div>
       {error ? <p className="mb-3 text-sm text-destructive">{error}</p> : null}
-      <div className="mb-5 rounded-md border border-border bg-white p-4">
+      <div className="mb-5 rounded-md border border-border bg-background p-4">
         <h3 className="mb-3 text-sm font-semibold">添加敏感词规则</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <Input
@@ -661,7 +661,7 @@ function RuleEditRow({
   });
 
   return (
-    <div className="rounded-md border border-border bg-white p-4">
+    <div className="rounded-md border border-border bg-background p-4">
       <h4 className="mb-3 text-sm font-semibold">编辑规则「{rule.name}」</h4>
       <div className="grid gap-3 sm:grid-cols-2">
         <Input

@@ -182,7 +182,7 @@ export function PollCard({ poll }: { poll: Poll }) {
                 showResults
                   ? "cursor-default border-border"
                   : "cursor-pointer hover:border-primary/50",
-                voted ? "border-primary/60 bg-primary/5" : "border-border bg-white",
+                voted ? "border-primary/60 bg-primary/5" : "border-border bg-background",
                 picked && !showResults ? "border-primary bg-primary/10" : "",
               )}
             >

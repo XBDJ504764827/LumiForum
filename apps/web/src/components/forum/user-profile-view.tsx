@@ -3,13 +3,15 @@
 import type { Paginated, TopicSummary, UserPublicSummary } from "@lumiforum/types";
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button } from "@lumiforum/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, UserMinus, UserPlus } from "lucide-react";
+import { CalendarDays, Mail, UserMinus, UserPlus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
 import { TopicList } from "@/components/forum/topic-list";
+import { startConversation } from "@/lib/api/dm";
 import { followUser, forumKeys, getPublicUser, listTopics, unfollowUser } from "@/lib/api/forum";
 import { errorMessage } from "@/lib/api/errors";
 
@@ -23,6 +25,7 @@ export function UserProfileView({
   initialTopics?: Paginated<TopicSummary>;
 }) {
   const { status, user } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const profile = useQuery({
     queryKey: ["forum", "user", userId],
@@ -58,6 +61,7 @@ export function UserProfileView({
       );
     },
   });
+  const [dmStarting, setDmStarting] = useState(false);
 
   if (profile.isPending) return <QueryLoading label="正在加载用户" />;
   if (profile.isError || !profile.data) {
@@ -74,6 +78,18 @@ export function UserProfileView({
 
   const data = profile.data;
   const canFollow = status === "authenticated" && Boolean(user && user.id !== data.id);
+
+  const startDm = async () => {
+    setDmStarting(true);
+    try {
+      const conversation = await startConversation(data.username);
+      router.push(`/messages?c=${conversation.id}` as never);
+    } catch {
+      // 不可达（对方不存在/被禁用/给自己）时静默返回，不打断浏览。
+    } finally {
+      setDmStarting(false);
+    }
+  };
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8">
@@ -100,20 +116,32 @@ export function UserProfileView({
           </p>
         </div>
         {canFollow ? (
-          <Button
-            type="button"
-            variant={data.is_following ? "outline" : "default"}
-            className="gap-2"
-            disabled={toggleFollow.isPending}
-            onClick={() => toggleFollow.mutate(data)}
-          >
-            {data.is_following ? (
-              <UserMinus className="size-4" aria-hidden="true" />
-            ) : (
-              <UserPlus className="size-4" aria-hidden="true" />
-            )}
-            {data.is_following ? "取消关注" : "关注"}
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={dmStarting}
+              onClick={() => void startDm()}
+            >
+              <Mail className="size-4" aria-hidden="true" />
+              发私信
+            </Button>
+            <Button
+              type="button"
+              variant={data.is_following ? "outline" : "default"}
+              className="gap-2"
+              disabled={toggleFollow.isPending}
+              onClick={() => toggleFollow.mutate(data)}
+            >
+              {data.is_following ? (
+                <UserMinus className="size-4" aria-hidden="true" />
+              ) : (
+                <UserPlus className="size-4" aria-hidden="true" />
+              )}
+              {data.is_following ? "取消关注" : "关注"}
+            </Button>
+          </div>
         ) : null}
       </section>
 

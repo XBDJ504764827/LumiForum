@@ -3,7 +3,19 @@
 import type { Route } from "next";
 import { isAdminRole } from "@lumiforum/shared";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, Bookmark, LogIn, Menu, PenLine, Search, UserRound, X } from "lucide-react";
+import {
+  Bell,
+  Bookmark,
+  LogIn,
+  Mail,
+  Menu,
+  Moon,
+  PenLine,
+  Search,
+  Sun,
+  UserRound,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -11,6 +23,7 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Brand } from "@/components/brand";
 import { useRealtime } from "@/components/realtime/realtime-provider";
+import { useTheme } from "@/components/theme-provider";
 import { getUnreadCount, notificationKeys } from "@/lib/api/notifications";
 import { saveRecentSearch } from "@/lib/api/search";
 
@@ -18,6 +31,7 @@ export function ForumHeader() {
   const router = useRouter();
   const { status, user } = useAuth();
   const realtime = useRealtime();
+  const { theme, toggle } = useTheme();
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const unread = useQuery({
@@ -43,7 +57,7 @@ export function ForumHeader() {
   const closeMenu = () => setMenuOpen(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-5 sm:gap-6 sm:px-8">
         <Brand />
         <button
@@ -97,12 +111,25 @@ export function ForumHeader() {
               value={q}
               onChange={(event) => setQ(event.target.value)}
               placeholder="搜索帖子 / 用户"
-              className="h-9 w-full rounded-md border border-border bg-white pl-9 pr-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
             />
           </label>
         </form>
 
         <div className="flex min-w-28 items-center justify-end gap-2 lg:ml-0">
+          <button
+            type="button"
+            onClick={toggle}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-muted"
+            aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+            title={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+          >
+            {theme === "dark" ? (
+              <Sun className="size-4" aria-hidden="true" />
+            ) : (
+              <Moon className="size-4" aria-hidden="true" />
+            )}
+          </button>
           <Link
             href="/search"
             className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted lg:hidden"
@@ -133,6 +160,13 @@ export function ForumHeader() {
                     ? "连接中"
                     : "离线"}
               </span>
+              <Link
+                href="/messages"
+                className="relative inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted"
+                aria-label="私信"
+              >
+                <Mail className="size-4" aria-hidden="true" />
+              </Link>
               <Link
                 href="/notifications"
                 className="relative inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted"
@@ -186,7 +220,7 @@ export function ForumHeader() {
 
       {menuOpen ? (
         <nav
-          className="border-t border-border bg-white px-5 py-3 md:hidden"
+          className="border-t border-border bg-background px-5 py-3 md:hidden"
           aria-label="移动端导航"
         >
           <ul className="space-y-1 text-sm">
@@ -217,6 +251,15 @@ export function ForumHeader() {
                     className="block rounded-md px-3 py-2 font-medium hover:bg-muted"
                   >
                     收藏
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/messages"
+                    onClick={closeMenu}
+                    className="block rounded-md px-3 py-2 font-medium hover:bg-muted"
+                  >
+                    私信
                   </Link>
                 </li>
                 <li>

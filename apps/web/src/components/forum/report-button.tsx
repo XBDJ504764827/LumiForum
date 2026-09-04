@@ -72,7 +72,7 @@ export function ReportButton({
   }
 
   return (
-    <div className="rounded-md border border-border bg-white p-3 shadow-sm">
+    <div className="rounded-md border border-border bg-background p-3 shadow-sm">
       <p className="mb-2 text-xs font-medium">举报该{targetLabel(targetType)}</p>
       <Select
         value={reason}

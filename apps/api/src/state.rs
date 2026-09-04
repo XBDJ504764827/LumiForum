@@ -8,14 +8,14 @@ use crate::config::Config;
 use crate::realtime::{PresenceService, RealtimeBus, RealtimeHub};
 use crate::repositories::{
     AdminRepository, AuthRepository, AuthorizationRepository, CategoryRepository,
-    CommentRepository, ModerationRepository, NotificationRepository, PollRepository,
-    ReactionRepository, SearchRepository, SteamAuthRepository, TopicRepository, UploadRepository,
-    UserRepository,
+    CommentRepository, ConversationRepository, ModerationRepository, NotificationRepository,
+    PollRepository, ReactionRepository, SearchRepository, SteamAuthRepository, TopicRepository,
+    UploadRepository, UserRepository,
 };
 use crate::services::{
     AdminService, AuthService, AuthServiceConfig, AuthorizationService, CategoryService,
-    CommentService, MetricsRegistry, ModerationService, NotificationService, PollService,
-    ReactionService, SearchService, SteamAuthService, SteamRelayClient, TopicService,
+    CommentService, DmService, MetricsRegistry, ModerationService, NotificationService,
+    PollService, ReactionService, SearchService, SteamAuthService, SteamRelayClient, TopicService,
     UploadService, UserService,
 };
 use crate::storage::{LocalStorage, S3Storage, S3StorageConfig, StorageProvider};
@@ -38,6 +38,7 @@ struct AppStateInner {
     pub polls: PollService,
     pub comments: CommentService,
     pub reactions: ReactionService,
+    pub dm: DmService,
     pub notifications: NotificationService,
     pub search: SearchService,
     pub uploads: UploadService,
@@ -156,6 +157,7 @@ impl AppState {
             moderation.clone(),
             polls.clone(),
             admin_repository.clone(),
+            notifications.clone(),
         );
         let comments = CommentService::new(
             CommentRepository::new(db.clone()),
@@ -170,6 +172,11 @@ impl AppState {
             notifications.clone(),
             notification_repository,
             redis.clone(),
+        );
+        let dm = DmService::new(
+            ConversationRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            notifications.clone(),
         );
         let search = SearchService::new(SearchRepository::new(db.clone()), redis.clone());
         let storage: Arc<dyn StorageProvider> = match config.storage_provider.as_str() {
@@ -256,6 +263,7 @@ impl AppState {
                 polls,
                 comments,
                 reactions,
+                dm,
                 notifications,
                 search,
                 uploads,
@@ -314,6 +322,10 @@ impl AppState {
 
     pub fn reactions(&self) -> &ReactionService {
         &self.inner.reactions
+    }
+
+    pub fn dm(&self) -> &DmService {
+        &self.inner.dm
     }
 
     pub fn notifications(&self) -> &NotificationService {

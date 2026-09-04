@@ -113,7 +113,7 @@ export function AdminRolesView() {
         {grouped.map(([group, items]) => {
           if (!items) return null;
           return (
-            <section key={group} className="border border-border bg-white p-4">
+            <section key={group} className="border border-border bg-background p-4">
               <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 {group}
               </h3>

@@ -307,6 +307,8 @@ export interface TopicDetail extends TopicSummary {
   /** published | pending_review | hidden */
   status: "published" | "pending_review" | "hidden";
   liked_by_me: boolean;
+  /** Normalized lowercase tags (max 5). */
+  tags: string[];
   favorited_by_me: boolean;
   following_author: boolean;
 }
@@ -342,6 +344,8 @@ export interface CreateTopicRequest {
   /** Post anonymously (only in categories with allow_anonymous). */
   anonymous?: boolean;
   poll?: CreatePollDraft;
+  /** Optional tags (max 5, normalized server-side). */
+  tags?: string[];
 }
 
 export interface UpdateTopicRequest {
@@ -349,6 +353,8 @@ export interface UpdateTopicRequest {
   title?: string;
   content?: string;
   summary?: string | null;
+  /** Explicit tag replacement (empty array clears). */
+  tags?: string[];
 }
 
 export interface CommentStats {
@@ -1107,4 +1113,50 @@ export interface RuleRequest {
   risk_score?: number;
   enabled?: boolean;
   config: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Private messages (DM)
+// ---------------------------------------------------------------------------
+
+export interface ConversationUser {
+  id: string;
+  username: string;
+  nickname: string | null;
+  avatar: string | null;
+  role: RoleSummary;
+}
+
+export interface ConversationSummary {
+  id: string;
+  other_user: ConversationUser;
+  unread_count: number;
+  last_message_at: string;
+  last_message_preview: string | null;
+}
+
+export interface ConversationDetail {
+  id: string;
+  other_user: ConversationUser;
+  unread_count: number;
+  created_at: string;
+}
+
+export interface DmMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  /** Empty when the message was deleted by its sender. */
+  content: string;
+  is_deleted: boolean;
+  created_at: string;
+  edited_at: string | null;
+}
+
+export interface SendMessageRequest {
+  content: string;
+}
+
+export interface StartConversationRequest {
+  username: string;
 }

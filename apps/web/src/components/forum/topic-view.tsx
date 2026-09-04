@@ -119,6 +119,18 @@ export function TopicView({ slug, initialTopic }: { slug: string; initialTopic?:
             {data.title}
           </h1>
 
+          {data.tags?.length ? (
+            <ul className="mt-4 flex flex-wrap gap-2" aria-label="话题标签">
+              {data.tags.map((tag) => (
+                <li key={tag}>
+                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                    #{tag}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
           <div className="mt-6 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
             <div className="flex items-center gap-3">
               {data.author_anonymous ? (

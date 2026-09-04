@@ -5,11 +5,11 @@ import type { CreateTopicRequest, TopicDetail, UpdateTopicRequest } from "@lumif
 import { isElevatedRole } from "@lumiforum/shared";
 import { Alert, Button, Input, Label, Select, Textarea } from "@lumiforum/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleAlert, Eye, FilePenLine, PenLine, Send } from "lucide-react";
+import { CircleAlert, CloudUpload, Eye, FilePenLine, PenLine, Send } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -25,6 +25,7 @@ import { ATTACHMENT_ACCEPT, IMAGE_ACCEPT } from "@/components/uploads/accept";
 import { FileUpload } from "@/components/uploads/file-upload";
 import { errorMessage } from "@/lib/api/errors";
 import { createTopic, forumKeys, listCategories, updateTopic } from "@/lib/api/forum";
+import { clearDraft, draftIsEmpty, draftKey, loadDraft, saveDraft } from "@/lib/forum/draft";
 import { createPoll, getTopicPoll, pollKeys, updatePoll } from "@/lib/api/polls";
 import { topicEditorSchema, type TopicEditorValues } from "@/lib/forum/schemas";
 
@@ -46,13 +47,51 @@ export function TopicEditor(props: Props) {
     staleTime: 30_000,
     retry: false,
   });
-  const form = useForm<TopicEditorValues>({
-    resolver: zodResolver(topicEditorSchema),
-    defaultValues: {
+  // ---------------------------------------------------------------------
+  // Draft (create mode only): restore a previously auto-saved draft; save
+  // as the user types (debounced); clear on successful publish.
+  // ---------------------------------------------------------------------
+  const isCreate = props.mode === "create";
+  const draftKeyValue = draftKey(user?.id);
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  // Load the draft once (lazy initialiser runs before the first render of
+  // the form) and use it as the initial values for create mode.
+  const [formDefaults] = useState<TopicEditorValues>(() => {
+    if (isCreate && user) {
+      const draft = loadDraft(draftKeyValue);
+      if (draft && !draftIsEmpty(draft)) {
+        return {
+          categoryId: draft.categoryId,
+          title: draft.title,
+          content: draft.content,
+          summary: draft.summary,
+          tags: "",
+          anonymous: draft.anonymous,
+          poll: {
+            enabled: draft.poll.enabled,
+            title: draft.poll.title,
+            description: draft.poll.description,
+            multiple_choice: draft.poll.multiple_choice,
+            anonymous: draft.poll.anonymous,
+            allow_cancel: true,
+            max_choices: draft.poll.max_choices || 2,
+            options:
+              draft.poll.options.length > 0
+                ? draft.poll.options
+                : [{ value: "" }, { value: "" }],
+          },
+        };
+      }
+    }
+    return {
       categoryId: props.topic?.category.id ?? "",
       title: props.topic?.title ?? "",
       content: props.topic?.content ?? "",
       summary: props.topic?.summary ?? "",
+      // TopicDetail.tags may be undefined on older cached responses.
+      tags: (props.topic?.tags ?? []).join(" "),
+      anonymous: false,
       poll: {
         enabled: false,
         title: "",
@@ -63,10 +102,16 @@ export function TopicEditor(props: Props) {
         max_choices: 2,
         options: [{ value: "" }, { value: "" }],
       },
-    },
+    };
+  });
+
+  const form = useForm<TopicEditorValues>({
+    resolver: zodResolver(topicEditorSchema),
+    defaultValues: formDefaults,
   });
   const mutation = useMutation({
     mutationFn: async (values: TopicEditorValues) => {
+      const tags = parseTags(values.tags);
       if (props.mode === "create") {
         const input: CreateTopicRequest = {
           category_id: values.categoryId,
@@ -75,6 +120,7 @@ export function TopicEditor(props: Props) {
           summary: values.summary || undefined,
           anonymous: values.anonymous && canAnonymous ? true : undefined,
           poll: pollDraftFromValues(values.poll),
+          tags,
         };
         return createTopic(input);
       }
@@ -83,6 +129,7 @@ export function TopicEditor(props: Props) {
         title: values.title,
         content: values.content,
         summary: values.summary || null,
+        tags,
       };
       const topic = await updateTopic(props.topic.id, input);
       // Poll changes: patch the existing poll, or attach a new one when the
@@ -99,6 +146,9 @@ export function TopicEditor(props: Props) {
       return topic;
     },
     onSuccess: async (topic) => {
+      if (isCreate) {
+        clearDraft(draftKeyValue);
+      }
       queryClient.setQueryData(forumKeys.topic(topic.slug), topic);
       await queryClient.invalidateQueries({ queryKey: ["forum", "topics"] });
       await queryClient.invalidateQueries({ queryKey: forumKeys.categories });
@@ -120,6 +170,32 @@ export function TopicEditor(props: Props) {
   const contentField = form.register("content");
   const selectedCategory = (categories.data ?? []).find((category) => category.id === categoryId);
   const canAnonymous = Boolean(selectedCategory?.allow_anonymous);
+
+  // Debounced auto-save of the draft (create mode only). Runs on every value
+  // change; a 1s timer avoids writing on every keystroke.
+  useEffect(() => {
+    if (!isCreate) return;
+    const timer = setTimeout(() => {
+      const values = form.getValues();
+      saveDraft(draftKeyValue, {
+        categoryId: values.categoryId,
+        title: values.title,
+        content: values.content,
+        summary: values.summary,
+        anonymous: values.anonymous ?? false,
+        poll: {
+          enabled: values.poll.enabled,
+          title: values.poll.title,
+          description: values.poll.description,
+          multiple_choice: values.poll.multiple_choice,
+          anonymous: values.poll.anonymous,
+          max_choices: values.poll.max_choices || 2,
+          options: values.poll.options,
+        },
+      });
+    }, 1_000);
+    return () => clearTimeout(timer);
+  }, [form, isCreate, content, categoryId, draftKeyValue]);
 
   const insertImage = (url: string, originalFilename: string) => {
     const current = form.getValues("content");
@@ -187,6 +263,41 @@ export function TopicEditor(props: Props) {
         ) : null}
       </div>
 
+      {isCreate && !draftRestored && !form.formState.isDirty ? (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <span className="inline-flex items-center gap-2">
+            <CloudUpload className="size-4 text-primary" aria-hidden="true" />
+            检测到未发布的草稿，已恢复上次的内容。
+          </span>
+          <button
+            type="button"
+            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            onClick={() => {
+              clearDraft(draftKeyValue);
+              setDraftRestored(true);
+              form.reset({
+                categoryId: "",
+                title: "",
+                content: "",
+                summary: "",
+                poll: {
+                  enabled: false,
+                  title: "",
+                  description: "",
+                  multiple_choice: false,
+                  anonymous: false,
+                  allow_cancel: true,
+                  max_choices: 2,
+                  options: [{ value: "" }, { value: "" }],
+                },
+              });
+            }}
+          >
+            放弃草稿
+          </button>
+        </div>
+      ) : null}
+
       <FormProvider {...form}>
         <form onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
           <FieldErrorSummary form={form} />
@@ -209,6 +320,19 @@ export function TopicEditor(props: Props) {
                   autoFocus
                   aria-invalid={Boolean(form.formState.errors.title)}
                   {...form.register("title")}
+                />
+              </Field>
+
+              <Field
+                label="标签"
+                error={form.formState.errors.tags?.message}
+                htmlFor="topic-tags"
+              >
+                <Input
+                  id="topic-tags"
+                  placeholder="cs2 攻略 赛事（空格分隔，最多 5 个）"
+                  aria-invalid={Boolean(form.formState.errors.tags)}
+                  {...form.register("tags")}
                 />
               </Field>
 
@@ -245,7 +369,7 @@ export function TopicEditor(props: Props) {
                     }}
                   />
                 ) : (
-                  <div className="min-h-[420px] border border-border bg-white px-5 py-2">
+                  <div className="min-h-[420px] border border-border bg-background px-5 py-2">
                     {content ? (
                       <MarkdownContent content={content} />
                     ) : (
@@ -327,7 +451,7 @@ export function TopicEditor(props: Props) {
               </Field>
 
               {props.mode === "create" && canAnonymous ? (
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-white px-3 py-3 text-sm">
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-background px-3 py-3 text-sm">
                   <input
                     type="checkbox"
                     className="mt-0.5 size-4 accent-primary"
@@ -442,4 +566,22 @@ function FieldErrorSummary({ form }: { form: ReturnType<typeof useForm<TopicEdit
       </div>
     </Alert>
   );
+}
+
+/** Parse a space/comma separated tag string into a normalized tag array
+ * (lowercase, deduped, max 5 tags of ≤32 chars). */
+function parseTags(raw: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const part of raw.split(/[\s,]+/)) {
+    const name = part.trim().toLowerCase();
+    if (!name || name.length > 32) continue;
+    if (!/^[a-z0-9][a-z0-9_-]*$/.test(name)) continue;
+    if (!seen.has(name)) {
+      seen.add(name);
+      result.push(name);
+      if (result.length >= 5) break;
+    }
+  }
+  return result;
 }

@@ -2,6 +2,7 @@ mod admin;
 pub mod auth;
 mod categories;
 mod comments;
+mod dm;
 mod health;
 mod moderation;
 mod notifications;
@@ -47,6 +48,7 @@ pub fn create_router(state: AppState) -> Router {
         .merge(comments::router(state.clone()))
         .merge(reactions::router(state.clone()))
         .merge(notifications::router(state.clone()))
+        .merge(dm::router(state.clone()))
         .merge(polls::public_router(state.clone()))
         .merge(search::router())
         .merge(settings::router())

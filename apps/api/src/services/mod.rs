@@ -3,6 +3,7 @@ mod auth;
 mod authorization;
 mod category;
 mod comment;
+mod dm;
 mod metrics;
 mod moderation;
 mod notification;
@@ -23,6 +24,7 @@ pub use auth::{AuthError, AuthService, AuthServiceConfig, IssuedSession, Refresh
 pub use authorization::{AuthorizationError, AuthorizationService};
 pub use category::{CategoryError, CategoryService};
 pub use comment::{CommentError, CommentService};
+pub use dm::{DmError, DmService};
 pub use metrics::MetricsRegistry;
 pub use moderation::{
     BatchResult, BatchResultItem, ModerationError, ModerationService, ScreeningDecision,

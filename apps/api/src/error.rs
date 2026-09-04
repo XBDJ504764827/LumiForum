@@ -7,8 +7,9 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::services::{
-    AdminError, AuthError, AuthorizationError, CategoryError, CommentError, ModerationError,
-    NotificationError, PollError, ReactionError, SearchError, TopicError, UploadError, UserError,
+    AdminError, AuthError, AuthorizationError, CategoryError, CommentError, DmError,
+    ModerationError, NotificationError, PollError, ReactionError, SearchError, TopicError,
+    UploadError, UserError,
 };
 
 #[derive(Debug, Error)]
@@ -354,6 +355,19 @@ impl From<UploadError> for AppError {
             UploadError::Forbidden => Self::Forbidden,
             UploadError::StorageUnavailable => Self::StorageUnavailable,
             UploadError::Internal(error) => Self::Internal(error),
+        }
+    }
+}
+
+impl From<DmError> for AppError {
+    fn from(error: DmError) -> Self {
+        match error {
+            DmError::Validation(message) => Self::Validation(message),
+            DmError::NotFound => Self::NotFound,
+            DmError::RecipientUnavailable => Self::Validation("对方不存在或账号不可用"),
+            DmError::SelfMessage => Self::Validation("不能给自己发私信"),
+            DmError::Forbidden => Self::Forbidden,
+            DmError::Internal(error) => Self::Internal(error),
         }
     }
 }

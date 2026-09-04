@@ -97,7 +97,7 @@ export function AdminUserDetailView({ userId }: { userId: string }) {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <section className="border border-border bg-white p-5">
+        <section className="border border-border bg-background p-5">
           <h2 className="mb-4 font-semibold">基本信息</h2>
           <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-2.5 text-sm">
             <dt className="text-muted-foreground">用户 ID</dt>
@@ -121,7 +121,7 @@ export function AdminUserDetailView({ userId }: { userId: string }) {
           </dl>
         </section>
 
-        <section className="border border-border bg-white p-5">
+        <section className="border border-border bg-background p-5">
           <h2 className="mb-4 font-semibold">内容统计</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Stat label="登录次数" value={detail.data.login_count} />
@@ -151,7 +151,7 @@ export function AdminUserDetailView({ userId }: { userId: string }) {
           </div>
         </section>
 
-        <section className="border border-border bg-white p-5 xl:col-span-2">
+        <section className="border border-border bg-background p-5 xl:col-span-2">
           <h2 className="mb-4 font-semibold">最近登录记录</h2>
           {detail.data.recent_logins.length === 0 ? (
             <p className="text-sm text-muted-foreground">暂无登录记录</p>

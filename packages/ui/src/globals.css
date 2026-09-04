@@ -13,3 +13,19 @@
   --lf-surface: 210 20% 98%;
   --lf-accent: 35 92% 55%;
 }
+
+/* Dark theme — toggled by the ThemeProvider adding the `dark` class to <html>. */
+.dark {
+  --lf-background: 240 10% 8%;
+  --lf-foreground: 0 0% 98%;
+  --lf-muted: 240 5% 18%;
+  --lf-muted-foreground: 240 5% 65%;
+  --lf-border: 240 5% 22%;
+  --lf-ring: 158 64% 45%;
+  --lf-primary: 158 60% 45%;
+  --lf-primary-foreground: 240 10% 8%;
+  --lf-destructive: 0 72% 55%;
+  --lf-destructive-foreground: 0 0% 100%;
+  --lf-surface: 240 8% 12%;
+  --lf-accent: 35 92% 60%;
+}
