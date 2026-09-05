@@ -30,11 +30,13 @@ export function AdminToolbar({ children }: { children: ReactNode }) {
 export function AdminTable({ headers, children }: { headers: string[]; children: ReactNode }) {
   return (
     <div className="overflow-x-auto border border-border bg-background">
-      <table className="min-w-full text-left text-sm">
+      {/* min-w keeps narrow viewports scrolling horizontally instead of
+          squeezing 6-8 columns into an unreadable sliver. */}
+      <table className="min-w-full w-max min-w-3xl text-left text-sm">
         <thead className="border-b border-border bg-surface text-muted-foreground">
           <tr>
             {headers.map((header) => (
-              <th key={header} className="px-3 py-2.5 font-medium">
+              <th key={header} className="px-3 py-2.5 font-medium whitespace-nowrap">
                 {header}
               </th>
             ))}
@@ -57,10 +59,10 @@ export function AdminPagination({
 }) {
   if (totalPages <= 1) return null;
   return (
-    <div className="mt-4 flex items-center justify-end gap-2 text-sm">
+    <div className="mt-4 flex items-center justify-center gap-2 text-sm sm:justify-end">
       <button
         type="button"
-        className="rounded-md border border-border px-3 py-1.5 disabled:opacity-50"
+        className="rounded-md border border-border px-3 py-2 disabled:opacity-50"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
       >
@@ -71,7 +73,7 @@ export function AdminPagination({
       </span>
       <button
         type="button"
-        className="rounded-md border border-border px-3 py-1.5 disabled:opacity-50"
+        className="rounded-md border border-border px-3 py-2 disabled:opacity-50"
         disabled={page >= totalPages}
         onClick={() => onPageChange(page + 1)}
       >

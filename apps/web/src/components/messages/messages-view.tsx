@@ -74,9 +74,9 @@ export function MessagesView() {
       ) : conversations.isError ? (
         <QueryError message={errorMessage(conversations.error)} />
       ) : (
-        <div className="grid min-h-[60vh] overflow-hidden rounded-lg border border-border lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="grid min-h-[60vh] overflow-hidden rounded-lg border border-border lg:grid-cols-[280px_minmax(0,1fr)] max-lg:h-[calc(100dvh-11rem)]">
           <ul
-            className={`divide-y divide-border border-border lg:border-r ${
+            className={`divide-y divide-border overflow-y-auto border-border lg:border-r ${
               mobileThreadOpen ? "hidden lg:block" : "block"
             }`}
           >
@@ -244,7 +244,7 @@ function MessageThread(props: {
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted lg:hidden"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md hover:bg-muted lg:hidden lg:h-8 lg:w-8"
           aria-label="返回会话列表"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />

@@ -77,9 +77,11 @@ export function MarkdownContent({ content, className }: { content: string; class
           ),
           hr: () => <hr className="my-8 border-border" />,
           table: ({ children }) => (
-            <table className="my-5 block w-full overflow-x-auto border-collapse text-sm">
-              {children}
-            </table>
+            // Horizontal scroll on narrow screens; the wrapper keeps the real
+            // table layout intact (display:block on the table itself breaks it).
+            <div className="my-5 w-full overflow-x-auto">
+              <table className="w-full border-collapse text-sm">{children}</table>
+            </div>
           ),
           th: ({ children }) => (
             <th className="border border-border bg-muted px-3 py-2 text-left font-semibold">

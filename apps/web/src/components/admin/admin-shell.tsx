@@ -74,7 +74,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-surface">
       <div className="mx-auto grid min-h-screen max-w-[1400px] lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="border-b border-border bg-background lg:border-b-0 lg:border-r">
+        <aside className="sticky top-0 z-30 border-b border-border bg-background lg:border-b-0 lg:border-r">
           <div className="flex h-16 items-center px-5">
             <Brand />
           </div>
@@ -82,8 +82,16 @@ export function AdminShell({ children }: { children: ReactNode }) {
             className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:overflow-visible"
             aria-label="后台导航"
           >
-            {navGroups.map((group) => (
-              <div key={group.label} className="lg:mt-3 lg:first:mt-0">
+            {navGroups.map((group, groupIndex) => (
+              <div
+                key={group.label}
+                className={cn(
+                  "flex gap-1 lg:mt-3 lg:flex-col lg:first:mt-0",
+                  // Group separator is invisible on desktop (labels suffice)
+                  // but needed when the groups flow in one mobile strip.
+                  groupIndex > 0 && "max-lg:border-l max-lg:border-border/60 max-lg:pl-1",
+                )}
+              >
                 <p className="hidden px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/60 lg:block">
                   {group.label}
                 </p>
@@ -99,7 +107,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                         key={item.href}
                         href={item.href as Route}
                         className={cn(
-                          "inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm",
+                          "inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2.5 text-sm lg:py-2",
                           active
                             ? "bg-muted font-medium text-foreground"
                             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",

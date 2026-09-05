@@ -514,7 +514,7 @@ function ModeButton({
   return (
     <button
       type="button"
-      className={`inline-flex h-7 items-center gap-1.5 rounded-sm px-2 text-xs font-medium ${
+      className={`inline-flex h-9 items-center gap-1.5 rounded-sm px-2 text-xs font-medium sm:h-7 ${
         active ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
       }`}
       onClick={onClick}

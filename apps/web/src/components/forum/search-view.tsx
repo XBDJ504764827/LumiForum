@@ -349,7 +349,7 @@ function TopicHit({ item }: { item: TopicSearchHit & { kind: "topic" } }) {
         </Link>
       </div>
       <h2 className="text-lg font-semibold">
-        <Link href={`/topics/${item.slug}`} className="hover:text-primary">
+        <Link href={`/topics/${item.slug}`} className="break-words hover:text-primary">
           {item.title}
         </Link>
       </h2>

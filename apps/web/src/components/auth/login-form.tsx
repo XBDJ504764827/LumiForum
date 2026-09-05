@@ -65,7 +65,7 @@ export function LoginForm() {
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground hover:text-foreground"
               aria-label={showPassword ? "隐藏密码" : "显示密码"}
               title={showPassword ? "隐藏密码" : "显示密码"}
               onClick={() => setShowPassword((value) => !value)}

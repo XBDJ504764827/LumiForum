@@ -3,19 +3,7 @@
 import type { Route } from "next";
 import { isAdminRole } from "@lumiforum/shared";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Bell,
-  Bookmark,
-  LogIn,
-  Mail,
-  Menu,
-  Moon,
-  PenLine,
-  Search,
-  Sun,
-  UserRound,
-  X,
-} from "lucide-react";
+import { Bell, LogIn, Mail, Menu, Moon, PenLine, Search, Sun, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -63,7 +51,7 @@ export function ForumHeader() {
         <button
           type="button"
           onClick={() => setMenuOpen((open) => !open)}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-muted md:hidden"
+          className="-mr-1 inline-flex h-11 w-11 items-center justify-center rounded-md hover:bg-muted md:hidden"
           aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
           aria-expanded={menuOpen}
         >
@@ -116,7 +104,7 @@ export function ForumHeader() {
           </label>
         </form>
 
-        <div className="flex min-w-28 items-center justify-end gap-2 lg:ml-0">
+        <div className="flex min-w-0 items-center justify-end gap-1 lg:ml-0 sm:gap-2">
           <button
             type="button"
             onClick={toggle}
@@ -130,13 +118,6 @@ export function ForumHeader() {
               <Moon className="size-4" aria-hidden="true" />
             )}
           </button>
-          <Link
-            href="/search"
-            className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted lg:hidden"
-            aria-label="搜索"
-          >
-            <Search className="size-4" aria-hidden="true" />
-          </Link>
           {status === "authenticated" ? (
             <>
               <span
@@ -160,31 +141,33 @@ export function ForumHeader() {
                     ? "连接中"
                     : "离线"}
               </span>
+              {/* Search / DM / favorites stay in the hamburger menu on narrow
+                  screens; the icons only show once there is room (sm+). */}
+              <Link
+                href="/search"
+                className="hidden h-9 items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-muted sm:inline-flex lg:hidden"
+                aria-label="搜索"
+              >
+                <Search className="size-4" aria-hidden="true" />
+              </Link>
               <Link
                 href="/messages"
-                className="relative inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted"
+                className="relative hidden h-9 items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-muted sm:inline-flex"
                 aria-label="私信"
               >
                 <Mail className="size-4" aria-hidden="true" />
               </Link>
               <Link
                 href="/notifications"
-                className="relative inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted"
+                className="relative inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-muted"
                 aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : "通知"}
               >
                 <Bell className="size-4" aria-hidden="true" />
                 {unreadCount > 0 ? (
-                  <span className="absolute right-1 top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-4 text-white">
+                  <span className="absolute right-0.5 top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-4 text-white">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 ) : null}
-              </Link>
-              <Link
-                href="/favorites"
-                className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted sm:hidden"
-                aria-label="我的收藏"
-              >
-                <Bookmark className="size-4" aria-hidden="true" />
               </Link>
               <Link
                 href="/topics/new"
@@ -195,10 +178,12 @@ export function ForumHeader() {
               </Link>
               <Link
                 href="/profile"
-                className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted"
+                className="inline-flex h-9 items-center gap-2 rounded-md px-1.5 text-sm font-medium hover:bg-muted sm:px-3"
               >
                 <UserRound className="size-4" aria-hidden="true" />
-                <span className="max-w-24 truncate">{user?.nickname || user?.username}</span>
+                <span className="hidden max-w-24 truncate sm:inline">
+                  {user?.nickname || user?.username}
+                </span>
               </Link>
             </>
           ) : status === "unauthenticated" ? (
@@ -211,7 +196,7 @@ export function ForumHeader() {
             </Link>
           ) : (
             <span
-              className="h-9 w-24 animate-pulse rounded-md bg-muted"
+              className="h-9 w-16 animate-pulse rounded-md bg-muted sm:w-24"
               aria-label="正在确认登录状态"
             />
           )}
@@ -240,6 +225,15 @@ export function ForumHeader() {
                 className="block rounded-md px-3 py-2 font-medium hover:bg-muted"
               >
                 板块
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/search"
+                onClick={closeMenu}
+                className="block rounded-md px-3 py-2 font-medium hover:bg-muted"
+              >
+                搜索
               </Link>
             </li>
             {status === "authenticated" ? (

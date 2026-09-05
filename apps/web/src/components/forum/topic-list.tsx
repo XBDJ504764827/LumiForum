@@ -46,7 +46,7 @@ export function TopicList({ topics }: { topics: TopicSummary[] }) {
                 </Link>
               </div>
               <h3 className="text-lg font-semibold leading-7">
-                <Link href={`/topics/${topic.slug}`} className="hover:text-primary">
+                <Link href={`/topics/${topic.slug}`} className="break-words hover:text-primary">
                   {topic.title}
                 </Link>
               </h3>
