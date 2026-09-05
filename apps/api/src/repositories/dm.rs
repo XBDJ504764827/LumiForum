@@ -146,7 +146,7 @@ impl ConversationRepository {
                 ou.avatar_url AS other_avatar,
                 r.code AS other_role_code,
                 r.name AS other_role_name,
-                CASE WHEN c.user1_id = $1 THEN c.user1_unread ELSE c.user2_unread END AS unread_count,
+                CASE WHEN c.user1_id = $1 THEN c.user1_unread ELSE c.user2_unread END::bigint AS unread_count,
                 c.last_message_at,
                 (
                     SELECT m.content FROM messages m
@@ -341,7 +341,7 @@ impl ConversationRepository {
             r#"
             SELECT COALESCE(SUM(
                 CASE WHEN user1_id = $1 THEN user1_unread ELSE user2_unread END
-            ), 0)
+            ), 0)::bigint
             FROM conversations
             WHERE user1_id = $1 OR user2_id = $1
             "#,
@@ -359,7 +359,7 @@ impl ConversationRepository {
     ) -> Result<i64, sqlx::Error> {
         sqlx::query_scalar::<_, i64>(
             r#"
-            SELECT CASE WHEN user1_id = $2 THEN user1_unread ELSE user2_unread END
+            SELECT CASE WHEN user1_id = $2 THEN user1_unread ELSE user2_unread END::bigint
             FROM conversations
             WHERE id = $1 AND ($2 = user1_id OR $2 = user2_id)
             "#,
