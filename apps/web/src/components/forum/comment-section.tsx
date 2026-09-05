@@ -8,10 +8,12 @@ import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import type { InfiniteData } from "@tanstack/react-query";
 import { ChevronDown, Heart, MessageSquare, Pencil, Reply, Trash2 } from "lucide-react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { AvatarPreview } from "@/components/forum/avatar-preview";
 import { ReportButton } from "@/components/forum/report-button";
 import { MarkdownContent } from "@/components/forum/markdown-content";
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
@@ -160,17 +162,25 @@ function CommentItem({
       className={isChild ? "scroll-mt-24 py-4 pl-4 sm:pl-8" : "scroll-mt-24 py-6"}
     >
       <div className="flex items-start gap-3">
-        <Avatar className="size-9 border border-border">
-          {comment.author.avatar ? <AvatarImage src={comment.author.avatar} alt="" /> : null}
-          <AvatarFallback>
-            {(comment.author.nickname || comment.author.username).slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+        <AvatarPreview
+          src={comment.author.avatar}
+          alt={comment.author.nickname || comment.author.username}
+        >
+          <Avatar className="size-9 border border-border">
+            {comment.author.avatar ? <AvatarImage src={comment.author.avatar} alt="" /> : null}
+            <AvatarFallback>
+              {(comment.author.nickname || comment.author.username).slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        </AvatarPreview>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            <span className="font-medium">
+            <Link
+              href={`/users/${comment.author.id}` as Route}
+              className="font-medium hover:text-primary hover:underline"
+            >
               {comment.author.nickname || comment.author.username}
-            </span>
+            </Link>
             <span className="text-xs text-muted-foreground">{comment.author.role.name}</span>
             <span className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</span>
             {comment.edited_at ? (

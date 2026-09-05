@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { AvatarPreview } from "@/components/forum/avatar-preview";
 import { MarkdownContent } from "@/components/forum/markdown-content";
 import { PollCard } from "@/components/forum/poll-card";
 import { ReportButton } from "@/components/forum/report-button";
@@ -103,7 +104,7 @@ export function TopicView({ slug, initialTopic }: { slug: string; initialTopic?:
         <header className="border-b border-border pb-7">
           <div className="mb-3 flex flex-wrap gap-2">
             {data.is_pinned ? (
-              <Badge className="gap-1 bg-foreground text-white">
+              <Badge className="gap-1 bg-primary text-primary-foreground">
                 <Pin className="size-3" />
                 置顶
               </Badge>
@@ -145,14 +146,24 @@ export function TopicView({ slug, initialTopic }: { slug: string; initialTopic?:
                 </>
               ) : (
                 <>
-                  <Avatar className="size-10 border border-border">
-                    {data.author.avatar ? <AvatarImage src={data.author.avatar} alt="" /> : null}
-                    <AvatarFallback>
-                      {authorInitials(data.author.nickname || data.author.username)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <AvatarPreview
+                    src={data.author.avatar}
+                    alt={data.author.nickname || data.author.username}
+                  >
+                    <Avatar className="size-10 border border-border">
+                      {data.author.avatar ? <AvatarImage src={data.author.avatar} alt="" /> : null}
+                      <AvatarFallback>
+                        {authorInitials(data.author.nickname || data.author.username)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </AvatarPreview>
                   <div className="text-sm">
-                    <p className="font-medium">{data.author.nickname || data.author.username}</p>
+                    <Link
+                      href={`/users/${data.author.id}` as Route}
+                      className="font-medium hover:text-primary hover:underline"
+                    >
+                      {data.author.nickname || data.author.username}
+                    </Link>
                     <p className="text-xs text-muted-foreground">{data.author.role.name}</p>
                   </div>
                   <Link
