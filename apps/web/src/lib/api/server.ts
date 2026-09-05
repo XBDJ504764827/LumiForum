@@ -69,6 +69,7 @@ export function fetchTopics(
 ): Promise<Paginated<TopicSummary> | null> {
   const query = new URLSearchParams();
   if (params.category) query.set("category", params.category);
+  if (params.author_id) query.set("author_id", params.author_id);
   if (params.sort) query.set("sort", params.sort);
   if (params.page) query.set("page", String(params.page));
   if (params.page_size) query.set("page_size", String(params.page_size));

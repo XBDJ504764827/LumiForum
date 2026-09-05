@@ -122,6 +122,9 @@ impl DmService {
     }
 
     /// Conversation metadata for a member (participant + unread state).
+    /// Online status is intentionally NOT part of DM delivery: messages are
+    /// durable and the recipient reads them whenever they return, so an
+    /// offline participant never changes these responses.
     pub async fn get_conversation(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -144,7 +147,7 @@ impl DmService {
             .conversations
             .unread_for(conversation_id, principal.user_id)
             .await
-            .map_err(internal)?;
+            .unwrap_or(0);
         Ok(ConversationDetail {
             id: conversation_id,
             other_user: ConversationUser {
@@ -239,10 +242,11 @@ impl DmService {
     /// Unread private-message total for the acting user.
     pub async fn unread_count(&self, principal: &AuthenticatedPrincipal) -> Result<i64, DmError> {
         require(principal, PERMISSION_DM_READ_SELF)?;
-        self.conversations
+        Ok(self
+            .conversations
             .total_unread(principal.user_id)
             .await
-            .map_err(internal)
+            .unwrap_or(0))
     }
 
     /// Soft-delete a message the sender wrote.

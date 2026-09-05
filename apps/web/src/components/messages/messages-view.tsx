@@ -19,6 +19,7 @@ import {
   markConversationRead,
   sendMessage,
 } from "@/lib/api/dm";
+import { getUserPresence } from "@/lib/api/presence";
 import { errorMessage } from "@/lib/api/errors";
 
 /**
@@ -265,7 +266,7 @@ function MessageThread(props: {
               >
                 {header.data.other_user.nickname || header.data.other_user.username}
               </Link>
-              <p className="text-xs text-muted-foreground">@{header.data.other_user.username}</p>
+              <PresenceLine userId={header.data.other_user.id} />
             </div>
           </>
         ) : (
@@ -329,6 +330,37 @@ function MessageThread(props: {
         {sendError ? <p className="mt-2 text-sm text-destructive">{sendError}</p> : null}
       </form>
     </div>
+  );
+}
+
+/**
+ * Shows the peer's online state under their name in a thread. Messages are
+ * durable: when the peer is offline the composer keeps working and the note
+ * says the reply arrives once they are back.
+ */
+function PresenceLine({ userId }: { userId: string }) {
+  const presence = useQuery({
+    queryKey: ["presence", userId],
+    queryFn: () => getUserPresence(userId),
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+  if (presence.isPending) {
+    return <p className="text-xs text-muted-foreground">…</p>;
+  }
+  if (presence.data?.online) {
+    return (
+      <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+        在线
+      </p>
+    );
+  }
+  return (
+    <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="size-1.5 rounded-full bg-muted-foreground/40" aria-hidden="true" />
+      离线 · 消息会在对方上线后送达
+    </p>
   );
 }
 

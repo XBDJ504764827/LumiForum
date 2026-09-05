@@ -79,10 +79,8 @@ export async function markConversationRead(conversationId: string): Promise<void
 }
 
 export async function deleteMessage(messageId: string): Promise<void> {
-  // Soft delete shares the conversation route namespace; implemented as a
-  // dedicated endpoint in the API.
   await apiRequest<{ message: string }>(
-    `/messages/dm/${encodeURIComponent(messageId)}`,
+    `/messages/${encodeURIComponent(messageId)}`,
     { method: "DELETE" },
     true,
   );

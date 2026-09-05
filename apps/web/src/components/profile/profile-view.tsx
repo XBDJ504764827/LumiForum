@@ -63,8 +63,21 @@ function PageFrame({
   return (
     <div className="min-h-screen bg-surface">
       <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
-          <Brand />
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
+          <div className="flex items-center gap-4">
+            <Brand />
+            <nav className="flex items-center gap-3 text-sm text-muted-foreground">
+              <Link href="/" className="hover:text-foreground">
+                返回首页
+              </Link>
+              <Link href="/favorites" className="hover:text-foreground">
+                我的收藏
+              </Link>
+              <Link href="/notifications" className="hover:text-foreground">
+                通知中心
+              </Link>
+            </nav>
+          </div>
           <Button
             variant="ghost"
             size="sm"
