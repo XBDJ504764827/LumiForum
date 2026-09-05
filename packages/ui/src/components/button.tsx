@@ -9,8 +9,8 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variantClass: Record<NonNullable<ButtonProps["variant"]>, string> = {
   default: "bg-primary text-primary-foreground hover:bg-primary/90",
-  outline: "border border-zinc-300 bg-transparent hover:bg-zinc-100",
-  ghost: "bg-transparent hover:bg-zinc-100",
+  outline: "border border-border bg-transparent hover:bg-muted",
+  ghost: "bg-transparent hover:bg-muted",
 };
 
 const sizeClass: Record<NonNullable<ButtonProps["size"]>, string> = {
@@ -27,7 +27,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         type={type}
         className={cn(
           "inline-flex items-center justify-center rounded-md font-medium transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "disabled:pointer-events-none disabled:opacity-50",
           variantClass[variant],
           sizeClass[size],

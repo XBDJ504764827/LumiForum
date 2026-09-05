@@ -1,3 +1,4 @@
+import type { Route } from "next";
 import type { TopicSummary } from "@lumiforum/types";
 import { Badge } from "@lumiforum/ui";
 import { BarChart3, Eye, Heart, MessageSquare, Pin, Sparkles } from "lucide-react";
@@ -20,7 +21,7 @@ export function TopicList({ topics }: { topics: TopicSummary[] }) {
             <div className="min-w-0 flex-1">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 {topic.is_pinned ? (
-                  <Badge className="gap-1 bg-foreground text-white">
+                  <Badge className="gap-1 bg-primary text-primary-foreground">
                     <Pin className="size-3" aria-hidden="true" />
                     置顶
                   </Badge>
@@ -55,11 +56,16 @@ export function TopicList({ topics }: { topics: TopicSummary[] }) {
                 </p>
               ) : null}
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>
-                  {topic.author_anonymous
-                    ? "匿名玩家"
-                    : topic.author.nickname || topic.author.username}
-                </span>
+                {topic.author_anonymous ? (
+                  <span>匿名玩家</span>
+                ) : (
+                  <Link
+                    href={`/users/${topic.author.id}` as Route}
+                    className="font-medium hover:text-primary hover:underline"
+                  >
+                    {topic.author.nickname || topic.author.username}
+                  </Link>
+                )}
                 {topic.author_anonymous ? <span>· 匿名发帖</span> : null}
                 <span>{formatDate(topic.created_at)}</span>
               </div>

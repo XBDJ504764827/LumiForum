@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Mail, UserMinus, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import type { Route } from "next";
 import { useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -62,6 +63,7 @@ export function UserProfileView({
     },
   });
   const [dmStarting, setDmStarting] = useState(false);
+  const [dmError, setDmError] = useState<string | null>(null);
 
   if (profile.isPending) return <QueryLoading label="正在加载用户" />;
   if (profile.isError || !profile.data) {
@@ -81,11 +83,12 @@ export function UserProfileView({
 
   const startDm = async () => {
     setDmStarting(true);
+    setDmError(null);
     try {
       const conversation = await startConversation(data.username);
-      router.push(`/messages?c=${conversation.id}` as never);
-    } catch {
-      // 不可达（对方不存在/被禁用/给自己）时静默返回，不打断浏览。
+      router.push(`/messages?c=${conversation.id}` as Route);
+    } catch (error) {
+      setDmError(errorMessage(error));
     } finally {
       setDmStarting(false);
     }
@@ -116,31 +119,34 @@ export function UserProfileView({
           </p>
         </div>
         {canFollow ? (
-          <div className="flex shrink-0 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              disabled={dmStarting}
-              onClick={() => void startDm()}
-            >
-              <Mail className="size-4" aria-hidden="true" />
-              发私信
-            </Button>
-            <Button
-              type="button"
-              variant={data.is_following ? "outline" : "default"}
-              className="gap-2"
-              disabled={toggleFollow.isPending}
-              onClick={() => toggleFollow.mutate(data)}
-            >
-              {data.is_following ? (
-                <UserMinus className="size-4" aria-hidden="true" />
-              ) : (
-                <UserPlus className="size-4" aria-hidden="true" />
-              )}
-              {data.is_following ? "取消关注" : "关注"}
-            </Button>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={dmStarting}
+                onClick={() => void startDm()}
+              >
+                <Mail className="size-4" aria-hidden="true" />
+                私聊
+              </Button>
+              <Button
+                type="button"
+                variant={data.is_following ? "outline" : "default"}
+                className="gap-2"
+                disabled={toggleFollow.isPending}
+                onClick={() => toggleFollow.mutate(data)}
+              >
+                {data.is_following ? (
+                  <UserMinus className="size-4" aria-hidden="true" />
+                ) : (
+                  <UserPlus className="size-4" aria-hidden="true" />
+                )}
+                {data.is_following ? "取消关注" : "关注"}
+              </Button>
+            </div>
+            {dmError ? <p className="text-xs text-destructive">{dmError}</p> : null}
           </div>
         ) : null}
       </section>
