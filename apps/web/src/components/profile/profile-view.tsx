@@ -64,9 +64,9 @@ function PageFrame({
     <div className="min-h-screen bg-surface">
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <Brand />
-            <nav className="flex items-center gap-3 text-sm text-muted-foreground">
+            <nav className="hidden items-center gap-3 text-sm text-muted-foreground sm:flex">
               <Link href="/" className="hover:text-foreground">
                 返回首页
               </Link>

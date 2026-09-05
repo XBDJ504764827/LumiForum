@@ -74,11 +74,7 @@ export function ReportButton({
   return (
     <div className="rounded-md border border-border bg-background p-3 shadow-sm">
       <p className="mb-2 text-xs font-medium">举报该{targetLabel(targetType)}</p>
-      <Select
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-        className="h-8 text-xs"
-      >
+      <Select value={reason} onChange={(event) => setReason(event.target.value)}>
         {reasons.map((item) => (
           <option key={item.value} value={item.value}>
             {item.label}

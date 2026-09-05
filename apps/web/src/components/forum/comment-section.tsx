@@ -461,14 +461,14 @@ function CommentComposer({
         <div className="inline-flex rounded-md border border-border p-0.5">
           <button
             type="button"
-            className={`h-7 rounded-sm px-2 text-xs ${preview ? "text-muted-foreground" : "bg-muted"}`}
+            className={`h-9 rounded-sm px-2 text-xs sm:h-7 ${preview ? "text-muted-foreground" : "bg-muted"}`}
             onClick={() => setPreview(false)}
           >
             编写
           </button>
           <button
             type="button"
-            className={`h-7 rounded-sm px-2 text-xs ${preview ? "bg-muted" : "text-muted-foreground"}`}
+            className={`h-9 rounded-sm px-2 text-xs sm:h-7 ${preview ? "bg-muted" : "text-muted-foreground"}`}
             onClick={() => setPreview(true)}
           >
             预览

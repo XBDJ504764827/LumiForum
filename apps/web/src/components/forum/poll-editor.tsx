@@ -220,7 +220,7 @@ export function PollEditor({ existing }: { existing?: Poll }) {
                     onDrop={() => onDrop(index)}
                     onDragEnd={() => setDragIndex(null)}
                     className={cn(
-                      "flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5",
+                      "flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 sm:flex-nowrap",
                       dragIndex === index ? "opacity-50" : "",
                     )}
                   >
@@ -228,7 +228,7 @@ export function PollEditor({ existing }: { existing?: Poll }) {
                       <span className="w-4 shrink-0" aria-hidden="true" />
                     ) : (
                       <GripVertical
-                        className="size-4 shrink-0 cursor-grab text-muted-foreground/50"
+                        className="hidden size-4 shrink-0 cursor-grab text-muted-foreground/50 sm:block"
                         aria-hidden="true"
                       />
                     )}
@@ -236,7 +236,7 @@ export function PollEditor({ existing }: { existing?: Poll }) {
                       {index + 1}
                     </span>
                     <Input
-                      className="h-9"
+                      className="h-11 min-w-0 flex-1 basis-40 sm:h-9 sm:basis-auto"
                       placeholder={`选项 ${index + 1}`}
                       aria-invalid={Boolean(formState.errors.poll?.options?.[index]?.value)}
                       {...register(`poll.options.${index}.value`)}
@@ -251,7 +251,7 @@ export function PollEditor({ existing }: { existing?: Poll }) {
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="size-8 shrink-0 px-0"
+                        className="size-11 shrink-0 px-0 sm:size-8"
                         title="上移"
                         disabled={index === 0}
                         onClick={() => swap(index, index - 1)}
@@ -264,7 +264,7 @@ export function PollEditor({ existing }: { existing?: Poll }) {
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="size-8 shrink-0 px-0"
+                        className="size-11 shrink-0 px-0 sm:size-8"
                         title="下移"
                         disabled={index === fields.length - 1}
                         onClick={() => swap(index, index + 1)}
@@ -276,7 +276,7 @@ export function PollEditor({ existing }: { existing?: Poll }) {
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="size-8 shrink-0 px-0 text-destructive hover:text-destructive"
+                      className="size-11 shrink-0 px-0 text-destructive hover:text-destructive sm:size-8"
                       title={canRemove ? "删除选项" : "已有票数，无法删除"}
                       disabled={fields.length <= 2 || !canRemove}
                       onClick={() => remove(index)}

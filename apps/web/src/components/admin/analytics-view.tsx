@@ -69,7 +69,12 @@ export function AdminAnalyticsView() {
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={data.registrations}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11 }}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
               <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
               <Tooltip />
               <Bar dataKey="count" fill="#2563eb" radius={[3, 3, 0, 0]} />
@@ -87,7 +92,12 @@ export function AdminAnalyticsView() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11 }}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
               <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
               <Tooltip />
               <Area type="monotone" dataKey="count" stroke="#16a34a" fill="url(#cumUsers)" />
@@ -99,7 +109,12 @@ export function AdminAnalyticsView() {
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={activity}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11 }}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
               <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
               <Tooltip />
               <Legend />
@@ -145,8 +160,11 @@ export function AdminAnalyticsView() {
                     {topic.title}
                   </a>
                 </span>
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:inline">
                   {topic.view_count} 浏览 · {topic.like_count} 赞 · {topic.reply_count} 回复
+                </span>
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground sm:hidden">
+                  {topic.view_count} 浏览
                 </span>
               </li>
             ))}

@@ -116,7 +116,7 @@ export function TopicView({ slug, initialTopic }: { slug: string; initialTopic?:
               </Badge>
             ) : null}
           </div>
-          <h1 className="max-w-4xl text-3xl font-semibold leading-tight sm:text-4xl">
+          <h1 className="max-w-4xl text-3xl font-semibold leading-tight break-words sm:text-4xl">
             {data.title}
           </h1>
 
@@ -133,7 +133,7 @@ export function TopicView({ slug, initialTopic }: { slug: string; initialTopic?:
           ) : null}
 
           <div className="mt-6 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 gap-y-2">
               {data.author_anonymous ? (
                 <>
                   <Avatar className="size-10 border border-border bg-muted">

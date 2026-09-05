@@ -14,7 +14,9 @@ const variantClass: Record<NonNullable<ButtonProps["variant"]>, string> = {
 };
 
 const sizeClass: Record<NonNullable<ButtonProps["size"]>, string> = {
-  sm: "h-8 px-3 text-xs",
+  // 36px on mobile keeps dense action rows (comment actions, admin tables)
+  // comfortable to tap; md/lg stay at their fixed desktop heights.
+  sm: "h-9 px-3 text-xs sm:h-8 sm:px-3",
   md: "h-10 px-4 text-sm",
   lg: "h-11 px-6 text-base",
 };

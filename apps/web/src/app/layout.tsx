@@ -1,3 +1,4 @@
+import type { Viewport } from "next";
 import type { ReactNode } from "react";
 
 import { Providers } from "@/components/providers";
@@ -6,6 +7,12 @@ import { rootMetadata } from "@/lib/seo/metadata";
 import "./globals.css";
 
 export const metadata = rootMetadata();
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
