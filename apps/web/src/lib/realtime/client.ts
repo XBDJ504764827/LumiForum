@@ -19,6 +19,8 @@ export class RealtimeClient {
   private tokenProvider: (() => Promise<string>) | null = null;
   private readonly messageHandlers = new Set<MessageHandler>();
   private readonly statusHandlers = new Set<StatusHandler>();
+  private socketEverOpened = false;
+  private disconnectedAt: number | null = null;
 
   setTokenProvider(provider: () => Promise<string>): void {
     this.tokenProvider = provider;
@@ -48,6 +50,8 @@ export class RealtimeClient {
       this.socket.close();
       this.socket = null;
     }
+    this.socketEverOpened = false;
+    this.disconnectedAt = null;
     this.setStatus("disconnected");
   }
 
@@ -66,15 +70,28 @@ export class RealtimeClient {
       this.socket = socket;
 
       socket.onopen = () => {
+        const isFirstOpen = !this.socketEverOpened;
+        this.socketEverOpened = true;
         this.reconnectAttempt = 0;
         this.setStatus("connected");
         this.startPing();
+        // Messages published while we were disconnected are gone (the server
+        // hub is in-memory only). On reconnect after an unexpected drop, emit
+        // a synthetic resync so consumers can refetch affected queries.
+        if (!isFirstOpen && this.disconnectedAt !== null) {
+          this.emit({
+            type: "realtime.resync",
+            timestamp: new Date().toISOString(),
+            data: { disconnected_at: new Date(this.disconnectedAt).toISOString() },
+          });
+        }
+        this.disconnectedAt = null;
       };
 
       socket.onmessage = (event) => {
         try {
           const message = JSON.parse(String(event.data)) as RealtimeServerMessage;
-          for (const handler of this.messageHandlers) handler(message);
+          this.emit(message);
         } catch {
           // ignore malformed frames
         }
@@ -87,6 +104,7 @@ export class RealtimeClient {
       socket.onclose = () => {
         this.clearPing();
         this.socket = null;
+        if (this.disconnectedAt === null) this.disconnectedAt = Date.now();
         if (!this.shouldRun) {
           this.setStatus("disconnected");
           return;
@@ -98,6 +116,10 @@ export class RealtimeClient {
       this.setStatus("disconnected");
       this.scheduleReconnect();
     }
+  }
+
+  private emit(message: RealtimeServerMessage): void {
+    for (const handler of this.messageHandlers) handler(message);
   }
 
   private scheduleReconnect(): void {

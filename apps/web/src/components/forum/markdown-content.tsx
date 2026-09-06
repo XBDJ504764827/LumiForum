@@ -1,4 +1,7 @@
+"use client";
+
 import { cn } from "@lumiforum/ui";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -13,6 +16,77 @@ function highlightMentions(text: string): React.ReactNode[] {
     ) : (
       part
     ),
+  );
+}
+
+/**
+ * Defers network fetch + decode of user-posted images until they approach
+ * the viewport. Long topics embed many large images (uploads are capped at
+ * 2560px); eagerly loading all of them competes for bandwidth and slows the
+ * topic payload even though most sit far below the fold. An aspect-ratio
+ * placeholder (from the optional `w` query param emitted by the editors)
+ * keeps layout stable while nothing has loaded.
+ */
+function LazyImage({ src, alt }: { src: string; alt: string }) {
+  const [activated, setActivated] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const holderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const holder = holderRef.current;
+    if (!holder) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setActivated(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "400px 0px" },
+    );
+    observer.observe(holder);
+    return () => observer.disconnect();
+  }, []);
+
+  // Editors append `?w=<width>` from the upload record when inserting the
+  // markdown; only width is used so height scales proportionally.
+  const widthParam = (() => {
+    try {
+      const parsed = new URL(src, "http://placeholder.local");
+      const value = Number(parsed.searchParams.get("w"));
+      return Number.isFinite(value) && value > 0 ? value : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  return (
+    <div
+      ref={holderRef}
+      className="my-5 w-fit max-w-full overflow-hidden rounded-md border border-border"
+      style={
+        widthParam
+          ? { aspectRatio: `${widthParam} / auto` }
+          : activated
+            ? undefined
+            : { minHeight: "1px" }
+      }
+    >
+      {activated ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setLoaded(true)}
+          className={cn(
+            "h-auto w-auto max-w-full transition-opacity duration-300",
+            loaded ? "opacity-100" : "opacity-0",
+          )}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -65,16 +139,11 @@ export function MarkdownContent({ content, className }: { content: string; class
               {children}
             </a>
           ),
-          img: ({ src, alt }) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={src}
-              alt={alt || ""}
-              loading="lazy"
-              decoding="async"
-              className="my-5 h-auto max-w-full rounded-md border border-border"
-            />
-          ),
+          img: ({ src, alt }) => {
+            const resolved = typeof src === "string" ? src : "";
+            if (!resolved) return null;
+            return <LazyImage src={resolved} alt={alt || ""} />;
+          },
           hr: () => <hr className="my-8 border-border" />,
           table: ({ children }) => (
             // Horizontal scroll on narrow screens; the wrapper keeps the real

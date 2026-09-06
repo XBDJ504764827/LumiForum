@@ -445,9 +445,9 @@ function CommentComposer({
     });
   };
 
-  const insertImage = (url: string, originalFilename: string) => {
+  const insertImage = (url: string, originalFilename: string, width?: number | null) => {
     const alt = originalFilename.replace(/[\[\]]/g, "");
-    insertMarkdown(`![${alt || "image"}](${url})`);
+    insertMarkdown(`![${alt || "image"}](${width ? `${url}?w=${width}` : url})`);
   };
 
   const insertAttachment = (url: string, originalFilename: string) => {
@@ -506,7 +506,9 @@ function CommentComposer({
               category="comment_image"
               accept={IMAGE_ACCEPT}
               maxBytes={8 * 1024 * 1024}
-              onUploaded={(upload: Upload) => insertImage(upload.url, upload.original_filename)}
+              onUploaded={(upload: Upload) =>
+                insertImage(upload.url, upload.original_filename, upload.width)
+              }
             />
             <FileUpload
               compact

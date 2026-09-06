@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { dmKeys } from "@/lib/api/dm";
 import { notificationKeys } from "@/lib/api/notifications";
 import { sessionAccessToken } from "@/lib/auth/session";
 import { RealtimeClient } from "@/lib/realtime/client";
@@ -38,6 +39,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
             count: current.count + 1,
           });
         }
+        return;
+      }
+      if (message.type === "realtime.resync") {
+        // The socket dropped and the in-memory server hub missed everything
+        // published in between, so live event pushes cannot be trusted for
+        // that window. Refetch what normally arrives via push; polls and DMs
+        // also poll on an interval, so this only shortens the gap.
+        void queryClient.invalidateQueries({ queryKey: notificationKeys.all });
+        void queryClient.invalidateQueries({ queryKey: dmKeys.all });
+        void queryClient.invalidateQueries({ queryKey: ["polls"] });
+        return;
       }
     });
     return () => {
