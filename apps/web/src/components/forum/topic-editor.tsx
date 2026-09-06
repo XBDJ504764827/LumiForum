@@ -195,11 +195,11 @@ export function TopicEditor(props: Props) {
     return () => clearTimeout(timer);
   }, [form, isCreate, content, categoryId, draftKeyValue]);
 
-  const insertImage = (url: string, originalFilename: string) => {
+  const insertImage = (url: string, originalFilename: string, width?: number | null) => {
     const current = form.getValues("content");
     const cursor = contentRef.current?.selectionStart ?? current.length;
     const alt = originalFilename.replace(/[\[\]]/g, "");
-    const markdown = `![${alt || "image"}](${url})`;
+    const markdown = `![${alt || "image"}](${width ? `${url}?w=${width}` : url})`;
     const prefix = cursor > 0 && current[cursor - 1] !== "\n" ? "\n" : "";
     const suffix = cursor < current.length && current[cursor] !== "\n" ? "\n" : "";
     const insertion = `${prefix}${markdown}${suffix}`;
@@ -379,7 +379,9 @@ export function TopicEditor(props: Props) {
                         category="topic_image"
                         accept={IMAGE_ACCEPT}
                         maxBytes={10 * 1024 * 1024}
-                        onUploaded={(upload) => insertImage(upload.url, upload.original_filename)}
+                        onUploaded={(upload) =>
+                          insertImage(upload.url, upload.original_filename, upload.width)
+                        }
                       />
                     </div>
                     <div>
