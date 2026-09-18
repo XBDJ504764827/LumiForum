@@ -515,7 +515,7 @@ fn normalize_tags(tags: Vec<String>) -> Option<Vec<String>> {
 
 fn normalize_summary(value: Option<String>) -> Result<Option<String>, TopicError> {
     let value = value
-        .map(|value| value.split_whitespace().collect::<Vec<_>>().join(" "))
+        .map(|value| strip_markdown(&value))
         .filter(|value| !value.is_empty());
     if value
         .as_ref()
@@ -538,13 +538,66 @@ fn normalize_summary_patch(
 }
 
 fn markdown_summary(content: &str, max_chars: usize) -> String {
-    content
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(max_chars)
-        .collect()
+    let stripped = strip_markdown(content);
+    if stripped.is_empty() {
+        return "[图片]".to_owned();
+    }
+    stripped.chars().take(max_chars).collect()
+}
+
+/// Strip markdown syntax for list/search summaries. Images keep a readable
+/// `[图片]` marker (one per image, in place); links keep their label text.
+fn strip_markdown(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let rest = &value[index..];
+        if let Some(stripped) = rest.strip_prefix("```") {
+            if let Some(end) = stripped.find("```") {
+                index += 3 + end + 3;
+            } else {
+                index = value.len();
+            }
+            output.push(' ');
+            continue;
+        }
+        if rest.starts_with("![") {
+            if let Some(alt_end) = rest.find("](") {
+                if let Some(url_end) = rest[alt_end + 2..].find(')') {
+                    output.push_str(" [图片] ");
+                    index += alt_end + 2 + url_end + 1;
+                    continue;
+                }
+            }
+        }
+        if rest.starts_with('[') {
+            if let Some(mid) = rest.find("](") {
+                if let Some(url_end) = rest[mid + 2..].find(')') {
+                    output.push_str(&rest[1..mid]);
+                    output.push(' ');
+                    index += mid + 2 + url_end + 1;
+                    continue;
+                }
+            }
+        }
+        if rest.starts_with('`') {
+            output.push(' ');
+            index += 1;
+            continue;
+        }
+        let ch = rest.chars().next().expect("non-empty str slice");
+        if matches!(
+            ch,
+            '#' | '>' | '*' | '_' | '~' | '-' | '+' | '|' | '<' | '='
+        ) {
+            output.push(' ');
+        } else {
+            output.push(ch);
+        }
+        index += ch.len_utf8();
+    }
+    output.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn short_suffix() -> String {
@@ -637,7 +690,10 @@ mod tests {
         ROLE_USER,
     };
 
-    use super::{markdown_summary, normalize_content, normalize_title, require_owner_or_any};
+    use super::{
+        markdown_summary, normalize_content, normalize_summary, normalize_title,
+        require_owner_or_any, strip_markdown,
+    };
 
     #[test]
     fn normalizes_topic_fields() {
@@ -654,7 +710,35 @@ mod tests {
     #[test]
     fn creates_bounded_markdown_summary() {
         let summary = markdown_summary("# Hello\n\nThis   is a topic.", 12);
-        assert_eq!(summary, "# Hello This");
+        assert_eq!(summary, "Hello This i");
+    }
+
+    #[test]
+    fn summary_replaces_images_with_placeholder() {
+        let summary = markdown_summary(
+            "![1ca46.png](https://chat.iquankz.cn/topic_image/2026/08/x.png) 正文 ![b.png](https://x/y.png)",
+            240,
+        );
+        assert_eq!(summary, "[图片] 正文 [图片]");
+    }
+
+    #[test]
+    fn summary_falls_back_for_image_only_content() {
+        assert_eq!(markdown_summary("![a.png](https://x/a.png)", 240), "[图片]");
+    }
+
+    #[test]
+    fn summary_keeps_link_labels() {
+        let summary = markdown_summary("[LumiForum](https://example.com) 好用", 240);
+        assert_eq!(summary, "LumiForum 好用");
+    }
+
+    #[test]
+    fn user_summary_is_cleaned() {
+        let summary =
+            normalize_summary(Some("![a.png](https://x/a.png)\n\n# 标题 正文".into())).unwrap();
+        assert_eq!(summary.as_deref(), Some("[图片] 标题 正文"));
+        assert_eq!(strip_markdown("```rust\nlet x = 1;\n``` 正文"), "正文");
     }
 
     #[test]

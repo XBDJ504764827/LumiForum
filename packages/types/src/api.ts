@@ -362,10 +362,17 @@ export interface CommentStats {
   replies: number;
 }
 
+export interface CommentReplyTarget {
+  id: string;
+  author: TopicAuthor;
+  is_deleted: boolean;
+}
+
 export interface CommentNode {
   id: string;
   topic_id: string;
   parent_id: string | null;
+  reply_to: CommentReplyTarget | null;
   content: string;
   author: TopicAuthor;
   stats: CommentStats;

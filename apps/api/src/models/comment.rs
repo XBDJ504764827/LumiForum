@@ -51,12 +51,13 @@ impl CommentStatus {
     }
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct CommentRecord {
     pub id: Uuid,
     pub topic_id: Uuid,
     pub author_id: Uuid,
     pub parent_id: Option<Uuid>,
+    pub reply_to_comment_id: Option<Uuid>,
     pub content: String,
     pub status: String,
     pub like_count: i64,
@@ -74,10 +75,19 @@ pub struct CommentStats {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct CommentReplyTarget {
+    pub id: Uuid,
+    pub author: TopicAuthorSummary,
+    /// Whether the referenced comment is still visible.
+    pub is_deleted: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct CommentNode {
     pub id: Uuid,
     pub topic_id: Uuid,
     pub parent_id: Option<Uuid>,
+    pub reply_to: Option<CommentReplyTarget>,
     pub content: String,
     pub author: TopicAuthorSummary,
     pub stats: CommentStats,

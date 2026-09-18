@@ -141,6 +141,7 @@ impl CommentService {
                 topic_id,
                 author_id: principal.user_id,
                 parent_id: None,
+                reply_to_comment_id: None,
                 content: &content,
                 status,
                 is_collapsed: collapsed,
@@ -169,27 +170,63 @@ impl CommentService {
     pub async fn reply(
         &self,
         principal: &AuthenticatedPrincipal,
-        parent_id: Uuid,
+        target_id: Uuid,
         request: CreateCommentRequest,
     ) -> Result<CommentNode, CommentError> {
         require(principal, PERMISSION_COMMENT_REPLY)?;
         self.enforce_rate_limit(principal.user_id).await?;
-        let parent = self
+        // `target_id` may be a root comment or a reply inside a thread.
+        // Storage stays flat two-level: the new comment always hangs off the
+        // root, while `reply_to_comment_id` records the addressed comment.
+        let target = self
             .comments
-            .find_by_id(parent_id)
+            .find_by_id(target_id)
             .await
             .map_err(internal)?
             .ok_or(CommentError::NotFound)?;
-        if parent.status != "published" || parent.parent_id.is_some() {
+        let (root_id, reply_to) = match target.parent_id {
+            // Direct reply to a root: root must still be published.
+            None => {
+                if target.status != "published" {
+                    return Err(CommentError::NotFound);
+                }
+                (target.id, None)
+            }
+            // Reply to a reply: hang off the same root, reference the target
+            // even if it was soft-deleted (UI renders "已删除评论" instead).
+            Some(root_id) => (root_id, Some(target.id)),
+        };
+        let parent = if target.parent_id.is_none() {
+            target.clone()
+        } else {
+            self.comments
+                .find_by_id(root_id)
+                .await
+                .map_err(internal)?
+                .ok_or(CommentError::NotFound)?
+        };
+        if parent.parent_id.is_some() || parent.topic_id != target.topic_id {
             return Err(CommentError::Validation(
-                "can only reply to a published root comment",
+                "comment parent must belong to the same topic",
+            ));
+        }
+        if parent.status != "published" {
+            return Err(CommentError::Validation(
+                "cannot reply to a deleted comment",
             ));
         }
         self.ensure_topic_published(parent.topic_id).await?;
         self.moderation
-            .enforce_reply_creation(principal.user_id, parent.topic_id, parent_id)
+            .enforce_reply_creation(principal.user_id, parent.topic_id, parent.id)
             .await
             .map_err(map_moderation)?;
+        // The addressed reply may also be individually locked.
+        if reply_to.is_some() {
+            self.moderation
+                .enforce_reply_creation(principal.user_id, target.topic_id, target.id)
+                .await
+                .map_err(map_moderation)?;
+        }
         let content = normalize_content(request.content)?;
         let decision = self
             .moderation
@@ -205,7 +242,12 @@ impl CommentService {
             crate::models::RuleAction::Collapse => ("published", true),
             _ => ("published", false),
         };
-        let parent_author_id = parent.author_id;
+        // Notify only the addressed user: @ target author, else root author.
+        let recipient_id = if reply_to.is_some() {
+            target.author_id
+        } else {
+            parent.author_id
+        };
         let parent_topic_id = parent.topic_id;
         let parent_comment_id = parent.id;
         let comment = self
@@ -214,6 +256,7 @@ impl CommentService {
                 topic_id: parent.topic_id,
                 author_id: principal.user_id,
                 parent_id: Some(parent.id),
+                reply_to_comment_id: reply_to,
                 content: &content,
                 status,
                 is_collapsed: collapsed,
@@ -234,7 +277,7 @@ impl CommentService {
         }
         self.emit_comment_replied(
             principal.user_id,
-            parent_author_id,
+            recipient_id,
             parent_topic_id,
             parent_comment_id,
             comment.id,
@@ -489,6 +532,12 @@ fn map_write_error(error: sqlx::Error) -> CommentError {
         }
         if db.message().contains("same topic") {
             return CommentError::Validation("comment parent must belong to the same topic");
+        }
+        if db.message().contains("same thread") {
+            return CommentError::Validation("reply target must be in the same thread");
+        }
+        if db.message().contains("reply target not found") {
+            return CommentError::Validation("reply target not found");
         }
         if db.message().contains("deleted comment") {
             return CommentError::Validation("cannot reply to a deleted comment");
