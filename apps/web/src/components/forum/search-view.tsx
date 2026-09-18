@@ -27,6 +27,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { QueryError, QueryLoading } from "@/components/forum/query-state";
+import { formatTopicSummary } from "@/lib/forum/summary";
 import { listCategories } from "@/lib/api/forum";
 import {
   clearRecentSearches,
@@ -354,7 +355,7 @@ function TopicHit({ item }: { item: TopicSearchHit & { kind: "topic" } }) {
         </Link>
       </h2>
       <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-        {item.highlight || item.summary || "暂无摘要"}
+        {item.highlight || (item.summary ? formatTopicSummary(item.summary) : "") || "暂无摘要"}
       </p>
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span>{item.author.nickname || item.author.username}</span>

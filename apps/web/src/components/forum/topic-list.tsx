@@ -4,6 +4,8 @@ import { Badge } from "@lumiforum/ui";
 import { BarChart3, Eye, Heart, MessageSquare, Pin, Sparkles } from "lucide-react";
 import Link from "next/link";
 
+import { formatTopicSummary } from "@/lib/forum/summary";
+
 export function TopicList({ topics }: { topics: TopicSummary[] }) {
   if (topics.length === 0) {
     return (
@@ -52,7 +54,7 @@ export function TopicList({ topics }: { topics: TopicSummary[] }) {
               </h3>
               {topic.summary ? (
                 <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">
-                  {topic.summary}
+                  {formatTopicSummary(topic.summary)}
                 </p>
               ) : null}
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">

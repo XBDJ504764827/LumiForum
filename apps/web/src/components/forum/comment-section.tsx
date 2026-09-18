@@ -9,7 +9,7 @@ import type { InfiniteData } from "@tanstack/react-query";
 import { ChevronDown, Heart, MessageSquare, Pencil, Reply, Trash2 } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -135,21 +135,30 @@ function CommentItem({
   topicId,
   user,
   onChanged,
-  isChild = false,
+  depth = 0,
 }: {
   comment: CommentNode;
   topicId: string;
   user: User | null;
   onChanged: () => Promise<void>;
-  isChild?: boolean;
+  /** 0 = root, 1 = reply; storage stays flat two-level so depth never exceeds 1. */
+  depth?: number;
 }) {
+  const isChild = depth > 0;
   const [mode, setMode] = useState<"view" | "reply" | "edit">("view");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [flash, setFlash] = useState(false);
   const canEdit = Boolean(
     user && (user.id === comment.author.id || isElevatedRole(user.role.code)),
   );
-  const canReply = Boolean(user) && !isChild;
+  const canReply = Boolean(user);
   const canLike = Boolean(user);
+
+  useHashFlash(comment.id, setFlash);
+
+  const replyTargetName = comment.reply_to
+    ? comment.reply_to.author.nickname || comment.reply_to.author.username
+    : null;
 
   const deletion = useMutation({
     mutationFn: () => deleteComment(comment.id),
@@ -159,7 +168,9 @@ function CommentItem({
   return (
     <article
       id={`comment-${comment.id}`}
-      className={isChild ? "scroll-mt-24 py-4 pl-4 sm:pl-8" : "scroll-mt-24 py-6"}
+      className={`${isChild ? "py-4 pl-4 sm:pl-8" : "py-6"} scroll-mt-24 rounded-md transition-colors duration-700 ${
+        flash ? "bg-primary/15 ring-1 ring-primary/40" : "bg-transparent"
+      }`}
     >
       <div className="flex items-start gap-3">
         <AvatarPreview
@@ -187,6 +198,21 @@ function CommentItem({
               <span className="text-xs text-muted-foreground">已编辑</span>
             ) : null}
           </div>
+          {replyTargetName ? (
+            <div className="mt-1 text-xs text-muted-foreground">
+              回复{" "}
+              {comment.reply_to?.is_deleted ? (
+                <span className="text-muted-foreground">已删除评论</span>
+              ) : (
+                <a
+                  href={`#comment-${comment.reply_to?.id}`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  @{replyTargetName}
+                </a>
+              )}
+            </div>
+          ) : null}
 
           {mode === "edit" ? (
             <div className="mt-3">
@@ -279,6 +305,7 @@ function CommentItem({
               <CommentComposer
                 title={`回复 ${comment.author.nickname || comment.author.username}`}
                 submitLabel="发布回复"
+                defaultValue={`@${comment.author.username} `}
                 onCancel={() => setMode("view")}
                 onSubmit={async (content) => {
                   await replyToComment(comment.id, { content });
@@ -298,7 +325,7 @@ function CommentItem({
                   topicId={topicId}
                   user={user}
                   onChanged={onChanged}
-                  isChild
+                  depth={depth + 1}
                 />
               ))}
             </div>
@@ -546,4 +573,28 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+/**
+ * Flash-highlight the comment targeted by the URL hash (`#comment-<id>`) so
+ * `@` jumps both scroll into place and briefly highlight the target.
+ */
+function useHashFlash(commentId: string, setFlash: (value: boolean) => void) {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = () => {
+      if (window.location.hash === `#comment-${commentId}`) {
+        setFlash(true);
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => setFlash(false), 1800);
+      }
+    };
+    check();
+    window.addEventListener("hashchange", check);
+    return () => {
+      window.removeEventListener("hashchange", check);
+      if (timer) clearTimeout(timer);
+    };
+  }, [commentId, setFlash]);
 }

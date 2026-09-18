@@ -34,7 +34,7 @@ pub use category::{
     CategoryRecord, CategoryResponse, CategorySummary, CreateCategoryRequest, UpdateCategoryRequest,
 };
 pub use comment::{
-    CommentListQuery, CommentNode, CommentRecord, CommentStats, CommentStatus,
+    CommentListQuery, CommentNode, CommentRecord, CommentReplyTarget, CommentStats, CommentStatus,
     CreateCommentRequest, UpdateCommentRequest,
 };
 pub use dm::{

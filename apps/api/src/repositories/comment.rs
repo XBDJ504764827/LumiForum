@@ -2,19 +2,22 @@ use chrono::{DateTime, Utc};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::models::{CommentNode, CommentStats, RoleSummary, TopicAuthorSummary};
+use crate::models::{
+    CommentNode, CommentReplyTarget, CommentStats, RoleSummary, TopicAuthorSummary,
+};
 
 #[derive(Clone)]
 pub struct CommentRepository {
     pool: PgPool,
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct RepositoryComment {
     pub id: Uuid,
     pub topic_id: Uuid,
     pub author_id: Uuid,
     pub parent_id: Option<Uuid>,
+    pub reply_to_comment_id: Option<Uuid>,
     pub content: String,
     pub status: String,
     pub like_count: i64,
@@ -28,12 +31,21 @@ pub struct RepositoryComment {
     pub author_avatar: Option<String>,
     pub author_role_code: String,
     pub author_role_name: String,
+    pub reply_to_id: Option<Uuid>,
+    pub reply_to_author_id: Option<Uuid>,
+    pub reply_to_status: Option<String>,
+    pub reply_to_author_username: Option<String>,
+    pub reply_to_author_nickname: Option<String>,
+    pub reply_to_author_avatar: Option<String>,
+    pub reply_to_author_role_code: Option<String>,
+    pub reply_to_author_role_name: Option<String>,
 }
 
 pub struct NewComment<'a> {
     pub topic_id: Uuid,
     pub author_id: Uuid,
     pub parent_id: Option<Uuid>,
+    pub reply_to_comment_id: Option<Uuid>,
     pub content: &'a str,
     /// Initial status: "published" or "hidden" (auto-moderation).
     pub status: &'a str,
@@ -65,16 +77,18 @@ impl CommentRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        let roots = sqlx::query_as::<_, RepositoryComment>(
+        let roots = sqlx::query_as::<_, RepositoryComment>(&format!(
             r#"
             SELECT
-                c.id, c.topic_id, c.author_id, c.parent_id, c.content, c.status,
-                c.like_count, c.reply_count, c.edited_at, c.created_at, c.updated_at, c.deleted_at,
-                u.username AS author_username,
-                u.nickname AS author_nickname,
-                u.avatar_url AS author_avatar,
-                r.code AS author_role_code,
-                r.name AS author_role_name
+                {COMMENT_COLUMNS},
+                NULL::uuid AS reply_to_id,
+                NULL::uuid AS reply_to_author_id,
+                NULL::text AS reply_to_status,
+                NULL::text AS reply_to_author_username,
+                NULL::text AS reply_to_author_nickname,
+                NULL::text AS reply_to_author_avatar,
+                NULL::text AS reply_to_author_role_code,
+                NULL::text AS reply_to_author_role_name
             FROM comments c
             JOIN users u ON u.id = c.author_id
             JOIN roles r ON r.id = u.role_id
@@ -83,8 +97,8 @@ impl CommentRepository {
               AND c.status = 'published'
             ORDER BY c.created_at ASC, c.id ASC
             LIMIT $2 OFFSET $3
-            "#,
-        )
+            "#
+        ))
         .bind(topic_id)
         .bind(limit)
         .bind(offset)
@@ -96,24 +110,29 @@ impl CommentRepository {
         }
 
         let root_ids: Vec<Uuid> = roots.iter().map(|c| c.id).collect();
-        let children = sqlx::query_as::<_, RepositoryComment>(
+        let children = sqlx::query_as::<_, RepositoryComment>(&format!(
             r#"
             SELECT
-                c.id, c.topic_id, c.author_id, c.parent_id, c.content, c.status,
-                c.like_count, c.reply_count, c.edited_at, c.created_at, c.updated_at, c.deleted_at,
-                u.username AS author_username,
-                u.nickname AS author_nickname,
-                u.avatar_url AS author_avatar,
-                r.code AS author_role_code,
-                r.name AS author_role_name
+                {COMMENT_COLUMNS},
+                t.id AS reply_to_id,
+                t.author_id AS reply_to_author_id,
+                t.status AS reply_to_status,
+                tu.username AS reply_to_author_username,
+                tu.nickname AS reply_to_author_nickname,
+                tu.avatar_url AS reply_to_author_avatar,
+                tr.code AS reply_to_author_role_code,
+                tr.name AS reply_to_author_role_name
             FROM comments c
             JOIN users u ON u.id = c.author_id
             JOIN roles r ON r.id = u.role_id
+            LEFT JOIN comments t ON t.id = c.reply_to_comment_id
+            LEFT JOIN users tu ON tu.id = t.author_id
+            LEFT JOIN roles tr ON tr.id = tu.role_id
             WHERE c.parent_id = ANY($1)
               AND c.status = 'published'
             ORDER BY c.created_at ASC, c.id ASC
-            "#,
-        )
+            "#
+        ))
         .bind(&root_ids)
         .fetch_all(&self.pool)
         .await?;
@@ -135,14 +154,15 @@ impl CommentRepository {
         let mut tx = self.pool.begin().await?;
         let id = sqlx::query_scalar::<_, Uuid>(
             r#"
-            INSERT INTO comments (topic_id, author_id, parent_id, content, status, is_collapsed)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO comments (topic_id, author_id, parent_id, reply_to_comment_id, content, status, is_collapsed)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
             "#,
         )
         .bind(comment.topic_id)
         .bind(comment.author_id)
         .bind(comment.parent_id)
+        .bind(comment.reply_to_comment_id)
         .bind(comment.content)
         .bind(comment.status)
         .bind(comment.is_collapsed)
@@ -260,23 +280,25 @@ impl CommentRepository {
         comment_id: Uuid,
     ) -> Result<Option<RepositoryComment>, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        let row = sqlx::query_as::<_, RepositoryComment>(
+        let row = sqlx::query_as::<_, RepositoryComment>(&format!(
             r#"
             SELECT
-                c.id, c.topic_id, c.author_id, c.parent_id, c.content, c.status,
-                c.like_count, c.reply_count, c.edited_at, c.created_at, c.updated_at, c.deleted_at,
-                u.username AS author_username,
-                u.nickname AS author_nickname,
-                u.avatar_url AS author_avatar,
-                r.code AS author_role_code,
-                r.name AS author_role_name
+                {COMMENT_COLUMNS},
+                NULL::uuid AS reply_to_id,
+                NULL::uuid AS reply_to_author_id,
+                NULL::text AS reply_to_status,
+                NULL::text AS reply_to_author_username,
+                NULL::text AS reply_to_author_nickname,
+                NULL::text AS reply_to_author_avatar,
+                NULL::text AS reply_to_author_role_code,
+                NULL::text AS reply_to_author_role_name
             FROM comments c
             JOIN users u ON u.id = c.author_id
             JOIN roles r ON r.id = u.role_id
             WHERE c.id = $1
             FOR UPDATE OF c
-            "#,
-        )
+            "#
+        ))
         .bind(comment_id)
         .fetch_optional(&mut *tx)
         .await?;
@@ -395,10 +417,36 @@ pub fn repository_comment_to_node(
     comment: RepositoryComment,
     replies: Vec<CommentNode>,
 ) -> CommentNode {
+    let reply_to = match (
+        comment.reply_to_id,
+        comment.reply_to_author_id,
+        comment.reply_to_author_username,
+        comment.reply_to_author_role_code,
+        comment.reply_to_author_role_name,
+    ) {
+        (Some(id), Some(author_id), Some(username), Some(role_code), Some(role_name)) => {
+            Some(CommentReplyTarget {
+                id,
+                author: TopicAuthorSummary {
+                    id: author_id,
+                    username,
+                    nickname: comment.reply_to_author_nickname,
+                    avatar: comment.reply_to_author_avatar,
+                    role: RoleSummary {
+                        code: role_code,
+                        name: role_name,
+                    },
+                },
+                is_deleted: comment.reply_to_status.as_deref() != Some("published"),
+            })
+        }
+        _ => None,
+    };
     CommentNode {
         id: comment.id,
         topic_id: comment.topic_id,
         parent_id: comment.parent_id,
+        reply_to,
         content: comment.content,
         author: TopicAuthorSummary {
             id: comment.author_id,
@@ -422,17 +470,42 @@ pub fn repository_comment_to_node(
     }
 }
 
+/// Shared `comments c` + author column list used by every `RepositoryComment`
+/// query. Reply-target columns are appended per query (NULL for roots).
+const COMMENT_COLUMNS: &str = r#"
+    c.id, c.topic_id, c.author_id, c.parent_id, c.reply_to_comment_id,
+    c.content, c.status,
+    c.like_count, c.reply_count, c.edited_at, c.created_at, c.updated_at, c.deleted_at,
+    u.username AS author_username,
+    u.nickname AS author_nickname,
+    u.avatar_url AS author_avatar,
+    r.code AS author_role_code,
+    r.name AS author_role_name
+"#;
+
 const COMMENT_BY_ID: &str = r#"
     SELECT
-        c.id, c.topic_id, c.author_id, c.parent_id, c.content, c.status,
+        c.id, c.topic_id, c.author_id, c.parent_id, c.reply_to_comment_id,
+        c.content, c.status,
         c.like_count, c.reply_count, c.edited_at, c.created_at, c.updated_at, c.deleted_at,
         u.username AS author_username,
         u.nickname AS author_nickname,
         u.avatar_url AS author_avatar,
         r.code AS author_role_code,
-        r.name AS author_role_name
+        r.name AS author_role_name,
+        t.id AS reply_to_id,
+        t.author_id AS reply_to_author_id,
+        t.status AS reply_to_status,
+        tu.username AS reply_to_author_username,
+        tu.nickname AS reply_to_author_nickname,
+        tu.avatar_url AS reply_to_author_avatar,
+        tr.code AS reply_to_author_role_code,
+        tr.name AS reply_to_author_role_name
     FROM comments c
     JOIN users u ON u.id = c.author_id
     JOIN roles r ON r.id = u.role_id
+    LEFT JOIN comments t ON t.id = c.reply_to_comment_id
+    LEFT JOIN users tu ON tu.id = t.author_id
+    LEFT JOIN roles tr ON tr.id = tu.role_id
     WHERE c.id = $1
 "#;
