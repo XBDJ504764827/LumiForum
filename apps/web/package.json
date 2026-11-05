@@ -13,7 +13,7 @@
     "clean": "rm -rf .next .turbo dist"
   },
   "dependencies": {
-    "@hookform/resolvers": "^3.9.1",
+    "@hookform/resolvers": "^5.9.1",
     "@lumiforum/shared": "workspace:*",
     "@lumiforum/types": "workspace:*",
     "@lumiforum/ui": "workspace:*",
